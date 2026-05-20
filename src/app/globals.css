@@ -286,6 +286,10 @@ h3 {
   gap: 10px;
 }
 
+.compact-actions {
+  gap: 6px;
+}
+
 .primary-button,
 .secondary-button,
 .warning-button {
@@ -318,6 +322,22 @@ h3 {
   color: #341100;
   background: var(--warning-soft);
   border-color: var(--warning);
+}
+
+.mini-button {
+  min-height: 32px;
+  padding: 0 8px;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+
+.mini-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.danger-text {
+  color: var(--danger);
 }
 
 .grid-12 {
@@ -525,6 +545,17 @@ tr:nth-child(even) td {
 .badge.red {
   background: #ffdad6;
   color: var(--danger);
+}
+
+.quote-action-cell {
+  display: grid;
+  gap: 6px;
+  min-width: 250px;
+}
+
+.action-error {
+  color: var(--danger);
+  line-height: 1.35;
 }
 
 .mono {

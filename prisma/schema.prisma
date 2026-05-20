@@ -59,6 +59,50 @@ enum LotStatus {
   CONSUMIDO
 }
 
+enum PurchaseRequestStatus {
+  ABERTA
+  EM_COTACAO
+  APROVADA
+  REPROVADA
+  CONVERTIDA_PEDIDO
+  CANCELADA
+}
+
+enum PurchaseQuoteStatus {
+  RECEBIDA
+  APROVADA
+  REPROVADA
+  CANCELADA
+}
+
+enum PurchaseOrderStatus {
+  EMITIDO
+  ENVIADO
+  PARCIALMENTE_RECEBIDO
+  RECEBIDO
+  CANCELADO
+}
+
+enum PurchaseReceiptStatus {
+  LIBERADO_ESTOQUE
+  DIVERGENTE
+  CANCELADO
+}
+
+enum AccountPayableStatus {
+  ABERTO
+  PROGRAMADO
+  PAGO
+  CANCELADO
+}
+
+enum AccountReceivableStatus {
+  ABERTO
+  FATURADO
+  RECEBIDO
+  CANCELADO
+}
+
 enum AuditAction {
   LOGIN
   CREATE
@@ -85,6 +129,14 @@ model User {
   auditLogs       AuditLog[]
   stockMovements  StockMovement[]
   productionNotes ProductionNote[]
+  purchaseRequests PurchaseRequest[]
+  purchaseQuotes  PurchaseQuote[]
+  purchaseOrders  PurchaseOrder[]
+  purchaseReceipts PurchaseReceipt[]
+  accountsPayable AccountPayable[]
+  accountPayments AccountPayment[]
+  accountsReceivable AccountReceivable[]
+  accountReceipts AccountReceipt[]
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 }
@@ -136,6 +188,7 @@ model Customer {
   phone     String?
   active    Boolean           @default(true)
   orders    ProductionOrder[]
+  accountsReceivable AccountReceivable[]
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt
 }
@@ -149,6 +202,9 @@ model Supplier {
   phone     String?
   active    Boolean  @default(true)
   lots      Lot[]
+  quotes    PurchaseQuote[]
+  orders    PurchaseOrder[]
+  accountsPayable AccountPayable[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -178,6 +234,8 @@ model Item {
   lots                  Lot[]
   stockBalances         StockBalance[]
   stockMovements        StockMovement[]
+  purchaseRequestItems  PurchaseRequestItem[]
+  purchaseOrderItems    PurchaseOrderItem[]
   compositionsAsProduct Composition[]     @relation("CompositionProduct")
   compositionItems      CompositionItem[]
   productionOrders      ProductionOrder[]
@@ -195,6 +253,7 @@ model Warehouse {
   balances       StockBalance[]
   originMoves    StockMovement[] @relation("OriginWarehouse")
   targetMoves    StockMovement[] @relation("TargetWarehouse")
+  purchaseReceipts PurchaseReceipt[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 }
@@ -212,6 +271,7 @@ model Lot {
   status         LotStatus       @default(EM_ANALISE)
   balances       StockBalance[]
   movements      StockMovement[]
+  purchaseReceipts PurchaseReceipt[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 }
@@ -247,11 +307,202 @@ model StockMovement {
   lot               Lot?               @relation(fields: [lotId], references: [id])
   productionOrderId String?
   productionOrder   ProductionOrder?   @relation(fields: [productionOrderId], references: [id])
+  purchaseReceipt   PurchaseReceipt?
   userId            String
   user              User               @relation(fields: [userId], references: [id])
   document          String?
   justification     String?
   createdAt         DateTime           @default(now())
+}
+
+model PurchaseRequest {
+  id             String                @id @default(cuid())
+  number         String                @unique
+  requesterId    String
+  requester      User                  @relation(fields: [requesterId], references: [id])
+  department     String?
+  costCenter     String?
+  priority       String                @default("NORMAL")
+  neededAt       DateTime?
+  status         PurchaseRequestStatus @default(ABERTA)
+  justification  String?
+  items          PurchaseRequestItem[]
+  quotes         PurchaseQuote[]
+  orders         PurchaseOrder[]
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+}
+
+model PurchaseRequestItem {
+  id                String          @id @default(cuid())
+  purchaseRequestId String
+  purchaseRequest   PurchaseRequest @relation(fields: [purchaseRequestId], references: [id], onDelete: Cascade)
+  itemId            String
+  item              Item            @relation(fields: [itemId], references: [id])
+  quantity          Decimal         @db.Decimal(14, 3)
+  note              String?
+}
+
+model PurchaseQuote {
+  id                String              @id @default(cuid())
+  number            String              @unique
+  purchaseRequestId String
+  purchaseRequest   PurchaseRequest     @relation(fields: [purchaseRequestId], references: [id])
+  supplierId        String
+  supplier          Supplier            @relation(fields: [supplierId], references: [id])
+  createdById       String
+  createdBy         User                @relation(fields: [createdById], references: [id])
+  status            PurchaseQuoteStatus @default(RECEBIDA)
+  deliveryDays      Int?
+  paymentTerms      String?
+  validUntil        DateTime?
+  freightCost       Decimal             @default(0) @db.Decimal(14, 4)
+  totalValue        Decimal             @db.Decimal(14, 4)
+  note              String?
+  purchaseOrder     PurchaseOrder?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+}
+
+model PurchaseOrder {
+  id                String              @id @default(cuid())
+  number            String              @unique
+  purchaseQuoteId   String              @unique
+  purchaseQuote     PurchaseQuote       @relation(fields: [purchaseQuoteId], references: [id])
+  purchaseRequestId String
+  purchaseRequest   PurchaseRequest     @relation(fields: [purchaseRequestId], references: [id])
+  supplierId        String
+  supplier          Supplier            @relation(fields: [supplierId], references: [id])
+  createdById       String
+  createdBy         User                @relation(fields: [createdById], references: [id])
+  status            PurchaseOrderStatus @default(EMITIDO)
+  issuedAt          DateTime            @default(now())
+  expectedDeliveryAt DateTime?
+  paymentTerms      String?
+  freightCost       Decimal             @default(0) @db.Decimal(14, 4)
+  totalValue        Decimal             @db.Decimal(14, 4)
+  note              String?
+  items             PurchaseOrderItem[]
+  receipts          PurchaseReceipt[]
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  itemId          String
+  item            Item          @relation(fields: [itemId], references: [id])
+  quantity        Decimal       @db.Decimal(14, 3)
+  unitPrice       Decimal       @default(0) @db.Decimal(14, 4)
+  totalValue      Decimal       @default(0) @db.Decimal(14, 4)
+  note            String?
+  receipts        PurchaseReceipt[]
+}
+
+model PurchaseReceipt {
+  id                  String                @id @default(cuid())
+  number              String                @unique
+  purchaseOrderId     String
+  purchaseOrder       PurchaseOrder         @relation(fields: [purchaseOrderId], references: [id])
+  purchaseOrderItemId String
+  purchaseOrderItem   PurchaseOrderItem     @relation(fields: [purchaseOrderItemId], references: [id])
+  warehouseId         String
+  warehouse           Warehouse             @relation(fields: [warehouseId], references: [id])
+  lotId               String?
+  lot                 Lot?                  @relation(fields: [lotId], references: [id])
+  stockMovementId     String?               @unique
+  stockMovement       StockMovement?        @relation(fields: [stockMovementId], references: [id])
+  accountPayable      AccountPayable?
+  receivedById        String
+  receivedBy          User                  @relation(fields: [receivedById], references: [id])
+  status              PurchaseReceiptStatus @default(LIBERADO_ESTOQUE)
+  invoiceNumber       String?
+  supplierLot         String?
+  receivedQuantity    Decimal               @db.Decimal(14, 3)
+  acceptedQuantity    Decimal               @db.Decimal(14, 3)
+  rejectedQuantity    Decimal               @default(0) @db.Decimal(14, 3)
+  unitCost            Decimal               @default(0) @db.Decimal(14, 4)
+  totalCost           Decimal               @default(0) @db.Decimal(14, 4)
+  receivedAt          DateTime              @default(now())
+  note                String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+}
+
+model AccountPayable {
+  id                String               @id @default(cuid())
+  number            String               @unique
+  purchaseReceiptId String               @unique
+  purchaseReceipt   PurchaseReceipt      @relation(fields: [purchaseReceiptId], references: [id])
+  supplierId        String
+  supplier          Supplier             @relation(fields: [supplierId], references: [id])
+  createdById       String
+  createdBy         User                 @relation(fields: [createdById], references: [id])
+  status            AccountPayableStatus @default(ABERTO)
+  description       String
+  documentNumber    String?
+  costCenter        String?
+  issueDate         DateTime             @default(now())
+  dueDate           DateTime
+  amount            Decimal              @db.Decimal(14, 4)
+  paidAmount        Decimal              @default(0) @db.Decimal(14, 4)
+  paidAt            DateTime?
+  note              String?
+  payments          AccountPayment[]
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+}
+
+model AccountPayment {
+  id               String         @id @default(cuid())
+  accountPayableId String
+  accountPayable   AccountPayable @relation(fields: [accountPayableId], references: [id], onDelete: Cascade)
+  paidById         String
+  paidBy           User           @relation(fields: [paidById], references: [id])
+  paymentDate      DateTime       @default(now())
+  amount           Decimal        @db.Decimal(14, 4)
+  method           String
+  reference        String?
+  note             String?
+  createdAt        DateTime       @default(now())
+}
+
+model AccountReceivable {
+  id             String                  @id @default(cuid())
+  number         String                  @unique
+  customerId     String
+  customer       Customer                @relation(fields: [customerId], references: [id])
+  createdById    String
+  createdBy      User                    @relation(fields: [createdById], references: [id])
+  status         AccountReceivableStatus @default(ABERTO)
+  description    String
+  documentNumber String?
+  costCenter     String?
+  issueDate      DateTime                @default(now())
+  dueDate        DateTime
+  amount         Decimal                 @db.Decimal(14, 4)
+  receivedAmount Decimal                 @default(0) @db.Decimal(14, 4)
+  receivedAt     DateTime?
+  note           String?
+  receipts       AccountReceipt[]
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+}
+
+model AccountReceipt {
+  id                  String            @id @default(cuid())
+  accountReceivableId String
+  accountReceivable   AccountReceivable @relation(fields: [accountReceivableId], references: [id], onDelete: Cascade)
+  receivedById        String
+  receivedBy          User              @relation(fields: [receivedById], references: [id])
+  receiptDate         DateTime          @default(now())
+  amount              Decimal           @db.Decimal(14, 4)
+  method              String
+  reference           String?
+  note                String?
+  createdAt           DateTime          @default(now())
 }
 
 model Mold {

@@ -62,6 +62,78 @@ async function main() {
     create: { code: "PA", name: "Produto acabado", type: "Estoque" }
   });
 
+  await prisma.customer.upsert({
+    where: { code: "CLI-001" },
+    update: {},
+    create: {
+      code: "CLI-001",
+      name: "Construtora Vale",
+      document: "00.000.000/0001-11",
+      email: "financeiro@construtoravale.example",
+      phone: "(41) 3000-2001"
+    }
+  });
+
+  await prisma.customer.upsert({
+    where: { code: "CLI-002" },
+    update: {},
+    create: {
+      code: "CLI-002",
+      name: "Obra Norte Engenharia",
+      document: "00.000.000/0001-12",
+      email: "contas@obranorte.example",
+      phone: "(41) 3000-2002"
+    }
+  });
+
+  await prisma.customer.upsert({
+    where: { code: "CLI-003" },
+    update: {},
+    create: {
+      code: "CLI-003",
+      name: "Rodovia 8 Infraestrutura",
+      document: "00.000.000/0001-13",
+      email: "adm@rodovia8.example",
+      phone: "(41) 3000-2003"
+    }
+  });
+
+  await prisma.supplier.upsert({
+    where: { code: "FOR-001" },
+    update: {},
+    create: {
+      code: "FOR-001",
+      name: "Concreto Sul Materiais",
+      document: "00.000.000/0001-01",
+      email: "compras@concretosul.example",
+      phone: "(41) 3000-1001"
+    }
+  });
+
+  await prisma.supplier.upsert({
+    where: { code: "FOR-002" },
+    update: {},
+    create: {
+      code: "FOR-002",
+      name: "Aco Forte Distribuidora",
+      document: "00.000.000/0001-02",
+      email: "vendas@acoforte.example",
+      phone: "(41) 3000-1002"
+    }
+  });
+
+  await prisma.supplier.upsert({
+    where: { code: "FOR-003" },
+    update: {},
+    create: {
+      code: "FOR-003",
+      name: "Tecno Aditivos Industriais",
+      document: "00.000.000/0001-03",
+      email: "comercial@tecnoaditivos.example",
+      phone: "(41) 3000-1003"
+    }
+  });
+
   await prisma.item.upsert({
     where: { code: "MP-001" },
     update: {},
