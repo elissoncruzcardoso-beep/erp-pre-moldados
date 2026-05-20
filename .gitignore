@@ -1,0 +1,11 @@
+node_modules
+.next
+out
+*.log
+.env*
+!.env.example
+next-debug.*.log
+dev-*.log
+dev.log
+
+.vercel

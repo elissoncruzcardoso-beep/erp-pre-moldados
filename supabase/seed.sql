@@ -1,0 +1,3 @@
+-- Seed SQL intentionally left empty.
+-- The MVP seed runs through Prisma:
+-- npm.cmd run db:seed
