@@ -7,5 +7,6 @@ out
 next-debug.*.log
 dev-*.log
 dev.log
+stitch-reference/
 
 .vercel

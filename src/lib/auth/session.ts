@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import type { NextResponse } from "next/server";
+import { getPrisma } from "@/lib/db/prisma";
 import type { PermissionKey } from "@/lib/permissions/permissions";
 
 export const SESSION_COOKIE_NAME = "erp_session";
@@ -79,8 +80,43 @@ export function verifySessionToken(token?: string): SessionUser | null {
 export async function getSession() {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  const session = verifySessionToken(token);
 
-  return verifySessionToken(token);
+  if (!session) {
+    return null;
+  }
+
+  try {
+    const prisma = getPrisma();
+    const user = await prisma.user.findUnique({
+      where: { id: session.userId },
+      include: {
+        role: {
+          include: {
+            permissions: {
+              include: {
+                permission: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!user || user.status !== "ACTIVE") {
+      return null;
+    }
+
+    return {
+      ...session,
+      email: user.email,
+      name: user.name,
+      role: user.role.name,
+      permissions: user.role.permissions.map((item) => item.permission.key as PermissionKey)
+    };
+  } catch {
+    return session;
+  }
 }
 
 export function setSessionCookie(response: NextResponse, token: string) {

@@ -1,7 +1,12 @@
 import { z } from "zod";
 
+const optionalNumberSchema = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+  z.string().min(2).max(40).optional()
+);
+
 export const productionOrderSchema = z.object({
-  number: z.string().min(2).max(40),
+  number: optionalNumberSchema,
   productId: z.string().min(1),
   compositionId: z.string().optional(),
   moldId: z.string().optional(),
@@ -22,5 +27,28 @@ export const productionNoteSchema = z.object({
   finishStage: z.coerce.boolean().default(false)
 });
 
+export const productionDailyLogSchema = z.object({
+  logDate: z.coerce.date(),
+  teamPresent: z.string().min(3).max(1000),
+  weatherMorning: z.string().min(2).max(80),
+  weatherAfternoon: z.string().min(2).max(80),
+  observation: z.string().max(1000).optional(),
+  items: z.array(
+    z.object({
+      itemId: z.string().min(1),
+      quantity: z.coerce.number().positive(),
+      note: z.string().max(300).optional()
+    })
+  ).min(1)
+});
+
+export const productionBatchReleaseSchema = z.object({
+  releasedQuantity: z.coerce.number().positive(),
+  releaseResponsible: z.string().min(2).max(120),
+  releaseNote: z.string().max(500).optional()
+});
+
 export type ProductionOrderInput = z.infer<typeof productionOrderSchema>;
 export type ProductionNoteInput = z.infer<typeof productionNoteSchema>;
+export type ProductionDailyLogInput = z.infer<typeof productionDailyLogSchema>;
+export type ProductionBatchReleaseInput = z.infer<typeof productionBatchReleaseSchema>;

@@ -12,7 +12,13 @@ function createPrismaClient() {
     throw new Error("DATABASE_URL nao configurada.");
   }
 
-  const adapter = new PrismaPg({ connectionString });
+  const poolMax = Number(process.env.DATABASE_POOL_MAX || "3");
+  const adapter = new PrismaPg({
+    connectionString,
+    max: Number.isFinite(poolMax) && poolMax > 0 ? poolMax : 3,
+    idleTimeoutMillis: 10_000,
+    connectionTimeoutMillis: 10_000
+  });
 
   return new PrismaClient({
     adapter,

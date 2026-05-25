@@ -13,7 +13,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const nextPath =
     requestedPath && requestedPath.startsWith("/") && requestedPath !== "/login"
       ? requestedPath
-      : "/diretoria";
+      : "/dashboard";
 
   return (
     <section className="login-shell">

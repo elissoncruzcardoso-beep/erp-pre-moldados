@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
 import { getSession } from "@/lib/auth/session";
+import { makeAutomaticCode, normalizeManualCode } from "@/lib/codes/auto-code";
 import { getPrisma } from "@/lib/db/prisma";
 import { accountPayableSchema } from "@/lib/validations/purchase";
 
@@ -62,7 +63,7 @@ export async function POST(request: Request) {
 
       const created = await tx.accountPayable.create({
         data: {
-          number: input.number.trim().toUpperCase(),
+          number: normalizeManualCode(input.number) || makeAutomaticCode("CP"),
           purchaseReceiptId: receipt.id,
           supplierId: receipt.purchaseOrder.supplierId,
           createdById: session.userId,

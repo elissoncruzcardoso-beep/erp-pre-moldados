@@ -59,7 +59,7 @@ export function ProductionOrderForm({ products, molds, compositions }: Productio
     <form className="product-form" onSubmit={handleSubmit}>
       <label className="field">
         <span>Numero da OP</span>
-        <input className="form-input mono" name="number" placeholder="OP-1040" required maxLength={40} />
+        <input className="form-input mono" name="number" placeholder="Automatico se vazio" maxLength={40} />
       </label>
 
       <label className="field">

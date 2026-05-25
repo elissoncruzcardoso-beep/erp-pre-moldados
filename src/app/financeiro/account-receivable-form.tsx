@@ -58,7 +58,7 @@ export function AccountReceivableForm({ customers }: Props) {
       <div className="form-two">
         <label className="field">
           <span>Titulo</span>
-          <input className="form-input mono" name="number" defaultValue={nextNumber} required />
+          <input className="form-input mono" name="number" defaultValue={nextNumber} placeholder="Automatico se vazio" />
         </label>
         <label className="field">
           <span>Vencimento</span>

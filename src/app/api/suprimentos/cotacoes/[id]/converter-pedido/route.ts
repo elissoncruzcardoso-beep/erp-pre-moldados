@@ -42,6 +42,11 @@ export async function POST(_request: Request, context: RouteContext) {
         include: {
           purchaseOrder: true,
           supplier: true,
+          items: {
+            include: {
+              supplier: true
+            }
+          },
           purchaseRequest: {
             include: {
               items: true
@@ -62,15 +67,33 @@ export async function POST(_request: Request, context: RouteContext) {
         throw new Error("ORDER_ALREADY_EXISTS");
       }
 
-      if (quote.purchaseRequest.items.length === 0) {
+      if (quote.purchaseRequest.items.length === 0 && quote.items.length === 0) {
         throw new Error("REQUEST_WITHOUT_ITEMS");
       }
 
-      const totalQuantity = quote.purchaseRequest.items.reduce(
-        (sum, item) => sum.plus(item.quantity),
-        new Prisma.Decimal(0)
-      );
-      const unitPrice = totalQuantity.gt(0) ? quote.totalValue.div(totalQuantity) : new Prisma.Decimal(0);
+      const orderItems = quote.items.length > 0
+        ? quote.items.map((item) => ({
+            itemId: item.itemId,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            totalValue: item.totalValue,
+            note: item.note
+          }))
+        : (() => {
+            const totalQuantity = quote.purchaseRequest.items.reduce(
+              (sum, item) => sum.plus(item.quantity),
+              new Prisma.Decimal(0)
+            );
+            const unitPrice = totalQuantity.gt(0) ? quote.totalValue.div(totalQuantity) : new Prisma.Decimal(0);
+
+            return quote.purchaseRequest.items.map((item) => ({
+              itemId: item.itemId,
+              quantity: item.quantity,
+              unitPrice,
+              totalValue: unitPrice.mul(item.quantity),
+              note: item.note
+            }));
+          })();
       const expectedDeliveryAt = quote.deliveryDays === null ? null : addDays(new Date(), quote.deliveryDays);
 
       const created = await tx.purchaseOrder.create({
@@ -86,13 +109,7 @@ export async function POST(_request: Request, context: RouteContext) {
           totalValue: quote.totalValue,
           note: quote.note,
           items: {
-            create: quote.purchaseRequest.items.map((item) => ({
-              itemId: item.itemId,
-              quantity: item.quantity,
-              unitPrice,
-              totalValue: unitPrice.mul(item.quantity),
-              note: item.note
-            }))
+            create: orderItems
           }
         },
         include: {

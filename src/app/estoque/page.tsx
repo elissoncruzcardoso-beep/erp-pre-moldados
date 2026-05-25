@@ -39,7 +39,7 @@ export default async function EstoquePage() {
   }
 
   if (!session.permissions.includes("estoque.view")) {
-    redirect("/diretoria");
+    redirect("/dashboard");
   }
 
   const prisma = getPrisma();

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
 import { getSession } from "@/lib/auth/session";
+import { makeAutomaticCode, normalizeManualCode } from "@/lib/codes/auto-code";
 import { getPrisma } from "@/lib/db/prisma";
 import { purchaseRequestSchema } from "@/lib/validations/purchase";
 
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
     const requestRecord = await prisma.$transaction(async (tx) => {
       const created = await tx.purchaseRequest.create({
         data: {
-          number: input.number.trim().toUpperCase(),
+          number: normalizeManualCode(input.number) || makeAutomaticCode("SC"),
           requesterId: session.userId,
           department: input.department?.trim() || null,
           costCenter: input.costCenter?.trim() || null,
@@ -37,11 +38,11 @@ export async function POST(request: Request) {
           neededAt: input.neededAt || null,
           justification: input.justification?.trim() || null,
           items: {
-            create: {
-              itemId: input.itemId,
-              quantity: new Prisma.Decimal(input.quantity),
-              note: input.note?.trim() || null
-            }
+            create: input.items.map((item) => ({
+              itemId: item.itemId,
+              quantity: new Prisma.Decimal(item.quantity),
+              note: item.note?.trim() || null
+            }))
           }
         },
         include: {

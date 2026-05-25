@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
 import { getSession } from "@/lib/auth/session";
+import { makeItemCode, normalizeManualCode } from "@/lib/codes/auto-code";
 import { getPrisma } from "@/lib/db/prisma";
 import { productSchema } from "@/lib/validations/product";
 
@@ -27,11 +28,12 @@ export async function POST(request: Request) {
 
   const prisma = getPrisma();
   const input = parsed.data;
+  const usesCuring = input.type === "PECA_PRE_MOLDADA" || input.type === "PRODUTO_ACABADO";
 
   try {
     const item = await prisma.item.create({
       data: {
-        code: input.code.trim().toUpperCase(),
+        code: normalizeManualCode(input.code) || makeItemCode(input.type),
         description: input.description.trim(),
         type: input.type,
         group: input.group?.trim() || null,
@@ -40,6 +42,7 @@ export async function POST(request: Request) {
         controlsLot: input.controlsLot,
         minimumStock: new Prisma.Decimal(input.minimumStock),
         standardCost: new Prisma.Decimal(input.standardCost),
+        curingHours: usesCuring ? input.curingHours : 0,
         active: input.active
       },
       include: {
@@ -58,7 +61,8 @@ export async function POST(request: Request) {
           newValue: {
             code: item.code,
             description: item.description,
-            type: item.type
+            type: item.type,
+            curingHours: item.curingHours
           }
         }
       })

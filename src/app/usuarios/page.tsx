@@ -13,7 +13,7 @@ export default async function UsuariosPage() {
   }
 
   if (!session.permissions.includes("usuarios.manage")) {
-    redirect("/diretoria");
+    redirect("/dashboard");
   }
 
   const prisma = getPrisma();

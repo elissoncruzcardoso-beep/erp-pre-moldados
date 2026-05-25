@@ -1,7 +1,21 @@
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { hashPassword } from "../src/lib/auth/password";
 
-const prisma = new PrismaClient();
+const connectionString = process.env.DATABASE_URL;
+
+if (!connectionString) {
+  throw new Error("DATABASE_URL nao configurada.");
+}
+
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({
+    connectionString,
+    max: 1,
+    idleTimeoutMillis: 10_000,
+    connectionTimeoutMillis: 10_000
+  })
+});
 
 async function main() {
   const email = process.env.ADMIN_EMAIL || "admin@erp.local";

@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
-import { Boxes, ClipboardList, Factory, Ruler, ShieldCheck } from "lucide-react";
+import { Boxes, ClipboardList, Factory, Plus, Ruler, ShieldCheck } from "lucide-react";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
-import { ProductCreateForm } from "./product-create-form";
+import { CompositionActions } from "./composition-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -14,14 +14,19 @@ function decimalToString(value: unknown) {
   return String(value ?? "0");
 }
 
-const typeLabels: Record<string, string> = {
-  MATERIA_PRIMA: "Materia-prima",
-  INSUMO: "Insumo",
-  PRODUTO_ACABADO: "Produto acabado",
-  PECA_PRE_MOLDADA: "Peca pre-moldada",
-  FORMA_MOLDE: "Forma/molde",
-  SERVICO: "Servico"
-};
+function decimalToNumber(value: unknown) {
+  if (value && typeof value === "object" && "toString" in value) {
+    return Number(value.toString());
+  }
+
+  return Number(value ?? 0);
+}
+
+function formatQuantity(value: unknown) {
+  return decimalToNumber(value).toLocaleString("pt-BR", {
+    maximumFractionDigits: 3
+  });
+}
 
 export default async function ProdutosPage() {
   const session = await getSession();
@@ -31,11 +36,11 @@ export default async function ProdutosPage() {
   }
 
   if (!session.permissions.includes("produtos.manage")) {
-    redirect("/diretoria");
+    redirect("/dashboard");
   }
 
   const prisma = getPrisma();
-  const [items, units, molds, compositions] = await Promise.all([
+  const [items, compositions] = await Promise.all([
     prisma.item.findMany({
       include: {
         unit: true,
@@ -43,39 +48,61 @@ export default async function ProdutosPage() {
       },
       orderBy: [{ type: "asc" }, { code: "asc" }]
     }),
-    prisma.unitOfMeasure.findMany({ orderBy: { code: "asc" } }),
-    prisma.mold.findMany({ orderBy: { code: "asc" } }),
     prisma.composition.findMany({
       include: {
-        product: true,
+        product: {
+          include: {
+            unit: true
+          }
+        },
         items: {
           include: {
             item: {
               include: {
-                unit: true
+                unit: true,
+                stockBalances: true
               }
             }
           },
           orderBy: { stage: "asc" }
-        }
+        },
+        orders: true
       },
       orderBy: { code: "asc" }
     })
   ]);
 
   const precastCount = items.filter((item) => item.type === "PECA_PRE_MOLDADA").length;
+  const precastItems = items.filter((item) => item.type === "PECA_PRE_MOLDADA");
   const rawMaterialCount = items.filter((item) => item.type === "MATERIA_PRIMA" || item.type === "INSUMO").length;
   const activeCompositions = compositions.filter((composition) => composition.approved).length;
+  const compositionCapacity = compositions.map((composition) => {
+    const capacities = composition.items
+      .map((compositionItem) => {
+        const required = decimalToNumber(compositionItem.quantity);
+        const available = compositionItem.item.stockBalances.reduce((sum, balance) => sum + decimalToNumber(balance.quantity), 0);
+
+        return required > 0 ? Math.floor(available / required) : null;
+      })
+      .filter((capacity): capacity is number => capacity !== null);
+
+    return {
+      id: composition.id,
+      code: composition.code,
+      product: composition.product.description,
+      approved: composition.approved,
+      capacity: capacities.length > 0 ? Math.min(...capacities) : null
+    };
+  });
 
   return (
     <>
-      <section className="page-head">
+      <section className="product-hero-panel">
         <div>
           <p className="eyebrow">Produtos e ficha tecnica</p>
-          <h1>Cadastro tecnico de pecas, insumos e formas</h1>
+          <h1>Produtos e ficha tecnica</h1>
           <p className="lead">
-            Primeira tela do MVP real lendo dados do Supabase. Aqui centralizamos produtos,
-            unidades, composicoes de materiais e formas/moldes usados pela producao.
+            Cadastro tecnico de pecas, insumos e composicoes para estimar producao, controlar estoque e orientar a fabrica.
           </p>
         </div>
         <div className="button-row">
@@ -83,11 +110,19 @@ export default async function ProdutosPage() {
             <ShieldCheck size={16} />
             Acesso: {session.role}
           </span>
+          <a className="secondary-button" href="/cadastros/produtos">
+            <Plus size={17} />
+            Cadastrar produto
+          </a>
+          <a className="primary-button" href="/produtos/composicoes/nova">
+            <ClipboardList size={17} />
+            Nova ficha
+          </a>
         </div>
       </section>
 
-      <section className="grid-12" style={{ marginBottom: 16 }}>
-        <article className="metric-card accent-blue span-3">
+      <section className="product-metric-grid">
+        <article className="product-metric-card accent-blue">
           <div className="metric-top">
             <span className="mono">Itens cadastrados</span>
             <Boxes size={22} />
@@ -95,15 +130,15 @@ export default async function ProdutosPage() {
           <strong className="metric-value">{items.length}</strong>
           <span className="metric-sub">Produtos, pecas, insumos e materias-primas.</span>
         </article>
-        <article className="metric-card accent-orange span-3">
+        <article className="product-metric-card accent-orange">
           <div className="metric-top">
             <span className="mono">Pecas pre-moldadas</span>
             <Factory size={22} />
           </div>
           <strong className="metric-value">{precastCount}</strong>
-          <span className="metric-sub">Itens prontos para planejamento de producao.</span>
+          <span className="metric-sub">Lista real das pecas fabricadas pela equipe.</span>
         </article>
-        <article className="metric-card accent-gray span-3">
+        <article className="product-metric-card accent-gray">
           <div className="metric-top">
             <span className="mono">Insumos base</span>
             <ClipboardList size={22} />
@@ -111,7 +146,7 @@ export default async function ProdutosPage() {
           <strong className="metric-value">{rawMaterialCount}</strong>
           <span className="metric-sub">Materiais usados nas composicoes.</span>
         </article>
-        <article className="metric-card accent-blue span-3">
+        <article className="product-metric-card accent-blue">
           <div className="metric-top">
             <span className="mono">Fichas aprovadas</span>
             <Ruler size={22} />
@@ -121,110 +156,141 @@ export default async function ProdutosPage() {
         </article>
       </section>
 
-      <section className="grid-12">
-        <section className="table-shell span-8">
-          <div className="table-header">
+      <section className="product-page-stack">
+        <section className="product-section-card">
+          <div className="table-header product-card-header">
             <div>
-              <p className="eyebrow">Catalogo</p>
-              <h2>Itens tecnicos</h2>
+              <p className="eyebrow">Foco da fabrica</p>
+              <h2>Pecas que vamos controlar neste momento</h2>
+              <p className="metric-sub">Pecas principais para controlar producao, cura, liberacao e estoque acabado.</p>
             </div>
-            <span className="badge blue">{units.length} unidades</span>
+            <span className="badge green">{precastItems.length} pecas</span>
           </div>
-          <table>
-            <thead>
-              <tr>
-                <th>Codigo</th>
-                <th>Descricao</th>
-                <th>Tipo</th>
-                <th>Un.</th>
-                <th>Estoque</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => {
-                const stockQuantity = item.stockBalances.reduce((total, balance) => {
-                  return total + Number(decimalToString(balance.quantity));
-                }, 0);
+          <div className="precast-product-grid">
+            {precastItems.map((item) => {
+              const stockQuantity = item.stockBalances.reduce((total, balance) => total + decimalToNumber(balance.quantity), 0);
 
-                return (
-                  <tr key={item.id}>
-                    <td className="mono">{item.code}</td>
-                    <td>{item.description}</td>
-                    <td>{typeLabels[item.type] || item.type}</td>
-                    <td className="mono">{item.unit.code}</td>
-                    <td className="mono">{stockQuantity.toLocaleString("pt-BR")}</td>
-                    <td>
-                      <span className={item.active ? "badge green" : "badge red"}>
-                        {item.active ? "Ativo" : "Inativo"}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </section>
-
-        <aside className="product-side-stack span-4">
-          <section className="card accent-blue product-side-panel">
-            <p className="eyebrow">Novo cadastro</p>
-            <h2>Adicionar produto</h2>
-            <ProductCreateForm units={units.map((unit) => ({ id: unit.id, code: unit.code, name: unit.name }))} />
-          </section>
-
-          <section className="card accent-orange product-side-panel">
-            <p className="eyebrow">Formas e moldes</p>
-            <h2>Recursos produtivos</h2>
-            <div className="split-list">
-              {molds.map((mold) => (
-                <div className="split-row" key={mold.id}>
-                  <div>
-                    <strong>{mold.name}</strong>
-                    <span className="product-detail mono">{mold.code}</span>
-                  </div>
-                  <span className={mold.active ? "badge green" : "badge red"}>
-                    {mold.active ? "Ativa" : "Inativa"}
+              return (
+              <article className="precast-product-card" key={item.id}>
+                <div className="precast-product-top">
+                  <span className="mono">{item.code}</span>
+                  <span className={item.active ? "badge green" : "badge red"}>
+                    {item.active ? "Ativa" : "Inativa"}
                   </span>
                 </div>
-              ))}
-              {molds.length === 0 ? <p className="metric-sub">Nenhuma forma cadastrada ainda.</p> : null}
-            </div>
-          </section>
-        </aside>
+                <h3>{item.description}</h3>
+                <div className="product-card-meta">
+                  <span>Grupo: {item.group || "Sem grupo"}</span>
+                  <span>Unidade: {item.unit.code}</span>
+                  <span>Cura: {item.curingHours}h</span>
+                </div>
+                <div className="lot-tags">
+                  <span className="badge blue">Estoque: {formatQuantity(stockQuantity)} {item.unit.code}</span>
+                  <a className="secondary-button mini-button" href="/produtos/composicoes/nova">Ficha técnica</a>
+                </div>
+              </article>
+              );
+            })}
+            {precastItems.length === 0 ? (
+              <p className="metric-sub">Rode o seed inicial para carregar as pecas de producao.</p>
+            ) : null}
+          </div>
+        </section>
 
-        <section className="card accent-blue span-12">
+        <section className="product-section-card">
           <div className="table-header product-card-header">
             <div>
               <p className="eyebrow">Composicoes</p>
               <h2>Fichas tecnicas de producao</h2>
             </div>
-            <span className="badge orange">{compositions.length} fichas</span>
+            <div className="button-row">
+              <span className="badge orange">{compositions.length} fichas</span>
+              <a className="primary-button mini-button" href="/produtos/composicoes/nova">
+                <ClipboardList size={14} />
+                Nova composição
+              </a>
+            </div>
           </div>
-          <div className="composition-grid">
+          <div className="composition-record-stack">
             {compositions.map((composition) => (
-              <article className="composition-card" key={composition.id}>
-                <div className="metric-top">
-                  <span className="mono">{composition.code}</span>
-                  <span className={composition.approved ? "badge green" : "badge orange"}>
-                    {composition.approved ? "Aprovada" : "Em revisao"}
-                  </span>
-                </div>
-                <h3>{composition.product.description}</h3>
-                <p className="metric-sub">
-                  Versao {composition.version} / revisao {composition.revision} - base{" "}
-                  {decimalToString(composition.baseQuantity)}
-                </p>
-                <div className="composition-items">
-                  {composition.items.map((compositionItem) => (
-                    <div className="split-row" key={compositionItem.id}>
-                      <span>{compositionItem.item.description}</span>
-                      <strong className="mono">
-                        {decimalToString(compositionItem.quantity)} {compositionItem.item.unit.code}
-                      </strong>
+              <article className="composition-record-card" key={composition.id}>
+                <div className="composition-record-main">
+                  <div className="supply-record-title">
+                    <div>
+                      <p className="eyebrow">Ficha tecnica</p>
+                      <h3 className="mono">{composition.code}</h3>
+                      <span className="metric-sub">{composition.product.code} - {composition.product.description}</span>
                     </div>
-                  ))}
+                    <div className="supplier-quote-badges">
+                      <span className={composition.approved ? "badge green" : "badge orange"}>
+                        {composition.approved ? "Aprovada" : "Em revisao"}
+                      </span>
+                      <span className="badge">{composition.orders.length} OP</span>
+                    </div>
+                  </div>
+
+                  <div className="quote-meta-grid">
+                    <div>
+                      <span>Versao</span>
+                      <strong>{composition.version} / {composition.revision}</strong>
+                    </div>
+                    <div>
+                      <span>Base</span>
+                      <strong>{decimalToString(composition.baseQuantity)} {composition.product.unit.code}</strong>
+                    </div>
+                    <div>
+                      <span>Perda</span>
+                      <strong>{decimalToString(composition.expectedLoss)}%</strong>
+                    </div>
+                    <div>
+                      <span>Cura</span>
+                      <strong>{composition.curingHours ?? composition.product.curingHours}h</strong>
+                    </div>
+                  </div>
+
+                  <div className="quote-items-table composition-items-table">
+                    <div className="composition-items-row composition-items-head">
+                      <span>Insumo</span>
+                      <span>Qtd.</span>
+                      <span>Perda</span>
+                      <span>Etapa</span>
+                      <span>Saldo</span>
+                    </div>
+                    {composition.items.map((compositionItem) => (
+                      <div className="composition-items-row" key={compositionItem.id}>
+                        <div>
+                          <strong>{compositionItem.item.code}</strong>
+                          <small>{compositionItem.item.description}</small>
+                        </div>
+                        <strong className="mono">{decimalToString(compositionItem.quantity)} {compositionItem.item.unit.code}</strong>
+                        <span className="mono">{decimalToString(compositionItem.lossPercent)}%</span>
+                        <span>{compositionItem.stage || "Sem etapa"}</span>
+                        <span className="mono">
+                          {formatQuantity(compositionItem.item.stockBalances.reduce((total, balance) => total + decimalToNumber(balance.quantity), 0))}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
+
+                <aside className="supply-record-actions">
+                  <div className="quote-total-box">
+                    <span>Capacidade estimada</span>
+                    <strong>
+                      {compositionCapacity.find((item) => item.id === composition.id)?.capacity === null
+                        ? "-"
+                        : `${compositionCapacity.find((item) => item.id === composition.id)?.capacity ?? 0} un`}
+                    </strong>
+                    <small>Limitada pelo menor saldo de insumo</small>
+                  </div>
+                  <CompositionActions
+                    compositionId={composition.id}
+                    locked={composition.orders.length > 0}
+                    editData={{
+                      code: composition.code
+                    }}
+                  />
+                </aside>
               </article>
             ))}
             {compositions.length === 0 ? (

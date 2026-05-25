@@ -4,13 +4,13 @@ import {
   Activity,
   Boxes,
   Building2,
-  ChartNoAxesCombined,
   ClipboardList,
   Factory,
   Gauge,
   Menu,
   PackageSearch,
   Search,
+  Settings2,
   ShieldCheck,
   UserCog,
   WalletCards
@@ -24,14 +24,14 @@ export const metadata: Metadata = {
 };
 
 const navItems = [
-  { href: "/diretoria", label: "Diretoria", icon: ChartNoAxesCombined },
   { href: "/dashboard", label: "Dashboard", icon: Gauge },
   { href: "/produtos", label: "Produtos", icon: ClipboardList },
   { href: "/producao", label: "Produção", icon: Factory },
   { href: "/suprimentos", label: "Suprimentos", icon: PackageSearch },
   { href: "/estoque", label: "Estoque", icon: Boxes },
   { href: "/financeiro", label: "Financeiro", icon: WalletCards },
-  { href: "/usuarios", label: "Usuarios", icon: UserCog }
+  { href: "/cadastros", label: "Cadastros", icon: Settings2 },
+  { href: "/usuarios", label: "Usuários", icon: UserCog }
 ];
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

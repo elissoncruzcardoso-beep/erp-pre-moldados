@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
 import { getSession } from "@/lib/auth/session";
+import { makeAutomaticCode, normalizeManualCode } from "@/lib/codes/auto-code";
 import { getPrisma } from "@/lib/db/prisma";
 import { productionOrderSchema } from "@/lib/validations/production";
 
@@ -35,9 +36,28 @@ export async function POST(request: Request) {
 
   try {
     const order = await prisma.$transaction(async (tx) => {
+      if (input.compositionId) {
+        const composition = await tx.composition.findUnique({
+          where: { id: input.compositionId },
+          select: {
+            productId: true,
+            approved: true,
+            code: true
+          }
+        });
+
+        if (!composition || composition.productId !== input.productId) {
+          throw new Error("A ficha tecnica selecionada nao pertence ao produto da OP.");
+        }
+
+        if (!composition.approved) {
+          throw new Error(`A ficha tecnica ${composition.code} ainda nao esta aprovada.`);
+        }
+      }
+
       const createdOrder = await tx.productionOrder.create({
         data: {
-          number: input.number.trim().toUpperCase(),
+          number: normalizeManualCode(input.number) || makeAutomaticCode("OP"),
           productId: input.productId,
           compositionId: input.compositionId || null,
           moldId: input.moldId || null,
@@ -86,6 +106,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Ja existe uma OP com este numero." }, { status: 409 });
     }
 
-    return NextResponse.json({ error: "Nao foi possivel criar a ordem de producao." }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Nao foi possivel criar a ordem de producao.";
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 }

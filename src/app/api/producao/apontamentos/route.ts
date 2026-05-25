@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
+import { consumeApprovedCompositionForProduction } from "@/lib/production/consume-composition";
 import { productionNoteSchema } from "@/lib/validations/production";
 
 export async function POST(request: Request) {
@@ -33,6 +34,7 @@ export async function POST(request: Request) {
       const order = await tx.productionOrder.findUnique({
         where: { id: input.productionOrderId },
         include: {
+          product: true,
           stages: { orderBy: { sequence: "asc" } }
         }
       });
@@ -56,6 +58,16 @@ export async function POST(request: Request) {
 
       const nextProducedQuantity = order.producedQuantity.plus(producedQuantity);
       const nextStatus = order.status === "PLANEJADA" || order.status === "LIBERADA" ? "EM_PRODUCAO" : order.status;
+      const consumptionSummary = producedQuantity.greaterThan(0)
+        ? await consumeApprovedCompositionForProduction(tx, {
+            productId: order.productId,
+            producedQuantity,
+            userId: session.userId,
+            document: order.number,
+            productionOrderId: order.id,
+            justification: `Consumo automatico pela ficha tecnica no apontamento da OP ${order.number}.`
+          })
+        : null;
 
       await tx.productionOrder.update({
         where: { id: order.id },
@@ -111,7 +123,8 @@ export async function POST(request: Request) {
             lossQuantity: note.lossQuantity.toString(),
             scrapQuantity: note.scrapQuantity.toString(),
             downtimeMinutes: note.downtimeMinutes,
-            finishStage: input.finishStage
+            finishStage: input.finishStage,
+            compositionConsumption: consumptionSummary
           }
         }
       });

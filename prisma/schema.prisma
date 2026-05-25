@@ -22,6 +22,11 @@ enum ItemType {
   SERVICO
 }
 
+enum FinancialGroupType {
+  ENTRADA
+  SAIDA
+}
+
 enum ProductionOrderStatus {
   RASCUNHO
   PLANEJADA
@@ -103,6 +108,14 @@ enum AccountReceivableStatus {
   CANCELADO
 }
 
+enum ProductionBatchStatus {
+  EM_CURA
+  APTA_RETIRADA
+  RETIRADA_PARCIAL
+  RETIRADA_TOTAL
+  BLOQUEADA
+}
+
 enum AuditAction {
   LOGIN
   CREATE
@@ -129,6 +142,8 @@ model User {
   auditLogs       AuditLog[]
   stockMovements  StockMovement[]
   productionNotes ProductionNote[]
+  productionDailyLogs ProductionDailyLog[]
+  releasedProductionBatches ProductionBatch[] @relation("ProductionBatchReleasedBy")
   purchaseRequests PurchaseRequest[]
   purchaseQuotes  PurchaseQuote[]
   purchaseOrders  PurchaseOrder[]
@@ -203,6 +218,7 @@ model Supplier {
   active    Boolean  @default(true)
   lots      Lot[]
   quotes    PurchaseQuote[]
+  quoteItems PurchaseQuoteItem[]
   orders    PurchaseOrder[]
   accountsPayable AccountPayable[]
   createdAt DateTime @default(now())
@@ -218,6 +234,34 @@ model UnitOfMeasure {
   createdAt DateTime @default(now())
 }
 
+model InputGroup {
+  id                    String             @id @default(cuid())
+  code                  String             @unique
+  name                  String             @unique
+  type                  ItemType           @default(INSUMO)
+  defaultFinancialGroupId String?
+  defaultFinancialGroup FinancialGroup?    @relation(fields: [defaultFinancialGroupId], references: [id])
+  controlsStock         Boolean            @default(true)
+  active                Boolean            @default(true)
+  note                  String?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+}
+
+model FinancialGroup {
+  id          String             @id @default(cuid())
+  code        String             @unique
+  name        String
+  type        FinancialGroupType
+  category    String?
+  costCenter  String?
+  active      Boolean            @default(true)
+  note        String?
+  inputGroups InputGroup[]
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+}
+
 model Item {
   id                    String            @id @default(cuid())
   code                  String            @unique
@@ -230,15 +274,19 @@ model Item {
   controlsLot           Boolean           @default(false)
   minimumStock          Decimal           @default(0) @db.Decimal(14, 3)
   standardCost          Decimal           @default(0) @db.Decimal(14, 4)
+  curingHours           Int               @default(24)
   active                Boolean           @default(true)
   lots                  Lot[]
   stockBalances         StockBalance[]
   stockMovements        StockMovement[]
   purchaseRequestItems  PurchaseRequestItem[]
+  purchaseQuoteItems    PurchaseQuoteItem[]
   purchaseOrderItems    PurchaseOrderItem[]
   compositionsAsProduct Composition[]     @relation("CompositionProduct")
   compositionItems      CompositionItem[]
   productionOrders      ProductionOrder[]
+  productionDailyLogItems ProductionDailyLogItem[]
+  productionBatches     ProductionBatch[]
   createdAt             DateTime          @default(now())
   updatedAt             DateTime          @updatedAt
 }
@@ -341,6 +389,7 @@ model PurchaseRequestItem {
   item              Item            @relation(fields: [itemId], references: [id])
   quantity          Decimal         @db.Decimal(14, 3)
   note              String?
+  quoteItems        PurchaseQuoteItem[]
 }
 
 model PurchaseQuote {
@@ -359,9 +408,30 @@ model PurchaseQuote {
   freightCost       Decimal             @default(0) @db.Decimal(14, 4)
   totalValue        Decimal             @db.Decimal(14, 4)
   note              String?
+  items             PurchaseQuoteItem[]
   purchaseOrder     PurchaseOrder?
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
+}
+
+model PurchaseQuoteItem {
+  id                    String              @id @default(cuid())
+  purchaseQuoteId       String
+  purchaseQuote         PurchaseQuote       @relation(fields: [purchaseQuoteId], references: [id], onDelete: Cascade)
+  purchaseRequestItemId String
+  purchaseRequestItem   PurchaseRequestItem @relation(fields: [purchaseRequestItemId], references: [id])
+  itemId                String
+  item                  Item                @relation(fields: [itemId], references: [id])
+  supplierId            String
+  supplier              Supplier            @relation(fields: [supplierId], references: [id])
+  quantity              Decimal             @db.Decimal(14, 3)
+  unitPrice             Decimal             @default(0) @db.Decimal(14, 4)
+  discountValue         Decimal             @default(0) @db.Decimal(14, 4)
+  freightCost           Decimal             @default(0) @db.Decimal(14, 4)
+  totalValue            Decimal             @default(0) @db.Decimal(14, 4)
+  note                  String?
+
+  @@unique([purchaseQuoteId, purchaseRequestItemId])
 }
 
 model PurchaseOrder {
@@ -525,6 +595,7 @@ model Composition {
   revision     String
   baseQuantity Decimal           @default(1) @db.Decimal(14, 3)
   expectedLoss Decimal           @default(0) @db.Decimal(6, 3)
+  curingHours  Int?
   approved     Boolean           @default(false)
   items        CompositionItem[]
   orders       ProductionOrder[]
@@ -589,6 +660,56 @@ model ProductionNote {
   downtimeMinutes   Int             @default(0)
   note              String?
   createdAt         DateTime        @default(now())
+}
+
+model ProductionDailyLog {
+  id             String                   @id @default(cuid())
+  logDate        DateTime
+  teamPresent    String
+  weatherMorning String
+  weatherAfternoon String
+  observation    String?
+  createdById    String
+  createdBy      User                     @relation(fields: [createdById], references: [id])
+  items          ProductionDailyLogItem[]
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  @@unique([logDate, createdById])
+}
+
+model ProductionDailyLogItem {
+  id                 String             @id @default(cuid())
+  dailyLogId         String
+  dailyLog           ProductionDailyLog @relation(fields: [dailyLogId], references: [id], onDelete: Cascade)
+  itemId             String
+  item               Item               @relation(fields: [itemId], references: [id])
+  quantity           Decimal            @db.Decimal(14, 3)
+  note               String?
+  batch              ProductionBatch?
+}
+
+model ProductionBatch {
+  id                 String                @id @default(cuid())
+  code               String                @unique
+  dailyLogItemId     String                @unique
+  dailyLogItem       ProductionDailyLogItem @relation(fields: [dailyLogItemId], references: [id], onDelete: Cascade)
+  itemId             String
+  item               Item                  @relation(fields: [itemId], references: [id])
+  producedQuantity   Decimal               @db.Decimal(14, 3)
+  curingQuantity     Decimal               @db.Decimal(14, 3)
+  releasedQuantity   Decimal               @default(0) @db.Decimal(14, 3)
+  status             ProductionBatchStatus @default(EM_CURA)
+  producedAt         DateTime
+  readyAt            DateTime?
+  autoStockedAt      DateTime?
+  releasedAt         DateTime?
+  releasedById       String?
+  releasedBy         User?                 @relation("ProductionBatchReleasedBy", fields: [releasedById], references: [id])
+  releaseResponsible String?
+  releaseNote        String?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
 }
 
 model AuditLog {

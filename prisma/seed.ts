@@ -1,7 +1,21 @@
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { permissions, rolePermissionMap } from "../src/lib/permissions/permissions";
 
-const prisma = new PrismaClient();
+const connectionString = process.env.DATABASE_URL;
+
+if (!connectionString) {
+  throw new Error("DATABASE_URL nao configurada.");
+}
+
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({
+    connectionString,
+    max: 1,
+    idleTimeoutMillis: 10_000,
+    connectionTimeoutMillis: 10_000
+  })
+});
 
 async function main() {
   for (const permission of permissions) {
@@ -61,6 +75,66 @@ async function main() {
     update: {},
     create: { code: "PA", name: "Produto acabado", type: "Estoque" }
   });
+
+  const financialSeed = [
+    { code: "FIN-VENDAS", name: "Venda de peças pré-moldadas", type: "ENTRADA", category: "Receita operacional", costCenter: "Comercial" },
+    { code: "FIN-MP", name: "Compra de matéria-prima", type: "SAIDA", category: "Produção", costCenter: "Fábrica" },
+    { code: "FIN-INS", name: "Compra de insumos", type: "SAIDA", category: "Produção", costCenter: "Fábrica" },
+    { code: "FIN-MANUT", name: "Manutenção de equipamentos", type: "SAIDA", category: "Manutenção", costCenter: "Fábrica" },
+    { code: "FIN-MO", name: "Mão de obra", type: "SAIDA", category: "Produção", costCenter: "Fábrica" }
+  ] as const;
+
+  for (const group of financialSeed) {
+    await prisma.financialGroup.upsert({
+      where: { code: group.code },
+      update: {
+        name: group.name,
+        type: group.type,
+        category: group.category,
+        costCenter: group.costCenter,
+        active: true
+      },
+      create: {
+        code: group.code,
+        name: group.name,
+        type: group.type,
+        category: group.category,
+        costCenter: group.costCenter
+      }
+    });
+  }
+
+  const financialMp = await prisma.financialGroup.findUniqueOrThrow({ where: { code: "FIN-MP" } });
+  const financialIns = await prisma.financialGroup.findUniqueOrThrow({ where: { code: "FIN-INS" } });
+  const inputGroupSeed = [
+    { code: "GRP-CIM", name: "Cimento", type: "MATERIA_PRIMA", defaultFinancialGroupId: financialMp.id, note: "CP-II, CP-V e similares." },
+    { code: "GRP-AGR", name: "Agregados", type: "MATERIA_PRIMA", defaultFinancialGroupId: financialMp.id, note: "Areia, brita e pó de pedra." },
+    { code: "GRP-ACO", name: "Aço e armaduras", type: "MATERIA_PRIMA", defaultFinancialGroupId: financialMp.id, note: "CA-50, estribos e telas." },
+    { code: "GRP-ADT", name: "Aditivos", type: "INSUMO", defaultFinancialGroupId: financialIns.id, note: "Plastificantes e impermeabilizantes." },
+    { code: "GRP-EPI", name: "EPIs e consumo", type: "INSUMO", defaultFinancialGroupId: financialIns.id, note: "Itens de consumo operacional." }
+  ] as const;
+
+  for (const group of inputGroupSeed) {
+    await prisma.inputGroup.upsert({
+      where: { code: group.code },
+      update: {
+        name: group.name,
+        type: group.type,
+        defaultFinancialGroupId: group.defaultFinancialGroupId,
+        controlsStock: true,
+        active: true,
+        note: group.note
+      },
+      create: {
+        code: group.code,
+        name: group.name,
+        type: group.type,
+        defaultFinancialGroupId: group.defaultFinancialGroupId,
+        controlsStock: true,
+        note: group.note
+      }
+    });
+  }
 
   await prisma.customer.upsert({
     where: { code: "CLI-001" },
@@ -134,7 +208,7 @@ async function main() {
     }
   });
 
-  await prisma.item.upsert({
+  const cimento = await prisma.item.upsert({
     where: { code: "MP-001" },
     update: {},
     create: {
@@ -149,7 +223,7 @@ async function main() {
     }
   });
 
-  await prisma.item.upsert({
+  const aco = await prisma.item.upsert({
     where: { code: "MP-014" },
     update: {},
     create: {
@@ -164,7 +238,7 @@ async function main() {
     }
   });
 
-  await prisma.item.upsert({
+  const aditivo = await prisma.item.upsert({
     where: { code: "AD-004" },
     update: {},
     create: {
@@ -176,21 +250,6 @@ async function main() {
       controlsLot: true,
       minimumStock: 300,
       standardCost: 14.8
-    }
-  });
-
-  await prisma.item.upsert({
-    where: { code: "PA-109" },
-    update: {},
-    create: {
-      code: "PA-109",
-      description: "Pilar P-40 estrutural",
-      type: "PECA_PRE_MOLDADA",
-      group: "Pilares",
-      unitId: un.id,
-      controlsLot: true,
-      minimumStock: 5,
-      standardCost: 1280
     }
   });
 
@@ -208,6 +267,107 @@ async function main() {
       standardCost: 420
     }
   });
+
+  const precastProducts = [
+    ["PM-D80-INF", "MANILHA PRE-MOLDADA INFERIOR D=80 CM X ALT 50 CM", "Manilhas D80", 0, 0, 24],
+    ["PM-D80-MED", "MANILHA PRE-MOLDADA MEDIAL D=80 CM X ALT 50 CM", "Manilhas D80", 0, 0, 24],
+    ["PM-D80-SUP", "MANILHA PRE-MOLDADA SUPERIOR D=80 CM X ALT 50 CM", "Manilhas D80", 0, 0, 24],
+    ["PM-D80", "MANILHA PRE-MOLDADA D=80 X ALT=50 CM", "Manilhas D80", 0, 0, 24],
+    ["TP-D80", "TAMPA PRE-MOLDADA D=80 X ESP=5 CM", "Tampas D80", 0, 0, 24],
+    ["PIL-520-20", "PILAR PRE-MOLDADO ALT=5,20 M X ESP=20 CM", "Pilares", 0, 0, 48],
+    ["LAJ-D200-20", "LAJE PRE-MOLDADA D=2,0 M X ESP=20 CM", "Lajes", 0, 0, 48],
+    ["MOU-10-220", "MOURAO RETO 10 X 10 X 2,20 M", "Mouroes", 0, 0, 24],
+    ["PM-D205", "MANILHAO PRE-MOLDADA D=205 CM X ALT=50 CM", "Manilhoes D205", 0, 0, 48],
+    ["TP-D205", "TAMPA PRE-MOLDADA D=205 CM X ESP=10 CM", "Tampas D205", 0, 0, 48]
+  ] as const;
+
+  for (const [code, description, group, minimumStock, standardCost, curingHours] of precastProducts) {
+    await prisma.item.upsert({
+      where: { code },
+      update: {
+        description,
+        type: "PECA_PRE_MOLDADA",
+        group,
+        unitId: un.id,
+        controlsStock: true,
+        controlsLot: true,
+        minimumStock,
+        standardCost,
+        curingHours,
+        active: true
+      },
+      create: {
+        code,
+        description,
+        type: "PECA_PRE_MOLDADA",
+        group,
+        unitId: un.id,
+        controlsStock: true,
+        controlsLot: true,
+        minimumStock,
+        standardCost,
+        curingHours
+      }
+    });
+  }
+
+  const pilar = await prisma.item.findUniqueOrThrow({ where: { code: "PIL-520-20" } });
+  const composition = await prisma.composition.upsert({
+    where: { code: "COMP-PIL-520-20" },
+    update: {
+      productId: pilar.id,
+      version: "1",
+      revision: "A",
+      baseQuantity: 1,
+      expectedLoss: 0,
+      curingHours: 48,
+      approved: false
+    },
+    create: {
+      code: "COMP-PIL-520-20",
+      productId: pilar.id,
+      version: "1",
+      revision: "A",
+      baseQuantity: 1,
+      expectedLoss: 0,
+      curingHours: 48,
+      approved: false
+    }
+  });
+
+  const compositionItems = [
+    { itemId: cimento.id, quantity: 55, stage: "Concreto" },
+    { itemId: aco.id, quantity: 18, stage: "Armadura" },
+    { itemId: aditivo.id, quantity: 0.8, stage: "Concreto" }
+  ];
+
+  for (const item of compositionItems) {
+    const existing = await prisma.compositionItem.findFirst({
+      where: {
+        compositionId: composition.id,
+        itemId: item.itemId
+      }
+    });
+
+    if (existing) {
+      await prisma.compositionItem.update({
+        where: { id: existing.id },
+        data: {
+          quantity: item.quantity,
+          stage: item.stage
+        }
+      });
+    } else {
+      await prisma.compositionItem.create({
+        data: {
+          compositionId: composition.id,
+          itemId: item.itemId,
+          quantity: item.quantity,
+          stage: item.stage
+        }
+      });
+    }
+  }
 
   await prisma.mold.upsert({
     where: { code: "F-304-B" },

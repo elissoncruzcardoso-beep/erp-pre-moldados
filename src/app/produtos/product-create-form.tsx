@@ -19,14 +19,19 @@ export function ProductCreateForm({ units }: ProductCreateFormProps) {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [type, setType] = useState("PECA_PRE_MOLDADA");
+  const usesCuring = type === "PECA_PRE_MOLDADA" || type === "PRODUTO_ACABADO";
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const form = event.currentTarget;
     setError("");
     setMessage("");
     setLoading(true);
 
-    const formData = new FormData(event.currentTarget);
+    const formData = new FormData(form);
+    const selectedType = String(formData.get("type") || "");
+    const selectedTypeUsesCuring = selectedType === "PECA_PRE_MOLDADA" || selectedType === "PRODUTO_ACABADO";
     const response = await fetch("/api/produtos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -40,6 +45,7 @@ export function ProductCreateForm({ units }: ProductCreateFormProps) {
         controlsLot: formData.get("controlsLot") === "on",
         minimumStock: formData.get("minimumStock") || 0,
         standardCost: formData.get("standardCost") || 0,
+        curingHours: selectedTypeUsesCuring ? formData.get("curingHours") || 24 : 0,
         active: true
       })
     });
@@ -51,73 +57,99 @@ export function ProductCreateForm({ units }: ProductCreateFormProps) {
       return;
     }
 
-    event.currentTarget.reset();
+    form.reset();
     setMessage("Produto cadastrado com sucesso.");
     router.refresh();
   }
 
   return (
     <form className="product-form" onSubmit={handleSubmit}>
-      <label className="field">
-        <span>Codigo</span>
-        <input className="form-input mono" name="code" placeholder="PA-120" required maxLength={40} />
-      </label>
+      <div className="product-form-group">
+        <div className="form-group-title">
+          <strong>Dados principais</strong>
+          <span>Identificacao tecnica do item.</span>
+        </div>
 
-      <label className="field">
-        <span>Descricao</span>
-        <input className="form-input" name="description" placeholder="Viga pre-moldada 6m" required maxLength={180} />
-      </label>
-
-      <div className="form-two">
         <label className="field">
-          <span>Tipo</span>
-          <select className="form-input" name="type" defaultValue="PECA_PRE_MOLDADA">
-            <option value="PECA_PRE_MOLDADA">Peca pre-moldada</option>
-            <option value="PRODUTO_ACABADO">Produto acabado</option>
-            <option value="MATERIA_PRIMA">Materia-prima</option>
-            <option value="INSUMO">Insumo</option>
-            <option value="FORMA_MOLDE">Forma/molde</option>
-            <option value="SERVICO">Servico</option>
-          </select>
+          <span>Codigo</span>
+          <input className="form-input mono" name="code" placeholder="Automatico se vazio" maxLength={40} />
         </label>
 
         <label className="field">
-          <span>Unidade</span>
-          <select className="form-input" name="unitId" required defaultValue={units[0]?.id || ""}>
-            {units.map((unit) => (
-              <option value={unit.id} key={unit.id}>
-                {unit.code} - {unit.name}
-              </option>
-            ))}
-          </select>
+          <span>Descricao</span>
+          <input className="form-input" name="description" placeholder="Viga pre-moldada 6m" required maxLength={180} />
+        </label>
+
+        <div className="form-two">
+          <label className="field">
+            <span>Tipo</span>
+            <select className="form-input" name="type" value={type} onChange={(event) => setType(event.target.value)}>
+              <option value="PECA_PRE_MOLDADA">Peca pre-moldada</option>
+              <option value="PRODUTO_ACABADO">Produto acabado</option>
+              <option value="MATERIA_PRIMA">Materia-prima</option>
+              <option value="INSUMO">Insumo</option>
+              <option value="FORMA_MOLDE">Forma/molde</option>
+              <option value="SERVICO">Servico</option>
+            </select>
+          </label>
+
+          <label className="field">
+            <span>Unidade</span>
+            <select className="form-input" name="unitId" required defaultValue={units[0]?.id || ""}>
+              {units.map((unit) => (
+                <option value={unit.id} key={unit.id}>
+                  {unit.code} - {unit.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <label className="field">
+          <span>Grupo</span>
+          <input className="form-input" name="group" placeholder="Estrutural, concreto, armadura..." maxLength={80} />
         </label>
       </div>
 
-      <label className="field">
-        <span>Grupo</span>
-        <input className="form-input" name="group" placeholder="Estrutural, concreto, armadura..." maxLength={80} />
-      </label>
+      <div className="product-form-group">
+        <div className="form-group-title">
+          <strong>Controle de estoque</strong>
+          <span>Parametros para saldo, custo e rastreio.</span>
+        </div>
 
-      <div className="form-two">
-        <label className="field">
-          <span>Estoque minimo</span>
-          <input className="form-input mono" name="minimumStock" type="number" min="0" step="0.001" defaultValue="0" />
-        </label>
-        <label className="field">
-          <span>Custo padrao</span>
-          <input className="form-input mono" name="standardCost" type="number" min="0" step="0.0001" defaultValue="0" />
-        </label>
-      </div>
+        <div className="form-two">
+          <label className="field">
+            <span>Estoque minimo</span>
+            <input className="form-input mono" name="minimumStock" type="number" min="0" step="0.001" defaultValue="0" />
+          </label>
+          <label className="field">
+            <span>Custo padrao</span>
+            <input className="form-input mono" name="standardCost" type="number" min="0" step="0.0001" defaultValue="0" />
+          </label>
+        </div>
 
-      <div className="check-row">
-        <label>
-          <input name="controlsStock" type="checkbox" defaultChecked />
-          Controla estoque
-        </label>
-        <label>
-          <input name="controlsLot" type="checkbox" />
-          Controla lote
-        </label>
+        {usesCuring ? (
+          <label className="field">
+            <span>Tempo de cura automatico (horas)</span>
+            <input className="form-input mono" name="curingHours" type="number" min="0" max="720" step="1" defaultValue="24" />
+            <small className="field-hint">Usado apenas para peca pre-moldada ou produto acabado.</small>
+          </label>
+        ) : (
+          <div className="field-readonly-note">
+            Tempo de cura nao se aplica a materia-prima, insumo, forma/molde ou servico.
+          </div>
+        )}
+
+        <div className="check-row">
+          <label>
+            <input name="controlsStock" type="checkbox" defaultChecked />
+            Controla estoque
+          </label>
+          <label>
+            <input name="controlsLot" type="checkbox" />
+            Controla lote
+          </label>
+        </div>
       </div>
 
       {error ? <p className="auth-error">{error}</p> : null}
