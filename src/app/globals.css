@@ -1604,6 +1604,191 @@ select.form-input {
   min-width: 0;
 }
 
+.stock-sale-stack {
+  display: grid;
+  gap: 16px;
+}
+
+.sale-receipt-panel {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.sale-receipt-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sale-receipt-actions h3 {
+  margin: 0;
+}
+
+.sale-receipt {
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+  color: var(--text);
+  background: #fff;
+}
+
+.sale-receipt-header,
+.sale-receipt-grid,
+.sale-receipt-total,
+.sale-receipt-footer {
+  display: grid;
+  gap: 12px;
+}
+
+.sale-receipt-header {
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  padding-bottom: 14px;
+  border-bottom: 2px solid var(--primary);
+}
+
+.sale-receipt-header h2 {
+  margin: 4px 0 0;
+  font-size: 24px;
+}
+
+.sale-receipt-number {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+  color: var(--primary);
+}
+
+.sale-receipt-number span,
+.sale-receipt-grid small,
+.sale-receipt-footer,
+.sale-receipt-note {
+  color: var(--text-muted);
+}
+
+.sale-receipt-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.sale-receipt-grid div {
+  display: grid;
+  gap: 3px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.sale-receipt-grid span,
+.sale-receipt-total span {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.sale-receipt-table {
+  width: 100%;
+  min-width: 0;
+  border-collapse: collapse;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.sale-receipt-table th,
+.sale-receipt-table td {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.sale-receipt-table th {
+  background: #111827;
+  color: #fff;
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.sale-receipt-total {
+  justify-self: end;
+  width: min(100%, 320px);
+}
+
+.sale-receipt-total div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.sale-receipt-total div:last-child {
+  padding: 14px;
+  border: 0;
+  border-radius: 12px;
+  background: #eef2ff;
+  color: var(--primary);
+}
+
+.sale-receipt-total div:last-child strong {
+  font-size: 20px;
+}
+
+.sale-receipt-note {
+  margin: 0;
+  padding: 12px;
+  border-left: 3px solid var(--primary);
+  background: #f8fafc;
+}
+
+.sale-receipt-footer {
+  grid-template-columns: 1fr;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.sale-receipt-footer p {
+  margin: 0;
+}
+
+.sale-signatures {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 34px;
+  padding-top: 18px;
+}
+
+.sale-signatures div {
+  display: grid;
+  gap: 8px;
+  text-align: center;
+}
+
+.sale-signatures span {
+  display: block;
+  height: 34px;
+  border-bottom: 1px solid #111827;
+}
+
+.sale-signatures strong {
+  font-size: 11px;
+  color: var(--text);
+}
+
+.sale-receipt-page {
+  max-width: 920px;
+  margin: 0 auto;
+}
+
 .product-form-group {
   display: grid;
   gap: 12px;
@@ -3940,11 +4125,16 @@ select.form-input {
 @media print {
   @page {
     size: A4;
-    margin: 16mm;
+    margin: 10mm;
   }
 
+  html,
   body {
     background: #fff !important;
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 !important;
+    overflow: visible !important;
   }
 
   body * {
@@ -3952,15 +4142,109 @@ select.form-input {
   }
 
   .print-only,
-  .print-only * {
+  .print-only *,
+  .sale-receipt,
+  .sale-receipt * {
     visibility: visible !important;
   }
 
-  .print-only {
+  .print-only,
+  .sale-receipt {
     position: absolute;
-    inset: 0 auto auto 0;
-    display: block !important;
-    width: 100%;
+    inset: 0 auto auto 0 !important;
+    display: grid !important;
+    width: 190mm !important;
+    max-width: 190mm !important;
+    min-height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    gap: 8mm !important;
+    box-shadow: none !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    page-break-after: avoid;
+    page-break-inside: avoid;
+    color: #111827 !important;
+  }
+
+  .no-print,
+  .no-print * {
+    display: none !important;
+  }
+
+  .sale-receipt-header {
+    display: grid !important;
+    grid-template-columns: 1fr 42mm !important;
+    padding-bottom: 5mm !important;
+    border-bottom: 1.5pt solid #1f2a8a !important;
+  }
+
+  .sale-receipt-header h2 {
+    font-size: 20pt !important;
+    margin: 2mm 0 0 !important;
+  }
+
+  .sale-receipt-number {
+    gap: 1mm !important;
+    font-size: 9pt !important;
+  }
+
+  .sale-receipt-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 4mm !important;
+  }
+
+  .sale-receipt-grid div {
+    padding: 4mm !important;
+    border-radius: 3mm !important;
+    background: #f8fafc !important;
+  }
+
+  .sale-receipt-grid strong,
+  .sale-receipt-table td,
+  .sale-receipt-total strong,
+  .sale-receipt-note,
+  .sale-receipt-footer {
+    font-size: 10pt !important;
+    line-height: 1.35 !important;
+  }
+
+  .sale-receipt-table {
+    min-width: 0 !important;
+    width: 100% !important;
+    border-radius: 0 !important;
+  }
+
+  .sale-receipt-table th,
+  .sale-receipt-table td {
+    padding: 3mm !important;
+    font-size: 9pt !important;
+  }
+
+  .sale-receipt-total {
+    width: 70mm !important;
+  }
+
+  .sale-receipt-total div {
+    padding: 2.5mm 0 !important;
+  }
+
+  .sale-receipt-total div:last-child {
+    padding: 4mm !important;
+  }
+
+  .sale-receipt-total div:last-child strong {
+    font-size: 14pt !important;
+  }
+
+  .sale-signatures {
+    gap: 18mm !important;
+    padding-top: 9mm !important;
+  }
+
+  .sale-signatures span {
+    height: 13mm !important;
   }
 
   .external-report {

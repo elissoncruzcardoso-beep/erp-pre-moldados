@@ -13,6 +13,17 @@ Voce esta trabalhando no MVP real de um ERP industrial para fabrica de pre-molda
   - Estoque: saldos, lotes, reservas, entradas, saidas, transferencias, ajustes e inventario.
   - Producao: ordens, etapas, consumo, apontamentos, cura, qualidade e entrada de produto acabado.
 
+## Subagentes recomendados
+Use subagentes somente para tarefas bem delimitadas e, por padrao, em modo read-only ate existir uma decisao de implementacao.
+
+- QA: testa fluxos ponta a ponta, reproduz erros e lista cenarios criticos antes de publicar.
+- Banco/Prisma: revisa schema, relacoes, migrations, integridade de estoque, lotes, financeiro e auditoria.
+- Seguranca: revisa autenticacao, permissoes, exposicao de dados, auditoria, endpoints criticos e segredos.
+- Design/UI: revisa layout, responsividade, densidade, impressao A4, padrao visual e consistencia entre modulos.
+- Fluxo ERP: revisa coerencia operacional entre suprimentos, producao, estoque, financeiro, vendas e relatorios.
+
+Ao receber retorno dos subagentes, priorize achados por risco para o negocio: perda de estoque, financeiro incorreto, falha de permissao, quebra de fluxo e problemas visuais que impeçam uso.
+
 ## Stack atual
 - Next.js App Router
 - React
@@ -51,6 +62,7 @@ Modelos mais importantes:
 - `User`, `Role`, `Permission`, `RolePermission`
 - `Item`, `UnitOfMeasure`, `Composition`, `CompositionItem`, `Mold`
 - `Warehouse`, `StockBalance`, `StockMovement`, `Lot`
+- `DirectSale` para recibos de venda direta com baixa/estorno de estoque
 - `ProductionOrder`, `ProductionStage`, `ProductionNote`
 - `AuditLog`
 
@@ -59,6 +71,7 @@ Modelos mais importantes:
 - Dashboard: prototipo visual.
 - Produtos: leitura real e cadastro real de item/produto.
 - Estoque: movimentacao real com saldo e auditoria.
+- Venda direta: recibo profissional, baixa de estoque, CRUD basico, cancelamento com estorno e impressao A4.
 - Suprimentos: ambiente visual reorganizado para compras, contratos, recebimento e conferencia.
 - Financeiro: prototipo visual.
 - Usuarios: tela real protegida para visualizar usuarios, perfis e permissoes.

@@ -104,6 +104,47 @@ async function main() {
     });
   }
 
+  const paymentMethodSeed = [
+    { code: "PIX", name: "Pix", type: "PIX", note: "Recebimento ou pagamento instantaneo." },
+    { code: "DINHEIRO", name: "Dinheiro", type: "DINHEIRO", note: "Pagamento em especie." },
+    { code: "CARTAO", name: "Cartao", type: "CARTAO", note: "Credito ou debito." },
+    { code: "BOLETO", name: "Boleto bancario", type: "BOLETO", note: "Pagamento a prazo por boleto." },
+    { code: "TRANSFERENCIA", name: "Transferencia bancaria", type: "TRANSFERENCIA", note: "TED, DOC ou transferencia entre contas." }
+  ] as const;
+
+  for (const method of paymentMethodSeed) {
+    await prisma.paymentMethod.upsert({
+      where: { code: method.code },
+      update: {
+        name: method.name,
+        type: method.type,
+        active: true,
+        note: method.note
+      },
+      create: method
+    });
+  }
+
+  const settlementTypeSeed = [
+    { code: "REC-VENDA", name: "Recebimento de venda", direction: "ENTRADA", note: "Baixa de conta a receber originada por venda." },
+    { code: "REC-PIX", name: "Recebimento via Pix", direction: "ENTRADA", note: "Baixa imediata por Pix." },
+    { code: "PAG-FORN", name: "Pagamento de fornecedor", direction: "SAIDA", note: "Baixa de conta a pagar." },
+    { code: "ESTORNO", name: "Estorno financeiro", direction: "ESTORNO", note: "Cancelamento ou ajuste de baixa financeira." }
+  ] as const;
+
+  for (const type of settlementTypeSeed) {
+    await prisma.financialSettlementType.upsert({
+      where: { code: type.code },
+      update: {
+        name: type.name,
+        direction: type.direction,
+        active: true,
+        note: type.note
+      },
+      create: type
+    });
+  }
+
   const financialMp = await prisma.financialGroup.findUniqueOrThrow({ where: { code: "FIN-MP" } });
   const financialIns = await prisma.financialGroup.findUniqueOrThrow({ where: { code: "FIN-INS" } });
   const inputGroupSeed = [

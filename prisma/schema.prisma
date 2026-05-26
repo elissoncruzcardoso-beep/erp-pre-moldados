@@ -108,6 +108,11 @@ enum AccountReceivableStatus {
   CANCELADO
 }
 
+enum DirectSaleStatus {
+  ATIVA
+  CANCELADA
+}
+
 enum ProductionBatchStatus {
   EM_CURA
   APTA_RETIRADA
@@ -141,6 +146,8 @@ model User {
   role            Role             @relation(fields: [roleId], references: [id])
   auditLogs       AuditLog[]
   stockMovements  StockMovement[]
+  directSales      DirectSale[]
+  cancelledDirectSales DirectSale[] @relation("DirectSaleCancelledBy")
   productionNotes ProductionNote[]
   productionDailyLogs ProductionDailyLog[]
   releasedProductionBatches ProductionBatch[] @relation("ProductionBatchReleasedBy")
@@ -201,11 +208,36 @@ model Customer {
   document  String?
   email     String?
   phone     String?
+  address   String?
+  city      String?
+  state     String?
   active    Boolean           @default(true)
   orders    ProductionOrder[]
   accountsReceivable AccountReceivable[]
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt
+}
+
+model PaymentMethod {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  type      String   @default("A_VISTA")
+  active    Boolean  @default(true)
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FinancialSettlementType {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  direction String   @default("ENTRADA")
+  active    Boolean  @default(true)
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Supplier {
@@ -287,6 +319,7 @@ model Item {
   productionOrders      ProductionOrder[]
   productionDailyLogItems ProductionDailyLogItem[]
   productionBatches     ProductionBatch[]
+  directSales            DirectSale[]
   createdAt             DateTime          @default(now())
   updatedAt             DateTime          @updatedAt
 }
@@ -302,6 +335,7 @@ model Warehouse {
   originMoves    StockMovement[] @relation("OriginWarehouse")
   targetMoves    StockMovement[] @relation("TargetWarehouse")
   purchaseReceipts PurchaseReceipt[]
+  directSales    DirectSale[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 }
@@ -356,11 +390,43 @@ model StockMovement {
   productionOrderId String?
   productionOrder   ProductionOrder?   @relation(fields: [productionOrderId], references: [id])
   purchaseReceipt   PurchaseReceipt?
+  directSale         DirectSale?
   userId            String
   user              User               @relation(fields: [userId], references: [id])
   document          String?
   justification     String?
   createdAt         DateTime           @default(now())
+}
+
+model DirectSale {
+  id               String           @id @default(cuid())
+  number           String           @unique
+  customerName     String
+  customerDocument String?
+  itemId           String
+  item             Item             @relation(fields: [itemId], references: [id])
+  warehouseId      String
+  warehouse        Warehouse        @relation(fields: [warehouseId], references: [id])
+  stockMovementId  String?          @unique
+  stockMovement    StockMovement?   @relation(fields: [stockMovementId], references: [id])
+  createdById      String
+  createdBy        User             @relation(fields: [createdById], references: [id])
+  cancelledById    String?
+  cancelledBy      User?            @relation("DirectSaleCancelledBy", fields: [cancelledById], references: [id])
+  status           DirectSaleStatus @default(ATIVA)
+  quantity         Decimal          @db.Decimal(14, 3)
+  unitPrice        Decimal          @default(0) @db.Decimal(14, 4)
+  grossTotal       Decimal          @default(0) @db.Decimal(14, 4)
+  discount         Decimal          @default(0) @db.Decimal(14, 4)
+  finalTotal       Decimal          @default(0) @db.Decimal(14, 4)
+  paymentMethod    String?
+  note             String?
+  consumedLots     Json?
+  issuedAt         DateTime         @default(now())
+  cancelledAt      DateTime?
+  cancelReason     String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 }
 
 model PurchaseRequest {

@@ -9,7 +9,7 @@ type BaseRegisterFormProps = {
   children: ReactNode;
   submitLabel: string;
   successMessage: string;
-  formType: "unit" | "inputGroup" | "financialGroup";
+  formType: "unit" | "inputGroup" | "financialGroup" | "customer" | "paymentMethod" | "settlementType";
 };
 
 export function BaseRegisterForm({
@@ -83,12 +83,46 @@ function buildPayload(formType: BaseRegisterFormProps["formType"], formData: For
     };
   }
 
+  if (formType === "financialGroup") {
+    return {
+      code: formData.get("code"),
+      name: formData.get("name"),
+      type: formData.get("type"),
+      category: formData.get("category") || undefined,
+      costCenter: formData.get("costCenter") || undefined,
+      note: formData.get("note") || undefined,
+      active: true
+    };
+  }
+
+  if (formType === "customer") {
+    return {
+      code: formData.get("code"),
+      name: formData.get("name"),
+      document: formData.get("document") || undefined,
+      email: formData.get("email") || undefined,
+      phone: formData.get("phone") || undefined,
+      address: formData.get("address") || undefined,
+      city: formData.get("city") || undefined,
+      state: formData.get("state") || undefined,
+      active: true
+    };
+  }
+
+  if (formType === "paymentMethod") {
+    return {
+      code: formData.get("code"),
+      name: formData.get("name"),
+      type: formData.get("type"),
+      note: formData.get("note") || undefined,
+      active: true
+    };
+  }
+
   return {
     code: formData.get("code"),
     name: formData.get("name"),
-    type: formData.get("type"),
-    category: formData.get("category") || undefined,
-    costCenter: formData.get("costCenter") || undefined,
+    direction: formData.get("direction"),
     note: formData.get("note") || undefined,
     active: true
   };

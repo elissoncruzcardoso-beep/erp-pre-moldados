@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Boxes, Calculator, ClipboardList, Ruler, Settings2, ShieldCheck } from "lucide-react";
+import { Boxes, Calculator, ClipboardList, CreditCard, HandCoins, Ruler, Settings2, ShieldCheck, Users } from "lucide-react";
 import { getSession } from "@/lib/auth/session";
 import { CadastrosNav } from "./_components/cadastros-nav";
 
@@ -20,6 +20,12 @@ const modules = [
     icon: Ruler
   },
   {
+    href: "/cadastros/clientes",
+    title: "Clientes",
+    description: "Cadastre clientes avulsos e recorrentes para vendas, contas a receber e recibos.",
+    icon: Users
+  },
+  {
     href: "/cadastros/grupos-insumos",
     title: "Grupos de insumos",
     description: "Organize cimento, aço, agregados, aditivos, EPIs e serviços para compras e composição.",
@@ -30,6 +36,18 @@ const modules = [
     title: "Grupos financeiros",
     description: "Classifique entradas e saídas para contas a pagar, receber, fluxo de caixa e relatórios.",
     icon: Calculator
+  },
+  {
+    href: "/cadastros/formas-pagamento",
+    title: "Formas de pagamento",
+    description: "Padronize Pix, dinheiro, boleto, cartao e condicoes usadas em vendas e baixas.",
+    icon: CreditCard
+  },
+  {
+    href: "/cadastros/tipos-baixa",
+    title: "Tipos de baixas financeiras",
+    description: "Classifique recebimentos, pagamentos, descontos, juros, estornos e ajustes financeiros.",
+    icon: HandCoins
   }
 ];
 

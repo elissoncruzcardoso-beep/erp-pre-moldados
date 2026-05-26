@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { ArrowDownUp, ClipboardCheck, PackageSearch, ScanLine } from "lucide-react";
+import Link from "next/link";
+import { ArrowDownUp, ClipboardCheck, PackageSearch, ReceiptText, ScanLine } from "lucide-react";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
 import { StockMovementForm } from "./stock-movement-form";
@@ -107,6 +108,10 @@ export default async function EstoquePage() {
           </p>
         </div>
         <div className="button-row">
+          <Link className="primary-button" href="/estoque/venda-direta">
+            <ReceiptText size={16} />
+            Venda direta
+          </Link>
           <span className="status-pill">
             <ClipboardCheck size={16} />
             Operador: {session.name}

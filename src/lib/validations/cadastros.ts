@@ -33,6 +33,37 @@ export const financialGroupSchema = z.object({
   note: z.string().trim().max(300).optional()
 });
 
+export const customerSchema = z.object({
+  code: codeSchema,
+  name: z.string().trim().min(2).max(120),
+  document: z.string().trim().max(40).optional(),
+  email: z.string().trim().email().max(120).optional().or(z.literal("")),
+  phone: z.string().trim().max(40).optional(),
+  address: z.string().trim().max(160).optional(),
+  city: z.string().trim().max(80).optional(),
+  state: z.string().trim().max(2).optional(),
+  active: z.coerce.boolean().default(true)
+});
+
+export const paymentMethodSchema = z.object({
+  code: codeSchema,
+  name: z.string().trim().min(2).max(90),
+  type: z.enum(["A_VISTA", "A_PRAZO", "CARTAO", "PIX", "DINHEIRO", "BOLETO", "TRANSFERENCIA", "OUTRO"]).default("A_VISTA"),
+  active: z.coerce.boolean().default(true),
+  note: z.string().trim().max(300).optional()
+});
+
+export const financialSettlementTypeSchema = z.object({
+  code: codeSchema,
+  name: z.string().trim().min(2).max(90),
+  direction: z.enum(["ENTRADA", "SAIDA", "ESTORNO"]).default("ENTRADA"),
+  active: z.coerce.boolean().default(true),
+  note: z.string().trim().max(300).optional()
+});
+
 export type UnitOfMeasureInput = z.infer<typeof unitOfMeasureSchema>;
 export type InputGroupInput = z.infer<typeof inputGroupSchema>;
 export type FinancialGroupInput = z.infer<typeof financialGroupSchema>;
+export type CustomerInput = z.infer<typeof customerSchema>;
+export type PaymentMethodInput = z.infer<typeof paymentMethodSchema>;
+export type FinancialSettlementTypeInput = z.infer<typeof financialSettlementTypeSchema>;
