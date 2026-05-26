@@ -35,7 +35,7 @@ export default async function VendaDiretaPage() {
   }
 
   const prisma = getPrisma();
-  const [items, warehouses, balances, directSales] = await Promise.all([
+  const [items, warehouses, balances, directSales, customers] = await Promise.all([
     prisma.item.findMany({
       where: {
         active: true,
@@ -73,6 +73,10 @@ export default async function VendaDiretaPage() {
       },
       orderBy: { issuedAt: "desc" },
       take: 8
+    }),
+    prisma.customer.findMany({
+      where: { active: true },
+      orderBy: { name: "asc" }
     })
   ]);
 
@@ -137,6 +141,12 @@ export default async function VendaDiretaPage() {
               id: warehouse.id,
               code: warehouse.code,
               name: warehouse.name
+            }))}
+            customers={customers.map((customer) => ({
+              id: customer.id,
+              code: customer.code,
+              name: customer.name,
+              document: customer.document || ""
             }))}
           />
         </section>

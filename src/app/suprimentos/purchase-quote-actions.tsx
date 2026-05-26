@@ -78,7 +78,6 @@ export function PurchaseQuoteActions({ quoteId, status, hasOrder, suppliers = []
     const formData = new FormData(event.currentTarget);
     const supplierId = String(formData.get("supplierId") || "");
     const payload = {
-      number: formData.get("number"),
       purchaseRequestId: editData.purchaseRequestId,
       supplierId,
       deliveryDays: formData.get("deliveryDays") || undefined,
@@ -199,11 +198,11 @@ export function PurchaseQuoteActions({ quoteId, status, hasOrder, suppliers = []
       </div>
       {editing && editData ? (
         <form className="quote-edit-form" onSubmit={updateQuote}>
+          <div className="receipt-helper">
+            <strong className="mono">{editData.number}</strong>
+            <p>Numero gerado automaticamente. Nao e editavel.</p>
+          </div>
           <div className="form-two">
-            <label className="field">
-              <span>Numero</span>
-              <input className="form-input mono" name="number" defaultValue={editData.number} required />
-            </label>
             <label className="field">
               <span>Fornecedor</span>
               <select className="form-input" name="supplierId" defaultValue={editData.supplierId} required>

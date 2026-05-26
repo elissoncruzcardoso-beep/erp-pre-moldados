@@ -45,7 +45,6 @@ export function PurchaseOrderActions({ orderId, locked, editData }: Props) {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        number: formData.get("number"),
         status: formData.get("status"),
         expectedDeliveryAt: formData.get("expectedDeliveryAt") || undefined,
         paymentTerms: formData.get("paymentTerms") || undefined,
@@ -105,11 +104,11 @@ export function PurchaseOrderActions({ orderId, locked, editData }: Props) {
 
       {editing ? (
         <form className="quote-edit-form" onSubmit={updateOrder}>
+          <div className="receipt-helper">
+            <strong className="mono">{editData.number}</strong>
+            <p>Numero gerado automaticamente pela cotacao aprovada. Nao e editavel.</p>
+          </div>
           <div className="form-two">
-            <label className="field">
-              <span>Numero</span>
-              <input className="form-input mono" name="number" defaultValue={editData.number} required />
-            </label>
             <label className="field">
               <span>Status</span>
               <select className="form-input" name="status" defaultValue={editData.status}>

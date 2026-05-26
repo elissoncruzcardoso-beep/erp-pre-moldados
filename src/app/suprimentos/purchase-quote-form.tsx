@@ -35,15 +35,8 @@ type Props = {
   suppliers: SupplierOption[];
 };
 
-function makeQuoteNumber() {
-  const date = new Date();
-  const stamp = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
-  return `COT-${stamp}-${String(Math.floor(Math.random() * 900) + 100)}`;
-}
-
 export function PurchaseQuoteForm({ requests, suppliers }: Props) {
   const router = useRouter();
-  const [quoteNumber, setQuoteNumber] = useState(makeQuoteNumber);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
@@ -96,12 +89,8 @@ export function PurchaseQuoteForm({ requests, suppliers }: Props) {
       const supplierId = String(formData.get(`supplierId-${supplierQuote.id}`) || "");
 
       if (!supplierId) continue;
-      const manualQuoteNumber = quoteNumber.trim();
 
       const payload = {
-        number: manualQuoteNumber
-          ? supplierQuotes.length > 1 ? `${manualQuoteNumber}-F${index + 1}` : manualQuoteNumber
-          : undefined,
         purchaseRequestId: selectedRequestId,
         supplierId,
         deliveryDays: formData.get(`deliveryDays-${supplierQuote.id}`) || undefined,
@@ -139,7 +128,6 @@ export function PurchaseQuoteForm({ requests, suppliers }: Props) {
     setLoading(false);
     setSuccess(`${filledSupplierIds.length} cotacao(oes) registrada(s) para comparativo.`);
     form.reset();
-    setQuoteNumber(makeQuoteNumber());
     setSelectedRequestId("");
     setSupplierQuotes([{ id: "fornecedor-1" }]);
     router.refresh();
@@ -147,15 +135,10 @@ export function PurchaseQuoteForm({ requests, suppliers }: Props) {
 
   return (
     <form className="product-form" onSubmit={handleSubmit}>
-      <label className="field">
-        <span>Numero base da cotacao</span>
-        <input
-          className="form-input"
-          value={quoteNumber}
-          onChange={(event) => setQuoteNumber(event.target.value)}
-          placeholder="Automatico se vazio"
-        />
-      </label>
+      <div className="receipt-helper">
+        <strong>Numero automatico</strong>
+        <p>Cada fornecedor recebera um codigo de cotacao gerado pelo sistema.</p>
+      </div>
 
       <label className="field">
         <span>Solicitacao</span>

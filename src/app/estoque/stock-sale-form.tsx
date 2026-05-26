@@ -17,6 +17,13 @@ type WarehouseOption = {
   name: string;
 };
 
+type CustomerOption = {
+  id: string;
+  code: string;
+  name: string;
+  document: string;
+};
+
 type SaleReceipt = {
   id: string;
   receiptNumber: string;
@@ -38,6 +45,7 @@ type SaleReceipt = {
 type StockSaleFormProps = {
   items: StockItem[];
   warehouses: WarehouseOption[];
+  customers: CustomerOption[];
 };
 
 function money(value: string | number) {
@@ -53,12 +61,14 @@ function quantity(value: string | number, unitCode: string) {
   })} ${unitCode}`;
 }
 
-export function StockSaleForm({ items, warehouses }: StockSaleFormProps) {
+export function StockSaleForm({ items, warehouses, customers }: StockSaleFormProps) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [receipt, setReceipt] = useState<SaleReceipt | null>(null);
+  const [selectedCustomerId, setSelectedCustomerId] = useState("");
+  const selectedCustomer = customers.find((customer) => customer.id === selectedCustomerId);
 
   const defaultItemId = useMemo(() => items[0]?.id || "", [items]);
   const defaultWarehouseId = useMemo(() => warehouses[0]?.id || "", [warehouses]);
@@ -76,6 +86,7 @@ export function StockSaleForm({ items, warehouses }: StockSaleFormProps) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        customerId: formData.get("customerId") || undefined,
         customerName: formData.get("customerName"),
         customerDocument: formData.get("customerDocument") || undefined,
         itemId: formData.get("itemId"),
@@ -98,6 +109,7 @@ export function StockSaleForm({ items, warehouses }: StockSaleFormProps) {
     setReceipt(data.receipt);
     setMessage("Venda registrada e recibo gerado.");
     form.reset();
+    setSelectedCustomerId("");
     router.refresh();
   }
 
@@ -106,12 +118,52 @@ export function StockSaleForm({ items, warehouses }: StockSaleFormProps) {
       <form className="product-form" onSubmit={handleSubmit}>
         <div className="form-two">
           <label className="field">
-            <span>Cliente</span>
-            <input className="form-input" name="customerName" placeholder="Nome do cliente" maxLength={120} required />
+            <span>Cliente cadastrado</span>
+            <select
+              className="form-input"
+              name="customerId"
+              value={selectedCustomerId}
+              onChange={(event) => setSelectedCustomerId(event.target.value)}
+            >
+              <option value="">Cliente avulso</option>
+              {customers.map((customer) => (
+                <option value={customer.id} key={customer.id}>
+                  {customer.code} - {customer.name}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="field">
             <span>CPF/CNPJ</span>
-            <input className="form-input mono" name="customerDocument" placeholder="Opcional" maxLength={40} />
+            <input
+              className="form-input mono"
+              name="customerDocument"
+              placeholder="Opcional"
+              maxLength={40}
+              value={selectedCustomer?.document || undefined}
+              readOnly={Boolean(selectedCustomer)}
+              onChange={() => undefined}
+            />
+          </label>
+        </div>
+
+        <div className="form-two">
+          <label className="field">
+            <span>Cliente</span>
+            <input
+              className="form-input"
+              name="customerName"
+              placeholder="Nome do cliente"
+              maxLength={120}
+              value={selectedCustomer?.name || undefined}
+              readOnly={Boolean(selectedCustomer)}
+              onChange={() => undefined}
+              required
+            />
+          </label>
+          <label className="field">
+            <span>Modo</span>
+            <input className="form-input" value={selectedCustomer ? "Cliente cadastrado" : "Cliente avulso"} readOnly />
           </label>
         </div>
 

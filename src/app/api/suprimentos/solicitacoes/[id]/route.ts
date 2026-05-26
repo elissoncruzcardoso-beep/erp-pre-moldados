@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
 import { getSession } from "@/lib/auth/session";
-import { normalizeManualCode } from "@/lib/codes/auto-code";
 import { getPrisma } from "@/lib/db/prisma";
 import { purchaseRequestSchema } from "@/lib/validations/purchase";
 
@@ -57,7 +56,6 @@ export async function PATCH(request: Request, context: RouteContext) {
       const updated = await tx.purchaseRequest.update({
         where: { id: current.id },
         data: {
-          number: normalizeManualCode(input.number) || current.number,
           department: input.department?.trim() || null,
           costCenter: input.costCenter?.trim() || null,
           priority: input.priority,

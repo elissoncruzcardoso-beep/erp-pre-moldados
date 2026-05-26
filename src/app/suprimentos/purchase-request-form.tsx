@@ -56,7 +56,6 @@ export function PurchaseRequestForm({ items }: PurchaseRequestFormProps) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        number: formData.get("number"),
         department: formData.get("department") || undefined,
         costCenter: formData.get("costCenter") || undefined,
         priority: formData.get("priority"),
@@ -87,10 +86,10 @@ export function PurchaseRequestForm({ items }: PurchaseRequestFormProps) {
 
   return (
     <form className="product-form" onSubmit={handleSubmit}>
-      <label className="field">
-        <span>Numero</span>
-        <input className="form-input mono" name="number" placeholder="Automatico se vazio" maxLength={40} />
-      </label>
+      <div className="receipt-helper">
+        <strong>Numero automatico</strong>
+        <p>O codigo da solicitacao sera gerado pelo sistema ao salvar.</p>
+      </div>
 
       <div className="form-two">
         <label className="field">

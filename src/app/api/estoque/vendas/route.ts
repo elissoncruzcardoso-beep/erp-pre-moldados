@@ -6,6 +6,7 @@ import { makeAutomaticCode } from "@/lib/codes/auto-code";
 import { getPrisma } from "@/lib/db/prisma";
 
 const stockSaleSchema = z.object({
+  customerId: z.string().optional(),
   customerName: z.string().trim().min(2).max(120),
   customerDocument: z.string().trim().max(40).optional(),
   itemId: z.string().min(1),
@@ -97,12 +98,13 @@ export async function POST(request: Request) {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      const [item, warehouse] = await Promise.all([
+      const [item, warehouse, customer] = await Promise.all([
         tx.item.findUnique({
           where: { id: input.itemId },
           include: { unit: true }
         }),
-        tx.warehouse.findUnique({ where: { id: input.warehouseId } })
+        tx.warehouse.findUnique({ where: { id: input.warehouseId } }),
+        input.customerId ? tx.customer.findUnique({ where: { id: input.customerId } }) : null
       ]);
 
       if (!item || !item.active || !item.controlsStock) {
@@ -111,6 +113,10 @@ export async function POST(request: Request) {
 
       if (!warehouse || !warehouse.active) {
         throw new Error("Deposito invalido para venda.");
+      }
+
+      if (input.customerId && (!customer || !customer.active)) {
+        throw new Error("Cliente selecionado invalido ou inativo.");
       }
 
       const balances = await tx.stockBalance.findMany({
@@ -229,6 +235,7 @@ export async function POST(request: Request) {
       const sale = await tx.directSale.create({
         data: {
           number: receiptNumber,
+          customerId: customer?.id || null,
           customerName: input.customerName,
           customerDocument: input.customerDocument || null,
           itemId: input.itemId,

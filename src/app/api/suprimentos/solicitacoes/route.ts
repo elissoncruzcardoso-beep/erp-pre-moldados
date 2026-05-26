@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
 import { getSession } from "@/lib/auth/session";
-import { makeAutomaticCode, normalizeManualCode } from "@/lib/codes/auto-code";
+import { makeAutomaticCode } from "@/lib/codes/auto-code";
 import { getPrisma } from "@/lib/db/prisma";
 import { purchaseRequestSchema } from "@/lib/validations/purchase";
 
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     const requestRecord = await prisma.$transaction(async (tx) => {
       const created = await tx.purchaseRequest.create({
         data: {
-          number: normalizeManualCode(input.number) || makeAutomaticCode("SC"),
+          number: makeAutomaticCode("SC"),
           requesterId: session.userId,
           department: input.department?.trim() || null,
           costCenter: input.costCenter?.trim() || null,

@@ -214,6 +214,7 @@ model Customer {
   active    Boolean           @default(true)
   orders    ProductionOrder[]
   accountsReceivable AccountReceivable[]
+  directSales DirectSale[]
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt
 }
@@ -401,6 +402,8 @@ model StockMovement {
 model DirectSale {
   id               String           @id @default(cuid())
   number           String           @unique
+  customerId       String?
+  customer         Customer?        @relation(fields: [customerId], references: [id])
   customerName     String
   customerDocument String?
   itemId           String

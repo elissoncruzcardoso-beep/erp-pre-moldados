@@ -72,7 +72,6 @@ export function PurchaseRequestActions({ requestId, locked, items, editData }: P
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        number: formData.get("number"),
         department: formData.get("department") || undefined,
         costCenter: formData.get("costCenter") || undefined,
         priority: formData.get("priority"),
@@ -136,11 +135,11 @@ export function PurchaseRequestActions({ requestId, locked, items, editData }: P
 
       {editing ? (
         <form className="quote-edit-form" onSubmit={updateRequest}>
+          <div className="receipt-helper">
+            <strong className="mono">{editData.number}</strong>
+            <p>Numero gerado automaticamente. Nao e editavel.</p>
+          </div>
           <div className="form-two">
-            <label className="field">
-              <span>Numero</span>
-              <input className="form-input mono" name="number" defaultValue={editData.number} required maxLength={40} />
-            </label>
             <label className="field">
               <span>Prioridade</span>
               <select className="form-input" name="priority" defaultValue={editData.priority}>

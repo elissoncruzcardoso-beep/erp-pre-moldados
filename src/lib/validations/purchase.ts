@@ -61,7 +61,6 @@ export const purchaseQuoteSchema = z.object({
 export type PurchaseQuoteInput = z.infer<typeof purchaseQuoteSchema>;
 
 export const purchaseOrderUpdateSchema = z.object({
-  number: z.string().min(2).max(40),
   status: z.enum(["EMITIDO", "ENVIADO", "PARCIALMENTE_RECEBIDO", "RECEBIDO", "CANCELADO"]),
   expectedDeliveryAt: z.coerce.date().optional(),
   paymentTerms: z.string().max(120).optional(),
