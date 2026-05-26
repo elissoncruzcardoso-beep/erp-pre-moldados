@@ -94,7 +94,7 @@ export function DirectSaleActions({ sale }: DirectSaleActionsProps) {
 
   return (
     <div className="quote-action-cell">
-      <Link className="icon-button" href={`/estoque/venda-direta/recibos/${sale.id}`} title="Reimprimir recibo">
+      <Link className="icon-button" href={`/vendas/recibos/${sale.id}`} title="Reimprimir recibo">
         <Printer size={16} />
       </Link>
       <button className="icon-button" type="button" onClick={editSale} disabled={disabled} title="Editar dados comerciais">

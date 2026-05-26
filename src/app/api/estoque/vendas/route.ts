@@ -15,6 +15,7 @@ const stockSaleSchema = z.object({
   unitPrice: z.coerce.number().min(0),
   discount: z.coerce.number().min(0).default(0),
   paymentMethod: z.string().trim().max(60).optional(),
+  settleNow: z.coerce.boolean().default(false),
   note: z.string().trim().max(240).optional()
 });
 
@@ -31,6 +32,12 @@ function receiptPayload(sale: {
   grossTotal: Prisma.Decimal;
   discount: Prisma.Decimal;
   finalTotal: Prisma.Decimal;
+  accountReceivable?: {
+    number: string;
+    status: string;
+    dueDate: Date;
+    receivedAmount: Prisma.Decimal;
+  } | null;
   createdBy: { name: string };
   warehouse: { code: string; name: string };
   item: { id: string; code: string; description: string; unit: { code: string } };
@@ -55,7 +62,15 @@ function receiptPayload(sale: {
     unitPrice: sale.unitPrice.toString(),
     grossTotal: sale.grossTotal.toString(),
     discount: sale.discount.toString(),
-    finalTotal: sale.finalTotal.toString()
+    finalTotal: sale.finalTotal.toString(),
+    financialTitle: sale.accountReceivable
+      ? {
+          number: sale.accountReceivable.number,
+          status: sale.accountReceivable.status,
+          dueDateLabel: formatDate(sale.accountReceivable.dueDate),
+          receivedAmount: sale.accountReceivable.receivedAmount.toString()
+        }
+      : null
   };
 }
 
@@ -117,6 +132,10 @@ export async function POST(request: Request) {
 
       if (input.customerId && (!customer || !customer.active)) {
         throw new Error("Cliente selecionado invalido ou inativo.");
+      }
+
+      if (!customer) {
+        throw new Error("Selecione um cliente cadastrado para gerar a venda e o financeiro.");
       }
 
       const balances = await tx.stockBalance.findMany({
@@ -258,7 +277,63 @@ export async function POST(request: Request) {
         }
       });
 
-      return sale;
+      const dueDate = new Date();
+      const receivable = await tx.accountReceivable.create({
+        data: {
+          number: makeAutomaticCode("CR"),
+          directSaleId: sale.id,
+          customerId: customer.id,
+          createdById: session.userId,
+          status: input.settleNow ? "RECEBIDO" : "ABERTO",
+          description: `Venda direta ${sale.number} - ${item.code}`,
+          documentNumber: sale.number,
+          costCenter: "Venda direta",
+          issueDate: sale.issuedAt,
+          dueDate,
+          amount: finalTotal,
+          receivedAmount: input.settleNow ? finalTotal : new Prisma.Decimal(0),
+          receivedAt: input.settleNow ? sale.issuedAt : null,
+          note: input.note || null
+        }
+      });
+
+      if (input.settleNow) {
+        await tx.accountReceipt.create({
+          data: {
+            accountReceivableId: receivable.id,
+            receivedById: session.userId,
+            receiptDate: sale.issuedAt,
+            amount: finalTotal,
+            method: input.paymentMethod || "NAO_INFORMADO",
+            reference: sale.number,
+            note: "Baixa automatica gerada pela venda direta."
+          }
+        });
+      }
+
+      await tx.auditLog.create({
+        data: {
+          userId: session.userId,
+          module: "Financeiro",
+          action: AuditAction.CREATE,
+          entity: "AccountReceivable",
+          entityId: receivable.id,
+          newValue: {
+            number: receivable.number,
+            directSaleNumber: sale.number,
+            customer: customer.name,
+            amount: receivable.amount.toString(),
+            status: receivable.status,
+            settledNow: input.settleNow
+          },
+          justification: "Titulo financeiro gerado pela venda direta"
+        }
+      });
+
+      return {
+        ...sale,
+        accountReceivable: receivable
+      };
     });
 
     return NextResponse.json({

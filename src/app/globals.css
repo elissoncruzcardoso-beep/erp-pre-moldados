@@ -537,6 +537,14 @@ h3 {
   border-left: 5px solid var(--warning);
 }
 
+.accent-green {
+  border-left: 5px solid var(--success);
+}
+
+.accent-red {
+  border-left: 5px solid var(--danger);
+}
+
 .accent-gray {
   border-left: 5px solid var(--border-strong);
 }
@@ -1828,8 +1836,30 @@ select.form-input {
   min-width: 0;
 }
 
+.form-three {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
 .form-input {
   min-width: 0;
+}
+
+.checkbox-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.checkbox-line input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
 }
 
 .check-row {
@@ -3964,6 +3994,7 @@ select.form-input {
   .quote-edit-line,
   .composition-grid,
   .form-two,
+  .form-three,
   .supply-feature-grid,
   .precast-product-grid,
   .report-environment-grid,

@@ -24,6 +24,12 @@ type CustomerOption = {
   document: string;
 };
 
+type PaymentMethodOption = {
+  id: string;
+  code: string;
+  name: string;
+};
+
 type SaleReceipt = {
   id: string;
   receiptNumber: string;
@@ -40,12 +46,19 @@ type SaleReceipt = {
   grossTotal: string;
   discount: string;
   finalTotal: string;
+  financialTitle: {
+    number: string;
+    status: string;
+    dueDateLabel: string;
+    receivedAmount: string;
+  } | null;
 };
 
 type StockSaleFormProps = {
   items: StockItem[];
   warehouses: WarehouseOption[];
   customers: CustomerOption[];
+  paymentMethods: PaymentMethodOption[];
 };
 
 function money(value: string | number) {
@@ -61,7 +74,7 @@ function quantity(value: string | number, unitCode: string) {
   })} ${unitCode}`;
 }
 
-export function StockSaleForm({ items, warehouses, customers }: StockSaleFormProps) {
+export function StockSaleForm({ items, warehouses, customers, paymentMethods }: StockSaleFormProps) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -95,6 +108,7 @@ export function StockSaleForm({ items, warehouses, customers }: StockSaleFormPro
         unitPrice: formData.get("unitPrice"),
         discount: formData.get("discount") || 0,
         paymentMethod: formData.get("paymentMethod") || undefined,
+        settleNow: formData.get("settleNow") === "on",
         note: formData.get("note") || undefined
       })
     });
@@ -124,8 +138,9 @@ export function StockSaleForm({ items, warehouses, customers }: StockSaleFormPro
               name="customerId"
               value={selectedCustomerId}
               onChange={(event) => setSelectedCustomerId(event.target.value)}
+              required
             >
-              <option value="">Cliente avulso</option>
+              <option value="" disabled>Selecione o cliente</option>
               {customers.map((customer) => (
                 <option value={customer.id} key={customer.id}>
                   {customer.code} - {customer.name}
@@ -140,8 +155,8 @@ export function StockSaleForm({ items, warehouses, customers }: StockSaleFormPro
               name="customerDocument"
               placeholder="Opcional"
               maxLength={40}
-              value={selectedCustomer?.document || undefined}
-              readOnly={Boolean(selectedCustomer)}
+              value={selectedCustomer?.document || ""}
+              readOnly
               onChange={() => undefined}
             />
           </label>
@@ -155,15 +170,15 @@ export function StockSaleForm({ items, warehouses, customers }: StockSaleFormPro
               name="customerName"
               placeholder="Nome do cliente"
               maxLength={120}
-              value={selectedCustomer?.name || undefined}
-              readOnly={Boolean(selectedCustomer)}
+              value={selectedCustomer?.name || ""}
+              readOnly
               onChange={() => undefined}
               required
             />
           </label>
           <label className="field">
             <span>Modo</span>
-            <input className="form-input" value={selectedCustomer ? "Cliente cadastrado" : "Cliente avulso"} readOnly />
+            <input className="form-input" value={selectedCustomer ? "Cliente cadastrado" : "Aguardando cliente"} readOnly />
           </label>
         </div>
 
@@ -207,7 +222,14 @@ export function StockSaleForm({ items, warehouses, customers }: StockSaleFormPro
         <div className="form-two">
           <label className="field">
             <span>Forma de pagamento</span>
-            <input className="form-input" name="paymentMethod" placeholder="Pix, dinheiro, boleto..." maxLength={60} />
+            <select className="form-input" name="paymentMethod" defaultValue={paymentMethods[0]?.name || "PIX"} required>
+              {paymentMethods.length === 0 ? <option value="PIX">PIX</option> : null}
+              {paymentMethods.map((method) => (
+                <option key={method.id} value={method.name}>
+                  {method.code} - {method.name}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="field">
             <span>Observacao</span>
@@ -215,12 +237,17 @@ export function StockSaleForm({ items, warehouses, customers }: StockSaleFormPro
           </label>
         </div>
 
+        <label className="checkbox-line">
+          <input type="checkbox" name="settleNow" defaultChecked />
+          <span>Baixar financeiro automaticamente no ato da venda</span>
+        </label>
+
         {error ? <p className="auth-error">{error}</p> : null}
         {message ? <p className="auth-success">{message}</p> : null}
 
-        <button className="primary-button" type="submit" disabled={loading || items.length === 0 || warehouses.length === 0}>
+        <button className="primary-button" type="submit" disabled={loading || items.length === 0 || warehouses.length === 0 || customers.length === 0}>
           <ShoppingCart size={17} />
-          {loading ? "Gerando..." : "Registrar venda e recibo"}
+          {loading ? "Gerando..." : "Registrar venda, recibo e financeiro"}
         </button>
       </form>
 
@@ -299,6 +326,26 @@ export function StockSaleForm({ items, warehouses, customers }: StockSaleFormPro
                 <strong>{money(receipt.finalTotal)}</strong>
               </div>
             </section>
+
+            {receipt.financialTitle ? (
+              <section className="sale-receipt-grid">
+                <div>
+                  <span>Titulo financeiro</span>
+                  <strong>{receipt.financialTitle.number}</strong>
+                  <small>Status: {receipt.financialTitle.status}</small>
+                </div>
+                <div>
+                  <span>Vencimento</span>
+                  <strong>{receipt.financialTitle.dueDateLabel}</strong>
+                  <small>Gerado automaticamente</small>
+                </div>
+                <div>
+                  <span>Baixa</span>
+                  <strong>{money(receipt.financialTitle.receivedAmount)}</strong>
+                  <small>Contas a receber</small>
+                </div>
+              </section>
+            ) : null}
 
             {receipt.note ? <p className="sale-receipt-note">{receipt.note}</p> : null}
 

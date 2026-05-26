@@ -12,6 +12,7 @@ import {
   Search,
   Settings2,
   ShieldCheck,
+  ShoppingCart,
   UserCog,
   WalletCards
 } from "lucide-react";
@@ -29,6 +30,7 @@ const navItems = [
   { href: "/producao", label: "Produção", icon: Factory },
   { href: "/suprimentos", label: "Suprimentos", icon: PackageSearch },
   { href: "/estoque", label: "Estoque", icon: Boxes },
+  { href: "/vendas", label: "Vendas", icon: ShoppingCart },
   { href: "/financeiro", label: "Financeiro", icon: WalletCards },
   { href: "/cadastros", label: "Cadastros", icon: Settings2 },
   { href: "/usuarios", label: "Usuários", icon: UserCog }

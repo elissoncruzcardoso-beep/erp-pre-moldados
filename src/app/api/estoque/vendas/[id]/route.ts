@@ -110,6 +110,15 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
         throw new Error("O desconto nao pode ser maior que o total bruto.");
       }
 
+      const receivable = await tx.accountReceivable.findFirst({
+        where: { directSaleId: sale.id },
+        include: { receipts: true }
+      });
+
+      if (receivable && receivable.receipts.length > 0 && !receivable.amount.equals(finalTotal)) {
+        throw new Error("Este recibo ja possui baixa financeira. Estorne ou ajuste o financeiro antes de alterar o valor.");
+      }
+
       const updated = await tx.directSale.update({
         where: { id },
         data: {
@@ -131,6 +140,18 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
             unitCost: unitPrice,
             totalCost: finalTotal,
             justification: `Venda direta do estoque para ${input.customerName}`
+          }
+        });
+      }
+
+      if (receivable) {
+        await tx.accountReceivable.update({
+          where: { id: receivable.id },
+          data: {
+            description: `Venda direta ${updated.number}`,
+            documentNumber: updated.number,
+            amount: finalTotal,
+            note: input.note || null
           }
         });
       }
@@ -191,7 +212,12 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
         where: { id },
         include: {
           item: { include: { unit: true } },
-          warehouse: true
+          warehouse: true,
+          accountsReceivable: {
+            include: {
+              receipts: true
+            }
+          }
         }
       });
 
@@ -201,6 +227,12 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
 
       if (sale.status !== "ATIVA") {
         throw new Error("Este recibo ja esta cancelado.");
+      }
+
+      const receivable = sale.accountsReceivable[0];
+
+      if (receivable && receivable.receipts.length > 0) {
+        throw new Error("Este recibo possui baixa financeira. Cancele ou estorne o recebimento antes de cancelar a venda.");
       }
 
       const consumedLots = parseConsumedLots(sale.consumedLots);
@@ -242,6 +274,16 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
           cancelReason: parsed.data.reason || null
         }
       });
+
+      if (receivable) {
+        await tx.accountReceivable.update({
+          where: { id: receivable.id },
+          data: {
+            status: "CANCELADO",
+            note: parsed.data.reason || `Cancelado junto com o recibo ${sale.number}`
+          }
+        });
+      }
 
       await tx.auditLog.create({
         data: {

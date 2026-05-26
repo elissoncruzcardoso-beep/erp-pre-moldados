@@ -108,9 +108,9 @@ export default async function EstoquePage() {
           </p>
         </div>
         <div className="button-row">
-          <Link className="primary-button" href="/estoque/venda-direta">
+          <Link className="primary-button" href="/vendas">
             <ReceiptText size={16} />
-            Venda direta
+            Vendas
           </Link>
           <span className="status-pill">
             <ClipboardCheck size={16} />

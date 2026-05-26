@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, ReceiptText } from "lucide-react";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
-import { PrintReceiptButton } from "../print-receipt-button";
+import { PrintReceiptButton } from "../../../estoque/venda-direta/recibos/print-receipt-button";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +36,7 @@ export default async function ReciboVendaPage({ params }: { params: Promise<{ id
   }
 
   if (!session.permissions.includes("estoque.view")) {
-    redirect("/estoque");
+    redirect("/dashboard");
   }
 
   const { id } = await params;
@@ -47,7 +47,11 @@ export default async function ReciboVendaPage({ params }: { params: Promise<{ id
       item: { include: { unit: true } },
       warehouse: true,
       createdBy: true,
-      cancelledBy: true
+      cancelledBy: true,
+      accountsReceivable: {
+        orderBy: { createdAt: "desc" },
+        take: 1
+      }
     }
   });
 
@@ -55,13 +59,15 @@ export default async function ReciboVendaPage({ params }: { params: Promise<{ id
     notFound();
   }
 
+  const receivable = sale.accountsReceivable[0];
+
   return (
     <>
       <section className="page-head no-print">
         <div>
-          <p className="eyebrow">Venda direta / Recibo</p>
+          <p className="eyebrow">Vendas / Recibo</p>
           <h1>{sale.number}</h1>
-          <p className="lead">Recibo profissional para impressão ou salvamento em PDF.</p>
+          <p className="lead">Recibo profissional para impressao ou salvamento em PDF.</p>
         </div>
         <div className="button-row">
           <Link className="secondary-button" href="/vendas">
@@ -136,6 +142,26 @@ export default async function ReciboVendaPage({ params }: { params: Promise<{ id
               <strong>{money(sale.finalTotal)}</strong>
             </div>
           </section>
+
+          {receivable ? (
+            <section className="sale-receipt-grid">
+              <div>
+                <span>Titulo financeiro</span>
+                <strong>{receivable.number}</strong>
+                <small>Status: {receivable.status}</small>
+              </div>
+              <div>
+                <span>Valor recebido</span>
+                <strong>{money(receivable.receivedAmount)}</strong>
+                <small>Contas a receber</small>
+              </div>
+              <div>
+                <span>Documento</span>
+                <strong>{receivable.documentNumber || sale.number}</strong>
+                <small>Vinculado ao recibo de venda</small>
+              </div>
+            </section>
+          ) : null}
 
           {sale.note ? <p className="sale-receipt-note">{sale.note}</p> : null}
           {sale.cancelReason ? <p className="sale-receipt-note">Cancelamento: {sale.cancelReason}</p> : null}

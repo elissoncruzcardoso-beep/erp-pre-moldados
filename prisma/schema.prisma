@@ -412,6 +412,7 @@ model DirectSale {
   warehouse        Warehouse        @relation(fields: [warehouseId], references: [id])
   stockMovementId  String?          @unique
   stockMovement    StockMovement?   @relation(fields: [stockMovementId], references: [id])
+  accountsReceivable AccountReceivable[]
   createdById      String
   createdBy        User             @relation(fields: [createdById], references: [id])
   cancelledById    String?
@@ -611,6 +612,8 @@ model AccountPayment {
 model AccountReceivable {
   id             String                  @id @default(cuid())
   number         String                  @unique
+  directSaleId   String?
+  directSale     DirectSale?             @relation(fields: [directSaleId], references: [id])
   customerId     String
   customer       Customer                @relation(fields: [customerId], references: [id])
   createdById    String
