@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { ShieldCheck, UserCog, Users } from "lucide-react";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
+import { UserActions } from "./user-actions";
+import { UserForm } from "./user-form";
 
 export const dynamic = "force-dynamic";
 
@@ -35,8 +37,8 @@ export default async function UsuariosPage() {
           <p className="eyebrow">Seguranca e acessos</p>
           <h1>Usuarios e perfis do ERP</h1>
           <p className="lead">
-            Primeira tela real ligada ao Supabase para conferir usuario inicial, departamentos,
-            perfis e permissoes planejadas para o MVP.
+            Cadastre usuarios internos, defina perfis de acesso, acompanhe status e mantenha a
+            gestao de permissoes dentro do ERP.
           </p>
         </div>
         <div className="button-row">
@@ -76,8 +78,17 @@ export default async function UsuariosPage() {
         </article>
       </section>
 
-      <section className="grid-12">
-        <section className="table-shell span-7">
+      <section className="grid-12" style={{ marginBottom: 16 }}>
+        <section className="card accent-blue span-4">
+          <p className="eyebrow">Novo usuario</p>
+          <h2>Adicionar acesso interno</h2>
+          <p className="section-note">
+            O login nao possui cadastro publico. Novos acessos sao criados aqui por administrador.
+          </p>
+          <UserForm roles={roles.map((role) => ({ id: role.id, name: role.name }))} />
+        </section>
+
+        <section className="table-shell span-8">
           <div className="table-header">
             <div>
               <p className="eyebrow">Usuarios</p>
@@ -89,28 +100,55 @@ export default async function UsuariosPage() {
               <tr>
                 <th>Nome</th>
                 <th>E-mail</th>
+                <th>Departamento</th>
                 <th>Perfil</th>
                 <th>Status</th>
+                <th>Acoes</th>
               </tr>
             </thead>
             <tbody>
               {users.map((user) => (
                 <tr key={user.id}>
-                  <td>{user.name}</td>
+                  <td>
+                    <strong>{user.name}</strong>
+                    {user.id === session.userId ? <small className="product-detail">Usuario atual</small> : null}
+                  </td>
                   <td className="mono">{user.email}</td>
+                  <td>{user.department || "-"}</td>
                   <td>{user.role.name}</td>
                   <td>
                     <span className={user.status === "ACTIVE" ? "badge green" : "badge red"}>
                       {user.status === "ACTIVE" ? "Ativo" : "Inativo"}
                     </span>
                   </td>
+                  <td>
+                    <UserActions
+                      roles={roles.map((role) => ({ id: role.id, name: role.name }))}
+                      user={{
+                        id: user.id,
+                        name: user.name,
+                        email: user.email,
+                        department: user.department || "",
+                        roleId: user.roleId,
+                        status: user.status,
+                        isCurrentUser: user.id === session.userId
+                      }}
+                    />
+                  </td>
                 </tr>
               ))}
+              {users.length === 0 ? (
+                <tr>
+                  <td colSpan={6}>Nenhum usuario cadastrado.</td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </section>
+      </section>
 
-        <section className="card accent-blue span-5 users-role-panel">
+      <section className="grid-12">
+        <section className="card accent-blue span-12 users-role-panel">
           <p className="eyebrow">Perfis</p>
           <h2>Matriz de permissao</h2>
           <div className="role-list">

@@ -1,5 +1,4 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import { ShieldCheck } from "lucide-react";
 import { LoginForm } from "./login-form";
 
@@ -31,9 +30,6 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <Suspense>
           <LoginForm nextPath={nextPath} />
         </Suspense>
-        <p className="setup-help">
-          Ainda nao definiu a senha inicial? <Link href="/setup-admin">Escolher senha do admin</Link>
-        </p>
       </div>
     </section>
   );

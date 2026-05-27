@@ -1,7 +1,12 @@
+import { notFound } from "next/navigation";
 import { KeyRound } from "lucide-react";
 import { SetupAdminForm } from "./setup-admin-form";
 
 export default function SetupAdminPage() {
+  if (process.env.NODE_ENV === "production") {
+    notFound();
+  }
+
   return (
     <section className="login-shell">
       <div className="login-card accent-orange">

@@ -573,6 +573,13 @@ h3 {
   font-size: 13px;
 }
 
+.section-note {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0;
+}
+
 .progress-track {
   width: 100%;
   height: 10px;

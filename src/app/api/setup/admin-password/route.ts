@@ -9,6 +9,10 @@ const setupSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "Setup do administrador desativado em producao." }, { status: 404 });
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = setupSchema.safeParse(body);
 
