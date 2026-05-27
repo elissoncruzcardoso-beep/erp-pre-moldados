@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AccountReceivableStatus, Prisma } from "@prisma/client";
 import { ArrowLeft, ArrowUpCircle, CircleDollarSign, Filter, ShieldCheck } from "lucide-react";
-import { PrototypeAction } from "@/components/prototype-action";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
 import { AccountReceiptForm } from "../account-receipt-form";
@@ -33,18 +33,94 @@ function badgeForStatus(status: string) {
   return "badge orange";
 }
 
-export default async function ContasReceberPage() {
+function parseFilterDate(value?: string) {
+  if (!value) return null;
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function endOfDay(value?: string) {
+  const date = parseFilterDate(value);
+  if (!date) return null;
+  date.setHours(23, 59, 59, 999);
+  return date;
+}
+
+type PageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+function firstParam(params: Record<string, string | string[] | undefined>, key: string) {
+  const value = params[key];
+  return Array.isArray(value) ? value[0] || "" : value || "";
+}
+
+export default async function ContasReceberPage({ searchParams }: PageProps) {
   const session = await getSession();
 
   if (!session) redirect("/login?next=/financeiro/contas-receber");
   if (!session.permissions.includes("financeiro.view")) redirect("/dashboard");
 
+  const params = (await searchParams) || {};
+  const statusFilter = firstParam(params, "status") || "ABERTOS";
+  const customerFilter = firstParam(params, "customerId");
+  const originFilter = firstParam(params, "origin") || "TODAS";
+  const startDate = firstParam(params, "startDate");
+  const endDate = firstParam(params, "endDate");
+  const search = firstParam(params, "q").trim();
+
+  const where: Prisma.AccountReceivableWhereInput = {};
+  const andFilters: Prisma.AccountReceivableWhereInput[] = [];
+
+  if (statusFilter === "ABERTOS") {
+    andFilters.push({ status: { in: ["ABERTO", "FATURADO"] } });
+  } else if (statusFilter !== "TODOS") {
+    andFilters.push({ status: statusFilter as AccountReceivableStatus });
+  }
+
+  if (customerFilter) {
+    andFilters.push({ customerId: customerFilter });
+  }
+
+  const dueFrom = parseFilterDate(startDate);
+  const dueTo = endOfDay(endDate);
+  if (dueFrom || dueTo) {
+    andFilters.push({
+      dueDate: {
+        ...(dueFrom ? { gte: dueFrom } : {}),
+        ...(dueTo ? { lte: dueTo } : {})
+      }
+    });
+  }
+
+  if (originFilter === "VENDAS") {
+    andFilters.push({ directSaleId: { not: null } });
+  } else if (originFilter === "MANUAL") {
+    andFilters.push({ directSaleId: null });
+  }
+
+  if (search) {
+    andFilters.push({
+      OR: [
+        { number: { contains: search, mode: "insensitive" } },
+        { documentNumber: { contains: search, mode: "insensitive" } },
+        { description: { contains: search, mode: "insensitive" } },
+        { customer: { name: { contains: search, mode: "insensitive" } } }
+      ]
+    });
+  }
+
+  if (andFilters.length > 0) {
+    where.AND = andFilters;
+  }
+
   const prisma = getPrisma();
   const [receivables, customers, accountReceipts] = await Promise.all([
     prisma.accountReceivable.findMany({
-      include: { customer: true, createdBy: true, receipts: true },
+      where,
+      include: { customer: true, createdBy: true, receipts: true, directSale: true },
       orderBy: { dueDate: "asc" },
-      take: 40
+      take: 80
     }),
     prisma.customer.findMany({ where: { active: true }, orderBy: { code: "asc" } }),
     prisma.accountReceipt.findMany({
@@ -107,16 +183,57 @@ export default async function ContasReceberPage() {
       </section>
 
       <section className="product-section-card finance-filter-panel">
-        <div className="table-header product-card-header">
-          <div><p className="eyebrow">Filtros</p><h2>Consulta de recebiveis</h2></div>
-          <PrototypeAction className="secondary-button" message="Filtros reais serao conectados depois."><Filter size={17} />Filtrar</PrototypeAction>
-        </div>
-        <div className="report-filter-grid">
-          <div className="field"><span>Status</span><div className="input-like">Abertos</div></div>
-          <div className="field"><span>Cliente</span><div className="input-like">Todos</div></div>
-          <div className="field"><span>Periodo</span><div className="input-like">Vencimento</div></div>
-          <div className="field"><span>Origem</span><div className="input-like">Manual / faturamento</div></div>
-        </div>
+        <form action="/financeiro/contas-receber">
+          <div className="table-header product-card-header">
+            <div><p className="eyebrow">Filtros</p><h2>Consulta de recebiveis</h2></div>
+            <div className="button-row">
+              <Link className="secondary-button" href="/financeiro/contas-receber">Limpar</Link>
+              <button className="secondary-button" type="submit"><Filter size={17} />Filtrar</button>
+            </div>
+          </div>
+          <div className="report-filter-grid">
+            <label className="field">
+              <span>Status</span>
+              <select className="form-input" name="status" defaultValue={statusFilter}>
+                <option value="ABERTOS">Abertos e faturados</option>
+                <option value="ABERTO">Somente abertos</option>
+                <option value="FATURADO">Somente faturados</option>
+                <option value="RECEBIDO">Recebidos</option>
+                <option value="CANCELADO">Cancelados</option>
+                <option value="TODOS">Todos</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Cliente</span>
+              <select className="form-input" name="customerId" defaultValue={customerFilter}>
+                <option value="">Todos</option>
+                {customers.map((customer) => (
+                  <option key={customer.id} value={customer.id}>{customer.code} - {customer.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Vencimento inicial</span>
+              <input className="form-input mono" type="date" name="startDate" defaultValue={startDate} />
+            </label>
+            <label className="field">
+              <span>Vencimento final</span>
+              <input className="form-input mono" type="date" name="endDate" defaultValue={endDate} />
+            </label>
+            <label className="field">
+              <span>Origem</span>
+              <select className="form-input" name="origin" defaultValue={originFilter}>
+                <option value="TODAS">Todas</option>
+                <option value="VENDAS">Vendas diretas</option>
+                <option value="MANUAL">Lancamento manual</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Buscar</span>
+              <input className="form-input" name="q" defaultValue={search} placeholder="Titulo, documento, cliente ou descricao" />
+            </label>
+          </div>
+        </form>
       </section>
 
       <section className="finance-action-grid two-columns">
@@ -136,7 +253,7 @@ export default async function ContasReceberPage() {
         <div className="table-shell product-table-shell">
           <div className="table-header">
             <div><p className="eyebrow">Entradas</p><h2>Contas a receber</h2></div>
-            <span className="badge blue">{receivables.length} registros</span>
+            <span className="badge blue">{receivables.length} registro(s) filtrado(s)</span>
           </div>
           <div className="table-scroll">
             <table className="technical-items-table finance-data-table">

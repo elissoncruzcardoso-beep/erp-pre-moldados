@@ -21,6 +21,12 @@ function formatQuantity(value: unknown) {
   });
 }
 
+function formatLogDate(value: Date) {
+  return value.toLocaleDateString("pt-BR", {
+    timeZone: "UTC"
+  });
+}
+
 export default async function DiarioProducaoPage() {
   const session = await getSession();
 
@@ -33,6 +39,8 @@ export default async function DiarioProducaoPage() {
   }
 
   const prisma = getPrisma();
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
   const [products, dailyLogs] = await Promise.all([
     prisma.item.findMany({
       where: {
@@ -54,6 +62,11 @@ export default async function DiarioProducaoPage() {
       orderBy: [{ group: "asc" }, { code: "asc" }]
     }),
     prisma.productionDailyLog.findMany({
+      where: {
+        logDate: {
+          lte: todayEnd
+        }
+      },
       include: {
         createdBy: true,
         items: {
@@ -66,7 +79,7 @@ export default async function DiarioProducaoPage() {
           }
         }
       },
-      orderBy: { logDate: "desc" },
+      orderBy: [{ logDate: "desc" }, { updatedAt: "desc" }],
       take: 20
     })
   ]);
@@ -174,7 +187,7 @@ export default async function DiarioProducaoPage() {
 
                   return (
                     <tr key={log.id}>
-                      <td className="mono">{log.logDate.toLocaleDateString("pt-BR")}</td>
+                      <td className="mono">{formatLogDate(log.logDate)}</td>
                       <td>{log.weatherMorning} / {log.weatherAfternoon}</td>
                       <td className="mono">{teamCount}</td>
                       <td>

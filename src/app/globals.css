@@ -2790,6 +2790,31 @@ select.form-input {
   text-transform: uppercase;
 }
 
+.production-lot-day-group {
+  display: grid;
+  border-top: 1px solid var(--border);
+}
+
+.production-lot-day-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #eef2ff;
+  color: var(--primary-strong);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.production-lot-day-title span {
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .production-lot-row strong,
 .production-lot-row span {
   min-width: 0;

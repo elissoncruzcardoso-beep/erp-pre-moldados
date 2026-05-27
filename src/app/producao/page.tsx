@@ -49,6 +49,16 @@ function formatDateTime(value: Date | null) {
   });
 }
 
+function formatLogDate(value: Date) {
+  return value.toLocaleDateString("pt-BR", {
+    timeZone: "UTC"
+  });
+}
+
+function makeDateKey(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
 const statusLabels: Record<string, string> = {
   RASCUNHO: "Rascunho",
   PLANEJADA: "Planejada",
@@ -75,6 +85,9 @@ export default async function ProducaoPage() {
   if (session.permissions.includes("producao.manage")) {
     await autoReleaseCuredBatches({ userId: session.userId });
   }
+
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
 
   const [orders, products, molds, compositions, notes, dailyLogs, batches] = await Promise.all([
     prisma.productionOrder.findMany({
@@ -131,6 +144,11 @@ export default async function ProducaoPage() {
       take: 12
     }),
     prisma.productionDailyLog.findMany({
+      where: {
+        logDate: {
+          lte: todayEnd
+        }
+      },
       include: {
         items: {
           include: {
@@ -142,10 +160,15 @@ export default async function ProducaoPage() {
           }
         }
       },
-      orderBy: { logDate: "desc" },
-      take: 7
+      orderBy: [{ logDate: "desc" }, { updatedAt: "desc" }],
+      take: 20
     }),
     prisma.productionBatch.findMany({
+      where: {
+        producedAt: {
+          lte: todayEnd
+        }
+      },
       include: {
         item: {
           include: {
@@ -178,6 +201,18 @@ export default async function ProducaoPage() {
   const lastTeamCount = lastLog
     ? lastLog.teamPresent.split(/,|\n/).map((name) => name.trim()).filter(Boolean).length
     : 0;
+  const batchesByDay = batches.reduce<Array<{ key: string; date: Date; batches: typeof batches }>>((groups, batch) => {
+    const key = makeDateKey(batch.producedAt);
+    const current = groups.find((group) => group.key === key);
+
+    if (current) {
+      current.batches.push(batch);
+      return groups;
+    }
+
+    groups.push({ key, date: batch.producedAt, batches: [batch] });
+    return groups;
+  }, []);
 
   return (
     <>
@@ -274,30 +309,38 @@ export default async function ProducaoPage() {
               <span>Cura</span>
               <span>Status</span>
             </div>
-            {batches.map((batch) => (
-              <article className="production-lot-row" key={batch.id}>
-                <div>
-                  <strong className="mono">{batch.code}</strong>
-                  <span className="metric-sub mono">{batch.producedAt.toLocaleDateString("pt-BR")}</span>
+            {batchesByDay.map((group) => (
+              <div className="production-lot-day-group" key={group.key}>
+                <div className="production-lot-day-title">
+                  <strong>{formatLogDate(group.date)}</strong>
+                  <span>{group.batches.length} lote(s)</span>
                 </div>
-                <div className="production-lot-product">
-                  <strong>{batch.item.description}</strong>
-                  <span className="metric-sub">{batch.item.code}</span>
-                </div>
-                <div className="production-lot-numbers">
-                  <span>Em cura <strong>{formatQuantity(batch.curingQuantity)} {batch.item.unit.code}</strong></span>
-                  <span>Liberado <strong>{formatQuantity(batch.releasedQuantity)} {batch.item.unit.code}</strong></span>
-                </div>
-                <div>
-                  <span className="metric-sub">Apto em</span>
-                  <strong className="mono">{formatDateTime(batch.readyAt)}</strong>
-                </div>
-                <div className="production-lot-status">
-                  <span className={batch.status === "APTA_RETIRADA" ? "badge green" : "badge orange"}>
-                    {batch.status === "APTA_RETIRADA" ? "Apta retirada" : "Em cura"}
-                  </span>
-                </div>
-              </article>
+                {group.batches.map((batch) => (
+                  <article className="production-lot-row" key={batch.id}>
+                    <div>
+                      <strong className="mono">{batch.code}</strong>
+                      <span className="metric-sub mono">Dia {formatLogDate(batch.producedAt)}</span>
+                    </div>
+                    <div className="production-lot-product">
+                      <strong>{batch.item.description}</strong>
+                      <span className="metric-sub">{batch.item.code}</span>
+                    </div>
+                    <div className="production-lot-numbers">
+                      <span>Em cura <strong>{formatQuantity(batch.curingQuantity)} {batch.item.unit.code}</strong></span>
+                      <span>Liberado <strong>{formatQuantity(batch.releasedQuantity)} {batch.item.unit.code}</strong></span>
+                    </div>
+                    <div>
+                      <span className="metric-sub">Apto em</span>
+                      <strong className="mono">{formatDateTime(batch.readyAt)}</strong>
+                    </div>
+                    <div className="production-lot-status">
+                      <span className={batch.status === "APTA_RETIRADA" ? "badge green" : "badge orange"}>
+                        {batch.status === "APTA_RETIRADA" ? "Apta retirada" : "Em cura"}
+                      </span>
+                    </div>
+                  </article>
+                ))}
+              </div>
             ))}
             {batches.length === 0 ? (
               <p className="empty-state">Nenhum lote gerado ainda. Lance um Diario de Producao.</p>
@@ -308,7 +351,7 @@ export default async function ProducaoPage() {
         <aside className="production-summary-row span-12">
           <section className="card accent-blue product-side-panel">
             <p className="eyebrow">Ultimo diario</p>
-            <h2>{lastLog ? lastLog.logDate.toLocaleDateString("pt-BR") : "Sem diario"}</h2>
+            <h2>{lastLog ? formatLogDate(lastLog.logDate) : "Sem diario"}</h2>
             {lastLog ? (
               <div className="split-list">
                 <div className="split-row">
