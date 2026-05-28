@@ -23,16 +23,21 @@ type ConsumedLot = {
   quantity: string;
 };
 
-function parseConsumedLots(value: unknown): ConsumedLot[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
+type RestockLine = {
+  itemId: string;
+  warehouseId: string;
+  quantity: string;
+  unitPrice: string;
+  finalTotal: string;
+  consumedLots: ConsumedLot[];
+};
+
+function parseConsumedLotsList(value: unknown): ConsumedLot[] {
+  if (!Array.isArray(value)) return [];
 
   return value
     .map((item) => {
-      if (!item || typeof item !== "object") {
-        return null;
-      }
+      if (!item || typeof item !== "object") return null;
 
       const record = item as Record<string, unknown>;
       return {
@@ -42,6 +47,39 @@ function parseConsumedLots(value: unknown): ConsumedLot[] {
       };
     })
     .filter((item): item is ConsumedLot => Boolean(item));
+}
+
+function parseRestockLines(value: unknown, fallback: RestockLine): RestockLine[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return [fallback];
+  }
+
+  const saleItems = (value as Record<string, unknown>).saleItems;
+  if (!Array.isArray(saleItems)) {
+    return [fallback];
+  }
+
+  const parsed = saleItems
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      const itemId = String(record.itemId || "");
+      const warehouseId = String(record.warehouseId || "");
+
+      if (!itemId || !warehouseId) return null;
+
+      return {
+        itemId,
+        warehouseId,
+        quantity: String(record.quantity || "0"),
+        unitPrice: String(record.unitPrice || "0"),
+        finalTotal: String(record.finalTotal || "0"),
+        consumedLots: parseConsumedLotsList(record.consumedLots)
+      };
+    })
+    .filter((item): item is RestockLine => Boolean(item));
+
+  return parsed.length > 0 ? parsed : [fallback];
 }
 
 async function addBalance(
@@ -235,35 +273,52 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
         throw new Error("Este recibo possui baixa financeira. Cancele ou estorne o recebimento antes de cancelar a venda.");
       }
 
-      const consumedLots = parseConsumedLots(sale.consumedLots);
+      const restockLines = parseRestockLines(sale.consumedLots, {
+        itemId: sale.itemId,
+        warehouseId: sale.warehouseId,
+        quantity: sale.quantity.toString(),
+        unitPrice: sale.unitPrice.toString(),
+        finalTotal: sale.finalTotal.toString(),
+        consumedLots: []
+      });
+      const reversalIds: string[] = [];
 
-      if (consumedLots.length === 0) {
-        await addBalance(tx as ReturnType<typeof getPrisma>, sale.itemId, sale.warehouseId, null, sale.quantity);
-      } else {
-        for (const consumedLot of consumedLots) {
+      for (const restockLine of restockLines) {
+        if (restockLine.consumedLots.length === 0) {
           await addBalance(
             tx as ReturnType<typeof getPrisma>,
-            sale.itemId,
-            sale.warehouseId,
-            consumedLot.lotId,
-            new Prisma.Decimal(consumedLot.quantity)
+            restockLine.itemId,
+            restockLine.warehouseId,
+            null,
+            new Prisma.Decimal(restockLine.quantity)
           );
+        } else {
+          for (const consumedLot of restockLine.consumedLots) {
+            await addBalance(
+              tx as ReturnType<typeof getPrisma>,
+              restockLine.itemId,
+              restockLine.warehouseId,
+              consumedLot.lotId,
+              new Prisma.Decimal(consumedLot.quantity)
+            );
+          }
         }
-      }
 
-      const reversal = await tx.stockMovement.create({
-        data: {
-          type: "ESTORNO",
-          itemId: sale.itemId,
-          quantity: sale.quantity,
-          unitCost: sale.unitPrice,
-          totalCost: sale.finalTotal,
-          targetWarehouseId: sale.warehouseId,
-          userId: session.userId,
-          document: `${sale.number}-EST`,
-          justification: parsed.data.reason || `Cancelamento do recibo ${sale.number}`
-        }
-      });
+        const reversal = await tx.stockMovement.create({
+          data: {
+            type: "ESTORNO",
+            itemId: restockLine.itemId,
+            quantity: new Prisma.Decimal(restockLine.quantity),
+            unitCost: new Prisma.Decimal(restockLine.unitPrice),
+            totalCost: new Prisma.Decimal(restockLine.finalTotal),
+            targetWarehouseId: restockLine.warehouseId,
+            userId: session.userId,
+            document: `${sale.number}-EST`,
+            justification: parsed.data.reason || `Cancelamento do recibo ${sale.number}`
+          }
+        });
+        reversalIds.push(reversal.id);
+      }
 
       const updated = await tx.directSale.update({
         where: { id },
@@ -298,7 +353,7 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
           },
           newValue: {
             status: updated.status,
-            reversalMovementId: reversal.id
+            reversalMovementIds: reversalIds
           },
           justification: parsed.data.reason || "Cancelamento de recibo com estorno de estoque"
         }

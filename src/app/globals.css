@@ -1624,6 +1624,147 @@ select.form-input {
   gap: 16px;
 }
 
+.sales-flow-card {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.sales-flow-card article {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  align-items: start;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, .06);
+}
+
+.sales-flow-card span,
+.sale-form-title span {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: var(--primary);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.sales-flow-card strong {
+  display: block;
+}
+
+.sales-flow-card small {
+  grid-column: 2;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.sale-form-group {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.sale-form-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.sale-form-title strong {
+  display: block;
+}
+
+.sale-form-title small {
+  color: var(--text-muted);
+}
+
+.sale-lines {
+  display: grid;
+  gap: 12px;
+}
+
+.sale-line-card {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.sale-line-head,
+.sale-line-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sale-line-head .icon-button {
+  width: auto;
+  min-width: 78px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+
+.sale-line-total {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f1f5f9;
+}
+
+.sale-line-total span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.sale-line-total strong {
+  font-family: var(--mono);
+}
+
+.sale-total-preview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.sale-total-preview div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.sale-total-preview div:last-child {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.sale-total-preview span,
+.sale-total-preview small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.sale-total-preview strong {
+  font-family: var(--mono);
+  font-size: 22px;
+}
+
 .sale-receipt-panel {
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -3932,6 +4073,10 @@ select.form-input {
   .production-summary-row {
     grid-template-columns: 1fr;
   }
+
+  .sales-flow-card {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 860px) {
@@ -4031,6 +4176,10 @@ select.form-input {
   .precast-product-grid,
   .report-environment-grid,
   .director-module-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sale-total-preview {
     grid-template-columns: 1fr;
   }
 

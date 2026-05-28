@@ -41,6 +41,18 @@ type SaleReceipt = {
   note: string;
   warehouse: string;
   item: StockItem;
+  items?: Array<{
+    itemId: string;
+    itemCode: string;
+    description: string;
+    unitCode: string;
+    warehouse: string;
+    quantity: string;
+    unitPrice: string;
+    grossTotal: string;
+    discount: string;
+    finalTotal: string;
+  }>;
   quantity: string;
   unitPrice: string;
   grossTotal: string;
@@ -52,6 +64,15 @@ type SaleReceipt = {
     dueDateLabel: string;
     receivedAmount: string;
   } | null;
+};
+
+type SaleLine = {
+  id: string;
+  itemId: string;
+  warehouseId: string;
+  quantity: string;
+  unitPrice: string;
+  discount: string;
 };
 
 type StockSaleFormProps = {
@@ -85,6 +106,34 @@ export function StockSaleForm({ items, warehouses, customers, paymentMethods }: 
 
   const defaultItemId = useMemo(() => items[0]?.id || "", [items]);
   const defaultWarehouseId = useMemo(() => warehouses[0]?.id || "", [warehouses]);
+  const [saleLines, setSaleLines] = useState<SaleLine[]>([
+    { id: "line-1", itemId: defaultItemId, warehouseId: defaultWarehouseId, quantity: "", unitPrice: "", discount: "0" }
+  ]);
+  const grossTotal = saleLines.reduce((total, line) => total + Number(line.quantity || 0) * Number(line.unitPrice || 0), 0);
+  const discountTotal = saleLines.reduce((total, line) => total + Number(line.discount || 0), 0);
+  const finalTotal = Math.max(grossTotal - discountTotal, 0);
+
+  function updateLine(id: string, field: keyof SaleLine, value: string) {
+    setSaleLines((current) => current.map((line) => (line.id === id ? { ...line, [field]: value } : line)));
+  }
+
+  function addLine() {
+    setSaleLines((current) => [
+      ...current,
+      {
+        id: `line-${Date.now()}`,
+        itemId: defaultItemId,
+        warehouseId: defaultWarehouseId,
+        quantity: "",
+        unitPrice: "",
+        discount: "0"
+      }
+    ]);
+  }
+
+  function removeLine(id: string) {
+    setSaleLines((current) => (current.length === 1 ? current : current.filter((line) => line.id !== id)));
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -102,11 +151,18 @@ export function StockSaleForm({ items, warehouses, customers, paymentMethods }: 
         customerId: formData.get("customerId") || undefined,
         customerName: formData.get("customerName"),
         customerDocument: formData.get("customerDocument") || undefined,
-        itemId: formData.get("itemId"),
-        warehouseId: formData.get("warehouseId"),
-        quantity: formData.get("quantity"),
-        unitPrice: formData.get("unitPrice"),
-        discount: formData.get("discount") || 0,
+        itemId: saleLines[0]?.itemId,
+        warehouseId: saleLines[0]?.warehouseId,
+        quantity: saleLines[0]?.quantity,
+        unitPrice: saleLines[0]?.unitPrice,
+        discount: saleLines[0]?.discount || 0,
+        items: saleLines.map((line) => ({
+          itemId: line.itemId,
+          warehouseId: line.warehouseId,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+          discount: line.discount || 0
+        })),
         paymentMethod: formData.get("paymentMethod") || undefined,
         settleNow: formData.get("settleNow") === "on",
         note: formData.get("note") || undefined
@@ -124,12 +180,22 @@ export function StockSaleForm({ items, warehouses, customers, paymentMethods }: 
     setMessage("Venda registrada e recibo gerado.");
     form.reset();
     setSelectedCustomerId("");
+    setSaleLines([{ id: "line-1", itemId: defaultItemId, warehouseId: defaultWarehouseId, quantity: "", unitPrice: "", discount: "0" }]);
     router.refresh();
   }
 
   return (
     <div className="stock-sale-stack">
       <form className="product-form" onSubmit={handleSubmit}>
+        <section className="sale-form-group">
+          <div className="sale-form-title">
+            <span>1</span>
+            <div>
+              <strong>Cliente</strong>
+              <small>Selecione quem vai aparecer no recibo.</small>
+            </div>
+          </div>
+
         <div className="form-two">
           <label className="field">
             <span>Cliente cadastrado</span>
@@ -181,42 +247,131 @@ export function StockSaleForm({ items, warehouses, customers, paymentMethods }: 
             <input className="form-input" value={selectedCustomer ? "Cliente cadastrado" : "Aguardando cliente"} readOnly />
           </label>
         </div>
+        </section>
 
-        <label className="field">
-          <span>Produto vendido</span>
-          <select className="form-input" name="itemId" required defaultValue={defaultItemId}>
-            {items.map((item) => (
-              <option value={item.id} key={item.id}>
-                {item.code} - {item.description} ({item.unitCode})
-              </option>
-            ))}
-          </select>
-        </label>
+        <section className="sale-form-group">
+          <div className="sale-form-title">
+            <span>2</span>
+            <div>
+              <strong>Itens da venda</strong>
+              <small>Adicione uma ou mais pecas no mesmo recibo.</small>
+            </div>
+          </div>
 
-        <label className="field">
-          <span>Deposito de saida</span>
-          <select className="form-input" name="warehouseId" required defaultValue={defaultWarehouseId}>
-            {warehouses.map((warehouse) => (
-              <option value={warehouse.id} key={warehouse.id}>
-                {warehouse.code} - {warehouse.name}
-              </option>
-            ))}
-          </select>
-        </label>
+          <div className="sale-lines">
+            {saleLines.map((line, index) => {
+              const selectedItem = items.find((item) => item.id === line.itemId);
+              const lineGrossTotal = Number(line.quantity || 0) * Number(line.unitPrice || 0);
+              const lineFinalTotal = Math.max(lineGrossTotal - Number(line.discount || 0), 0);
 
-        <div className="form-three">
-          <label className="field">
-            <span>Quantidade</span>
-            <input className="form-input mono" name="quantity" type="number" min="0.001" step="0.001" required />
-          </label>
-          <label className="field">
-            <span>Preco unitario</span>
-            <input className="form-input mono" name="unitPrice" type="number" min="0" step="0.01" required />
-          </label>
-          <label className="field">
-            <span>Desconto</span>
-            <input className="form-input mono" name="discount" type="number" min="0" step="0.01" defaultValue="0" />
-          </label>
+              return (
+                <article className="sale-line-card" key={line.id}>
+                  <div className="sale-line-head">
+                    <strong>Item {index + 1}</strong>
+                    <button className="icon-button danger" type="button" onClick={() => removeLine(line.id)} disabled={saleLines.length === 1}>
+                      Remover
+                    </button>
+                  </div>
+                  <label className="field">
+                    <span>Produto vendido</span>
+                    <select
+                      className="form-input"
+                      required
+                      value={line.itemId || defaultItemId}
+                      onChange={(event) => updateLine(line.id, "itemId", event.target.value)}
+                    >
+                      {items.map((item) => (
+                        <option value={item.id} key={item.id}>
+                          {item.code} - {item.description} ({item.unitCode})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Deposito de saida</span>
+                    <select
+                      className="form-input"
+                      required
+                      value={line.warehouseId || defaultWarehouseId}
+                      onChange={(event) => updateLine(line.id, "warehouseId", event.target.value)}
+                    >
+                      {warehouses.map((warehouse) => (
+                        <option value={warehouse.id} key={warehouse.id}>
+                          {warehouse.code} - {warehouse.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="form-three">
+                    <label className="field">
+                      <span>Quantidade</span>
+                      <input
+                        className="form-input mono"
+                        type="number"
+                        min="0.001"
+                        step="0.001"
+                        value={line.quantity}
+                        onChange={(event) => updateLine(line.id, "quantity", event.target.value)}
+                        required
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Preco unitario</span>
+                      <input
+                        className="form-input mono"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={line.unitPrice}
+                        onChange={(event) => updateLine(line.id, "unitPrice", event.target.value)}
+                        required
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Desconto</span>
+                      <input
+                        className="form-input mono"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={line.discount}
+                        onChange={(event) => updateLine(line.id, "discount", event.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <div className="sale-line-total">
+                    <span>{selectedItem ? quantity(line.quantity || 0, selectedItem.unitCode) : "Sem produto"}</span>
+                    <strong>{money(lineFinalTotal)}</strong>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+
+          <button className="secondary-button" type="button" onClick={addLine}>
+            + Adicionar produto
+          </button>
+        </section>
+
+        <section className="sale-form-group">
+          <div className="sale-form-title">
+            <span>3</span>
+            <div>
+              <strong>Resumo e pagamento</strong>
+              <small>Confira o total antes de confirmar.</small>
+            </div>
+          </div>
+
+        <div className="sale-total-preview">
+          <div>
+            <span>Total bruto</span>
+            <strong>{money(grossTotal)}</strong>
+          </div>
+          <div>
+            <span>Total final</span>
+            <strong>{money(finalTotal)}</strong>
+            <small>{saleLines.length} item(ns) no recibo</small>
+          </div>
         </div>
 
         <div className="form-two">
@@ -236,6 +391,7 @@ export function StockSaleForm({ items, warehouses, customers, paymentMethods }: 
             <input className="form-input" name="note" placeholder="Opcional" maxLength={240} />
           </label>
         </div>
+        </section>
 
         <label className="checkbox-line">
           <input type="checkbox" name="settleNow" defaultChecked />
@@ -247,7 +403,7 @@ export function StockSaleForm({ items, warehouses, customers, paymentMethods }: 
 
         <button className="primary-button" type="submit" disabled={loading || items.length === 0 || warehouses.length === 0 || customers.length === 0}>
           <ShoppingCart size={17} />
-          {loading ? "Gerando..." : "Registrar venda, recibo e financeiro"}
+          {loading ? "Gerando..." : "Confirmar venda"}
         </button>
       </form>
 
@@ -306,13 +462,24 @@ export function StockSaleForm({ items, warehouses, customers, paymentMethods }: 
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td className="mono">{receipt.item.code}</td>
-                  <td>{receipt.item.description}</td>
-                  <td>{quantity(receipt.quantity, receipt.item.unitCode)}</td>
-                  <td>{money(receipt.unitPrice)}</td>
-                  <td>{money(receipt.grossTotal)}</td>
-                </tr>
+                {(receipt.items && receipt.items.length > 0 ? receipt.items : [
+                  {
+                    itemCode: receipt.item.code,
+                    description: receipt.item.description,
+                    unitCode: receipt.item.unitCode,
+                    quantity: receipt.quantity,
+                    unitPrice: receipt.unitPrice,
+                    grossTotal: receipt.grossTotal
+                  }
+                ]).map((item, index) => (
+                  <tr key={`${item.itemCode}-${index}`}>
+                    <td className="mono">{item.itemCode}</td>
+                    <td>{item.description}</td>
+                    <td>{quantity(item.quantity, item.unitCode)}</td>
+                    <td>{money(item.unitPrice)}</td>
+                    <td>{money(item.grossTotal)}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
 

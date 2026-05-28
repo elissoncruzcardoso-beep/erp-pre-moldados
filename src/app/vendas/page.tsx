@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight, ClipboardCheck, PackageCheck, ReceiptText, WalletCards } from "lucide-react";
+import { ArrowRight, ClipboardCheck, PackageCheck, ReceiptText, ShoppingCart, WalletCards } from "lucide-react";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
 import { StockSaleForm } from "../estoque/stock-sale-form";
@@ -21,6 +21,25 @@ function money(value: number) {
     style: "currency",
     currency: "BRL"
   });
+}
+
+function parseSaleLines(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const saleItems = (value as Record<string, unknown>).saleItems;
+  if (!Array.isArray(saleItems)) return [];
+
+  return saleItems
+    .map((line) => {
+      if (!line || typeof line !== "object") return null;
+      const record = line as Record<string, unknown>;
+      return {
+        itemCode: String(record.itemCode || ""),
+        description: String(record.description || ""),
+        quantity: String(record.quantity || "0"),
+        unitCode: String(record.unitCode || "UN")
+      };
+    })
+    .filter((line): line is NonNullable<typeof line> => Boolean(line));
 }
 
 export default async function VendasPage() {
@@ -98,10 +117,10 @@ export default async function VendasPage() {
       <section className="page-head">
         <div>
           <p className="eyebrow">Vendas</p>
-          <h1>Venda direta, recibo e financeiro</h1>
+          <h1>Venda direta</h1>
           <p className="lead">
-            Emita venda de pecas prontas, baixe estoque, gere recibo profissional e crie automaticamente
-            o contas a receber da operacao.
+            Registre a venda de pecas prontas, baixe o estoque, gere recibo e alimente o contas a
+            receber em uma unica tela.
           </p>
         </div>
         <div className="button-row">
@@ -139,10 +158,31 @@ export default async function VendasPage() {
         </article>
       </section>
 
+      <section className="sales-flow-card">
+        <article>
+          <span>1</span>
+          <strong>Escolha o cliente</strong>
+          <small>Use clientes cadastrados para manter recibo e financeiro organizados.</small>
+        </article>
+        <article>
+          <span>2</span>
+          <strong>Informe produto e quantidade</strong>
+          <small>O sistema valida saldo antes de confirmar a venda.</small>
+        </article>
+        <article>
+          <span>3</span>
+          <strong>Confirme valores</strong>
+          <small>Ao salvar, gera recibo, baixa estoque e cria o financeiro.</small>
+        </article>
+      </section>
+
       <section className="grid-12">
-        <section className="card accent-orange span-5">
+        <section className="card accent-orange span-6">
           <p className="eyebrow">Nova venda</p>
-          <h2>Emitir recibo, baixar estoque e gerar financeiro</h2>
+          <h2>Registrar venda</h2>
+          <p className="section-note">
+            Preencha os campos na ordem. O recibo aparece na tela logo apos salvar.
+          </p>
           <StockSaleForm
             items={items.map((item) => ({
               id: item.id,
@@ -169,11 +209,11 @@ export default async function VendasPage() {
           />
         </section>
 
-        <section className="table-shell span-7">
+        <section className="table-shell span-6">
           <div className="table-header">
             <div>
-              <p className="eyebrow">Produtos disponiveis</p>
-              <h2>Saldo por deposito</h2>
+              <p className="eyebrow">Disponivel para venda</p>
+              <h2>Estoque de pecas prontas</h2>
             </div>
             <Link className="secondary-button" href="/estoque">
               Ver estoque
@@ -183,7 +223,6 @@ export default async function VendasPage() {
           <table>
             <thead>
               <tr>
-                <th>Codigo</th>
                 <th>Produto</th>
                 <th>Deposito</th>
                 <th>Saldo</th>
@@ -192,8 +231,10 @@ export default async function VendasPage() {
             <tbody>
               {balances.map((balance) => (
                 <tr key={balance.id}>
-                  <td className="mono">{balance.item.code}</td>
-                  <td>{balance.item.description}</td>
+                  <td>
+                    <strong>{balance.item.description}</strong>
+                    <small className="product-detail">{balance.item.code}</small>
+                  </td>
                   <td>{balance.warehouse.code} - {balance.warehouse.name}</td>
                   <td className="mono">
                     {decimalToNumber(balance.quantity).toLocaleString("pt-BR", { maximumFractionDigits: 3 })} {balance.item.unit.code}
@@ -202,7 +243,7 @@ export default async function VendasPage() {
               ))}
               {balances.length === 0 ? (
                 <tr>
-                  <td colSpan={4}>Nenhum produto acabado com saldo registrado.</td>
+                  <td colSpan={3}>Nenhum produto acabado com saldo registrado.</td>
                 </tr>
               ) : null}
             </tbody>
@@ -215,6 +256,7 @@ export default async function VendasPage() {
               <p className="eyebrow">Historico</p>
               <h2>Ultimos recibos emitidos</h2>
             </div>
+            <ShoppingCart size={22} color="#1a237e" />
           </div>
           <table>
             <thead>
@@ -233,13 +275,25 @@ export default async function VendasPage() {
             <tbody>
               {directSales.map((sale) => {
                 const receivable = sale.accountsReceivable[0];
+                const saleLines = parseSaleLines(sale.consumedLots);
 
                 return (
                   <tr key={sale.id}>
                     <td className="mono">{sale.issuedAt.toLocaleString("pt-BR")}</td>
                     <td className="mono">{sale.number}</td>
                     <td>{sale.customerName}</td>
-                    <td>{sale.item.code} - {sale.item.description}</td>
+                    <td>
+                      {saleLines.length > 1 ? (
+                        <>
+                          <strong>{saleLines.length} itens no recibo</strong>
+                          <small className="product-detail">
+                            {saleLines.map((line) => `${line.itemCode}: ${decimalToNumber(line.quantity).toLocaleString("pt-BR", { maximumFractionDigits: 3 })} ${line.unitCode}`).join(" | ")}
+                          </small>
+                        </>
+                      ) : (
+                        `${sale.item.code} - ${sale.item.description}`
+                      )}
+                    </td>
                     <td className="mono">
                       {decimalToNumber(sale.quantity).toLocaleString("pt-BR", { maximumFractionDigits: 3 })} {sale.item.unit.code}
                     </td>

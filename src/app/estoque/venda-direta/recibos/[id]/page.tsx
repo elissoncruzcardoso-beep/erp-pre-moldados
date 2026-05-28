@@ -28,6 +28,27 @@ function quantity(value: unknown, unitCode: string) {
   })} ${unitCode}`;
 }
 
+function parseSaleLines(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const saleItems = (value as Record<string, unknown>).saleItems;
+  if (!Array.isArray(saleItems)) return [];
+
+  return saleItems
+    .map((line) => {
+      if (!line || typeof line !== "object") return null;
+      const record = line as Record<string, unknown>;
+      return {
+        itemCode: String(record.itemCode || ""),
+        description: String(record.description || ""),
+        unitCode: String(record.unitCode || "UN"),
+        quantity: String(record.quantity || "0"),
+        unitPrice: String(record.unitPrice || "0"),
+        grossTotal: String(record.grossTotal || "0")
+      };
+    })
+    .filter((line): line is NonNullable<typeof line> => Boolean(line));
+}
+
 export default async function ReciboVendaPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
 
@@ -54,6 +75,21 @@ export default async function ReciboVendaPage({ params }: { params: Promise<{ id
   if (!sale) {
     notFound();
   }
+
+  const saleLines = parseSaleLines(sale.consumedLots);
+  const receiptItems =
+    saleLines.length > 0
+      ? saleLines
+      : [
+          {
+            itemCode: sale.item.code,
+            description: sale.item.description,
+            unitCode: sale.item.unit.code,
+            quantity: sale.quantity.toString(),
+            unitPrice: sale.unitPrice.toString(),
+            grossTotal: sale.grossTotal.toString()
+          }
+        ];
 
   return (
     <>
@@ -116,13 +152,15 @@ export default async function ReciboVendaPage({ params }: { params: Promise<{ id
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td className="mono">{sale.item.code}</td>
-                <td>{sale.item.description}</td>
-                <td>{quantity(sale.quantity, sale.item.unit.code)}</td>
-                <td>{money(sale.unitPrice)}</td>
-                <td>{money(sale.grossTotal)}</td>
-              </tr>
+              {receiptItems.map((item, index) => (
+                <tr key={`${item.itemCode}-${index}`}>
+                  <td className="mono">{item.itemCode}</td>
+                  <td>{item.description}</td>
+                  <td>{quantity(item.quantity, item.unitCode)}</td>
+                  <td>{money(item.unitPrice)}</td>
+                  <td>{money(item.grossTotal)}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
 
