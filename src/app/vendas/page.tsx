@@ -36,7 +36,8 @@ function parseSaleLines(value: unknown) {
         itemCode: String(record.itemCode || ""),
         description: String(record.description || ""),
         quantity: String(record.quantity || "0"),
-        unitCode: String(record.unitCode || "UN")
+        unitCode: String(record.unitCode || "UN"),
+        finalTotal: String(record.finalTotal || "0")
       };
     })
     .filter((line): line is NonNullable<typeof line> => Boolean(line));
@@ -107,7 +108,41 @@ export default async function VendasPage() {
     })
   ]);
 
-  const availablePieces = balances.reduce((total, balance) => total + decimalToNumber(balance.quantity), 0);
+  const balanceMap = new Map<string, {
+    id: string;
+    itemId: string;
+    warehouseId: string;
+    quantity: number;
+    item: (typeof balances)[number]["item"];
+    warehouse: (typeof balances)[number]["warehouse"];
+  }>();
+
+  balances.forEach((balance) => {
+    const key = `${balance.itemId}:${balance.warehouseId}`;
+    const current = balanceMap.get(key);
+
+    if (current) {
+      current.quantity += decimalToNumber(balance.quantity);
+      return;
+    }
+
+    balanceMap.set(key, {
+      id: key,
+      itemId: balance.itemId,
+      warehouseId: balance.warehouseId,
+      quantity: decimalToNumber(balance.quantity),
+      item: balance.item,
+      warehouse: balance.warehouse
+    });
+  });
+
+  const consolidatedBalances = Array.from(balanceMap.values())
+    .filter((balance) => balance.quantity > 0)
+    .sort((a, b) => {
+      const itemCompare = a.item.code.localeCompare(b.item.code);
+      return itemCompare || a.warehouse.code.localeCompare(b.warehouse.code);
+    });
+  const availablePieces = consolidatedBalances.reduce((total, balance) => total + balance.quantity, 0);
   const activeSales = directSales.filter((sale) => sale.status === "ATIVA");
   const soldTotal = activeSales.reduce((total, sale) => total + decimalToNumber(sale.finalTotal), 0);
   const openReceivables = directSales.filter((sale) => sale.accountsReceivable[0]?.status !== "RECEBIDO" && sale.status === "ATIVA").length;
@@ -206,6 +241,12 @@ export default async function VendasPage() {
               code: method.code,
               name: method.name
             }))}
+            balances={consolidatedBalances.map((balance) => ({
+              itemId: balance.itemId,
+              warehouseId: balance.warehouseId,
+              quantity: balance.quantity,
+              unitCode: balance.item.unit.code
+            }))}
           />
         </section>
 
@@ -229,7 +270,7 @@ export default async function VendasPage() {
               </tr>
             </thead>
             <tbody>
-              {balances.map((balance) => (
+              {consolidatedBalances.map((balance) => (
                 <tr key={balance.id}>
                   <td>
                     <strong>{balance.item.description}</strong>
@@ -237,11 +278,11 @@ export default async function VendasPage() {
                   </td>
                   <td>{balance.warehouse.code} - {balance.warehouse.name}</td>
                   <td className="mono">
-                    {decimalToNumber(balance.quantity).toLocaleString("pt-BR", { maximumFractionDigits: 3 })} {balance.item.unit.code}
+                    {balance.quantity.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} {balance.item.unit.code}
                   </td>
                 </tr>
               ))}
-              {balances.length === 0 ? (
+              {consolidatedBalances.length === 0 ? (
                 <tr>
                   <td colSpan={3}>Nenhum produto acabado com saldo registrado.</td>
                 </tr>
@@ -295,7 +336,9 @@ export default async function VendasPage() {
                       )}
                     </td>
                     <td className="mono">
-                      {decimalToNumber(sale.quantity).toLocaleString("pt-BR", { maximumFractionDigits: 3 })} {sale.item.unit.code}
+                      {saleLines.length > 1
+                        ? `${saleLines.reduce((total, line) => total + decimalToNumber(line.quantity), 0).toLocaleString("pt-BR", { maximumFractionDigits: 3 })} un.`
+                        : `${decimalToNumber(sale.quantity).toLocaleString("pt-BR", { maximumFractionDigits: 3 })} ${sale.item.unit.code}`}
                     </td>
                     <td className="mono">{money(decimalToNumber(sale.finalTotal))}</td>
                     <td>
@@ -322,7 +365,8 @@ export default async function VendasPage() {
                           discount: sale.discount.toString(),
                           paymentMethod: sale.paymentMethod || "",
                           note: sale.note || "",
-                          status: sale.status
+                          status: sale.status,
+                          itemCount: saleLines.length || 1
                         }}
                       />
                     </td>

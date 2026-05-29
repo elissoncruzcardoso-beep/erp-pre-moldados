@@ -14,15 +14,17 @@ type DirectSaleActionsProps = {
     paymentMethod: string;
     note: string;
     status: string;
+    itemCount?: number;
   };
 };
 
 export function DirectSaleActions({ sale }: DirectSaleActionsProps) {
   const router = useRouter();
   const disabled = sale.status !== "ATIVA";
+  const editDisabled = disabled || Number(sale.itemCount || 1) > 1;
 
   async function editSale() {
-    if (disabled) {
+    if (editDisabled) {
       return;
     }
 
@@ -97,7 +99,13 @@ export function DirectSaleActions({ sale }: DirectSaleActionsProps) {
       <Link className="icon-button" href={`/vendas/recibos/${sale.id}`} title="Reimprimir recibo">
         <Printer size={16} />
       </Link>
-      <button className="icon-button" type="button" onClick={editSale} disabled={disabled} title="Editar dados comerciais">
+      <button
+        className="icon-button"
+        type="button"
+        onClick={editSale}
+        disabled={editDisabled}
+        title={editDisabled && !disabled ? "Recibo multi-itens: cancele e lance novamente para alterar valores" : "Editar dados comerciais"}
+      >
         <Edit3 size={16} />
       </button>
       <button className="icon-button danger" type="button" onClick={cancelSale} disabled={disabled} title="Cancelar e estornar estoque">

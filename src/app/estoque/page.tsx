@@ -88,12 +88,50 @@ export default async function EstoquePage() {
     prisma.lot.count()
   ]);
 
-  const criticalBalances = balances.filter((balance) => {
+  const balanceMap = new Map<string, {
+    id: string;
+    itemId: string;
+    warehouseId: string;
+    quantity: number;
+    reserved: number;
+    lotCount: number;
+    item: (typeof balances)[number]["item"];
+    warehouse: (typeof balances)[number]["warehouse"];
+  }>();
+
+  balances.forEach((balance) => {
+    const key = `${balance.itemId}:${balance.warehouseId}`;
+    const current = balanceMap.get(key);
+
+    if (current) {
+      current.quantity += decimalToNumber(balance.quantity);
+      current.reserved += decimalToNumber(balance.reserved);
+      current.lotCount += balance.lotId ? 1 : 0;
+      return;
+    }
+
+    balanceMap.set(key, {
+      id: key,
+      itemId: balance.itemId,
+      warehouseId: balance.warehouseId,
+      quantity: decimalToNumber(balance.quantity),
+      reserved: decimalToNumber(balance.reserved),
+      lotCount: balance.lotId ? 1 : 0,
+      item: balance.item,
+      warehouse: balance.warehouse
+    });
+  });
+
+  const consolidatedBalances = Array.from(balanceMap.values()).sort((a, b) => {
+    const warehouseCompare = a.warehouse.code.localeCompare(b.warehouse.code);
+    return warehouseCompare || a.item.code.localeCompare(b.item.code);
+  });
+  const criticalBalances = consolidatedBalances.filter((balance) => {
     const minimumStock = decimalToNumber(balance.item.minimumStock);
-    return minimumStock > 0 && decimalToNumber(balance.quantity) <= minimumStock;
+    return minimumStock > 0 && balance.quantity <= minimumStock;
   }).length;
-  const reservedTotal = balances.reduce((total, balance) => total + decimalToNumber(balance.reserved), 0);
-  const stockTotal = balances.reduce((total, balance) => total + decimalToNumber(balance.quantity), 0);
+  const reservedTotal = consolidatedBalances.reduce((total, balance) => total + balance.reserved, 0);
+  const stockTotal = consolidatedBalances.reduce((total, balance) => total + balance.quantity, 0);
   const reservedPercent = stockTotal > 0 ? Math.round((reservedTotal / stockTotal) * 100) : 0;
 
   return (
@@ -163,16 +201,18 @@ export default async function EstoquePage() {
               </tr>
             </thead>
             <tbody>
-              {balances.map((balance) => {
-                const quantity = decimalToNumber(balance.quantity);
+              {consolidatedBalances.map((balance) => {
                 const minimumStock = decimalToNumber(balance.item.minimumStock);
-                const isCritical = minimumStock > 0 && quantity <= minimumStock;
+                const isCritical = minimumStock > 0 && balance.quantity <= minimumStock;
 
                 return (
                   <tr key={balance.id}>
                     <td>{balance.warehouse.name}</td>
                     <td className="mono">{balance.item.code}</td>
-                    <td>{balance.item.description}</td>
+                    <td>
+                      <strong>{balance.item.description}</strong>
+                      {balance.lotCount > 0 ? <small className="product-detail">{balance.lotCount} lote(s) consolidados</small> : null}
+                    </td>
                     <td className="mono">{formatQuantity(balance.quantity)} {balance.item.unit.code}</td>
                     <td className="mono">{formatQuantity(balance.reserved)} {balance.item.unit.code}</td>
                     <td>
@@ -183,7 +223,7 @@ export default async function EstoquePage() {
                   </tr>
                 );
               })}
-              {balances.length === 0 ? (
+              {consolidatedBalances.length === 0 ? (
                 <tr>
                   <td colSpan={6}>Nenhum saldo registrado. Use o formulario para fazer a primeira entrada.</td>
                 </tr>

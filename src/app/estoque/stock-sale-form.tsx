@@ -1,8 +1,9 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Printer, ReceiptText, ShoppingCart } from "lucide-react";
+import { Plus, Printer, ReceiptText, ShoppingCart, Trash2 } from "lucide-react";
 
 type StockItem = {
   id: string;
@@ -28,6 +29,13 @@ type PaymentMethodOption = {
   id: string;
   code: string;
   name: string;
+};
+
+type BalanceOption = {
+  itemId: string;
+  warehouseId: string;
+  quantity: number;
+  unitCode: string;
 };
 
 type SaleReceipt = {
@@ -80,6 +88,7 @@ type StockSaleFormProps = {
   warehouses: WarehouseOption[];
   customers: CustomerOption[];
   paymentMethods: PaymentMethodOption[];
+  balances: BalanceOption[];
 };
 
 function money(value: string | number) {
@@ -95,7 +104,7 @@ function quantity(value: string | number, unitCode: string) {
   })} ${unitCode}`;
 }
 
-export function StockSaleForm({ items, warehouses, customers, paymentMethods }: StockSaleFormProps) {
+export function StockSaleForm({ items, warehouses, customers, paymentMethods, balances }: StockSaleFormProps) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -104,8 +113,35 @@ export function StockSaleForm({ items, warehouses, customers, paymentMethods }: 
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const selectedCustomer = customers.find((customer) => customer.id === selectedCustomerId);
 
-  const defaultItemId = useMemo(() => items[0]?.id || "", [items]);
-  const defaultWarehouseId = useMemo(() => warehouses[0]?.id || "", [warehouses]);
+  const stockByLocation = useMemo(() => {
+    const map = new Map<string, BalanceOption>();
+    balances.forEach((balance) => {
+      const key = `${balance.itemId}:${balance.warehouseId}`;
+      const current = map.get(key);
+      map.set(key, {
+        ...balance,
+        quantity: (current?.quantity || 0) + balance.quantity
+      });
+    });
+    return map;
+  }, [balances]);
+
+  const stockByItem = useMemo(() => {
+    const map = new Map<string, number>();
+    balances.forEach((balance) => {
+      map.set(balance.itemId, (map.get(balance.itemId) || 0) + balance.quantity);
+    });
+    return map;
+  }, [balances]);
+
+  const defaultItemId = useMemo(() => {
+    return items.find((item) => (stockByItem.get(item.id) || 0) > 0)?.id || items[0]?.id || "";
+  }, [items, stockByItem]);
+
+  const defaultWarehouseId = useMemo(() => {
+    return balances.find((balance) => balance.itemId === defaultItemId && balance.quantity > 0)?.warehouseId || warehouses[0]?.id || "";
+  }, [balances, defaultItemId, warehouses]);
+
   const [saleLines, setSaleLines] = useState<SaleLine[]>([
     { id: "line-1", itemId: defaultItemId, warehouseId: defaultWarehouseId, quantity: "", unitPrice: "", discount: "0" }
   ]);
@@ -114,7 +150,19 @@ export function StockSaleForm({ items, warehouses, customers, paymentMethods }: 
   const finalTotal = Math.max(grossTotal - discountTotal, 0);
 
   function updateLine(id: string, field: keyof SaleLine, value: string) {
-    setSaleLines((current) => current.map((line) => (line.id === id ? { ...line, [field]: value } : line)));
+    setSaleLines((current) => current.map((line) => {
+      if (line.id !== id) return line;
+
+      if (field === "itemId") {
+        return {
+          ...line,
+          itemId: value,
+          warehouseId: getFirstWarehouseIdForItem(value)
+        };
+      }
+
+      return { ...line, [field]: value };
+    }));
   }
 
   function addLine() {
@@ -135,11 +183,51 @@ export function StockSaleForm({ items, warehouses, customers, paymentMethods }: 
     setSaleLines((current) => (current.length === 1 ? current : current.filter((line) => line.id !== id)));
   }
 
+  function getAvailable(line: SaleLine) {
+    return stockByLocation.get(`${line.itemId}:${line.warehouseId}`)?.quantity ?? 0;
+  }
+
+  function getFirstWarehouseIdForItem(itemId: string) {
+    return balances.find((balance) => balance.itemId === itemId && balance.quantity > 0)?.warehouseId || defaultWarehouseId;
+  }
+
+  function getWarehouseLabel(warehouse: WarehouseOption, itemId: string) {
+    const balance = stockByLocation.get(`${itemId}:${warehouse.id}`);
+    const stock = balance ? quantity(balance.quantity, balance.unitCode) : "sem saldo";
+
+    return `${warehouse.code} - ${warehouse.name} (${stock})`;
+  }
+
+  function getItemTotalStock(itemId: string) {
+    return stockByItem.get(itemId) || 0;
+  }
+
+  function getWarehousesForItem(itemId: string) {
+    const warehouseIdsWithStock = new Set(
+      balances
+        .filter((balance) => balance.itemId === itemId && balance.quantity > 0)
+        .map((balance) => balance.warehouseId)
+    );
+
+    return warehouses.filter((warehouse) => warehouseIdsWithStock.has(warehouse.id));
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setMessage("");
     setReceipt(null);
+
+    const invalidLine = saleLines.find((line) => {
+      const requested = Number(line.quantity || 0);
+      return requested <= 0 || requested > getAvailable(line);
+    });
+
+    if (invalidLine) {
+      setError("Revise os itens: existe quantidade zerada ou maior que o saldo disponivel.");
+      return;
+    }
+
     setLoading(true);
 
     const form = event.currentTarget;
@@ -214,6 +302,10 @@ export function StockSaleForm({ items, warehouses, customers, paymentMethods }: 
               ))}
             </select>
           </label>
+          <div className="sale-customer-helper">
+            <span>Cliente nao cadastrado?</span>
+            <Link href="/cadastros/clientes">Cadastrar cliente</Link>
+          </div>
           <label className="field">
             <span>CPF/CNPJ</span>
             <input
@@ -261,48 +353,61 @@ export function StockSaleForm({ items, warehouses, customers, paymentMethods }: 
           <div className="sale-lines">
             {saleLines.map((line, index) => {
               const selectedItem = items.find((item) => item.id === line.itemId);
+              const available = getAvailable(line);
+              const requestedQuantity = Number(line.quantity || 0);
+              const hasStockIssue = requestedQuantity > 0 && requestedQuantity > available;
               const lineGrossTotal = Number(line.quantity || 0) * Number(line.unitPrice || 0);
               const lineFinalTotal = Math.max(lineGrossTotal - Number(line.discount || 0), 0);
 
               return (
                 <article className="sale-line-card" key={line.id}>
                   <div className="sale-line-head">
-                    <strong>Item {index + 1}</strong>
+                    <div>
+                      <strong>Item {index + 1}</strong>
+                      <small>{selectedItem?.code || "Selecione o produto"}</small>
+                    </div>
                     <button className="icon-button danger" type="button" onClick={() => removeLine(line.id)} disabled={saleLines.length === 1}>
+                      <Trash2 size={15} />
                       Remover
                     </button>
                   </div>
-                  <label className="field">
-                    <span>Produto vendido</span>
-                    <select
-                      className="form-input"
-                      required
-                      value={line.itemId || defaultItemId}
-                      onChange={(event) => updateLine(line.id, "itemId", event.target.value)}
-                    >
-                      {items.map((item) => (
-                        <option value={item.id} key={item.id}>
-                          {item.code} - {item.description} ({item.unitCode})
+                  <div className="sale-line-product-grid">
+                    <label className="field">
+                      <span>Produto vendido</span>
+                      <select
+                        className="form-input"
+                        required
+                        value={line.itemId || defaultItemId}
+                        onChange={(event) => updateLine(line.id, "itemId", event.target.value)}
+                      >
+                      {items.map((item) => {
+                        const totalStock = getItemTotalStock(item.id);
+
+                        return (
+                        <option value={item.id} key={item.id} disabled={totalStock <= 0}>
+                          {item.code} - {item.description} ({totalStock.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} {item.unitCode})
                         </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Deposito de saida</span>
-                    <select
-                      className="form-input"
-                      required
-                      value={line.warehouseId || defaultWarehouseId}
-                      onChange={(event) => updateLine(line.id, "warehouseId", event.target.value)}
-                    >
-                      {warehouses.map((warehouse) => (
-                        <option value={warehouse.id} key={warehouse.id}>
-                          {warehouse.code} - {warehouse.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <div className="form-three">
+                        );
+                      })}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Deposito de saida</span>
+                      <select
+                        className="form-input"
+                        required
+                        value={line.warehouseId || defaultWarehouseId}
+                        onChange={(event) => updateLine(line.id, "warehouseId", event.target.value)}
+                      >
+                        {getWarehousesForItem(line.itemId || defaultItemId).map((warehouse) => (
+                          <option value={warehouse.id} key={warehouse.id}>
+                            {getWarehouseLabel(warehouse, line.itemId || defaultItemId)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <div className="sale-line-values-grid">
                     <label className="field">
                       <span>Quantidade</span>
                       <input
@@ -339,6 +444,11 @@ export function StockSaleForm({ items, warehouses, customers, paymentMethods }: 
                       />
                     </label>
                   </div>
+                  <div className={hasStockIssue ? "sale-stock-warning danger" : "sale-stock-warning"}>
+                    <span>Saldo disponivel</span>
+                    <strong>{selectedItem ? quantity(available, selectedItem.unitCode) : "0 UN"}</strong>
+                    {hasStockIssue ? <small>Quantidade acima do saldo deste deposito.</small> : null}
+                  </div>
                   <div className="sale-line-total">
                     <span>{selectedItem ? quantity(line.quantity || 0, selectedItem.unitCode) : "Sem produto"}</span>
                     <strong>{money(lineFinalTotal)}</strong>
@@ -349,7 +459,8 @@ export function StockSaleForm({ items, warehouses, customers, paymentMethods }: 
           </div>
 
           <button className="secondary-button" type="button" onClick={addLine}>
-            + Adicionar produto
+            <Plus size={16} />
+            Adicionar produto
           </button>
         </section>
 
@@ -366,6 +477,10 @@ export function StockSaleForm({ items, warehouses, customers, paymentMethods }: 
           <div>
             <span>Total bruto</span>
             <strong>{money(grossTotal)}</strong>
+          </div>
+          <div>
+            <span>Descontos</span>
+            <strong>{money(discountTotal)}</strong>
           </div>
           <div>
             <span>Total final</span>
@@ -443,11 +558,6 @@ export function StockSaleForm({ items, warehouses, customers, paymentMethods }: 
                 <span>Vendedor</span>
                 <strong>{receipt.sellerName}</strong>
                 <small>{receipt.paymentMethod}</small>
-              </div>
-              <div>
-                <span>Deposito</span>
-                <strong>{receipt.warehouse}</strong>
-                <small>Baixa automatica do estoque</small>
               </div>
             </section>
 

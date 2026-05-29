@@ -724,6 +724,33 @@ tbody tr:hover td {
   color: var(--danger);
 }
 
+.badge.gray {
+  background: #e5e7eb;
+  color: #4b5563;
+}
+
+.finance-origin-cell {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  min-width: 145px;
+}
+
+.finance-origin-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--primary);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.finance-origin-link:hover {
+  text-decoration: underline;
+}
+
 .quote-action-cell {
   display: grid;
   gap: 6px;
@@ -1690,6 +1717,28 @@ select.form-input {
   color: var(--text-muted);
 }
 
+.sale-customer-helper {
+  align-self: end;
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 12px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sale-customer-helper a {
+  color: var(--primary);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
 .sale-lines {
   display: grid;
   gap: 12px;
@@ -1714,9 +1763,59 @@ select.form-input {
 
 .sale-line-head .icon-button {
   width: auto;
-  min-width: 78px;
+  min-width: 92px;
   padding: 0 10px;
   font-size: 11px;
+}
+
+.sale-line-head small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.sale-line-product-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(220px, .75fr);
+  gap: 10px;
+  min-width: 0;
+}
+
+.sale-line-values-grid {
+  display: grid;
+  grid-template-columns: minmax(130px, .7fr) minmax(130px, .7fr) minmax(130px, .6fr);
+  gap: 10px;
+  min-width: 0;
+}
+
+.sale-stock-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  background: #f0fdf4;
+  color: #166534;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sale-stock-warning strong {
+  font-family: var(--mono);
+}
+
+.sale-stock-warning small {
+  color: #9a3412;
+}
+
+.sale-stock-warning.danger {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #9a3412;
 }
 
 .sale-line-total {
@@ -1736,7 +1835,7 @@ select.form-input {
 
 .sale-total-preview {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -4170,6 +4269,8 @@ select.form-input {
   .quote-comparison-line,
   .quote-edit-line,
   .composition-grid,
+  .sale-line-product-grid,
+  .sale-line-values-grid,
   .form-two,
   .form-three,
   .supply-feature-grid,
@@ -4337,20 +4438,40 @@ select.form-input {
 @media print {
   @page {
     size: A4;
-    margin: 10mm;
+    margin: 12mm;
   }
 
   html,
   body {
     background: #fff !important;
-    width: 210mm;
-    min-height: 297mm;
+    width: auto !important;
+    min-height: auto !important;
     margin: 0 !important;
     overflow: visible !important;
   }
 
   body * {
     visibility: hidden !important;
+  }
+
+  .app-shell,
+  .main-zone,
+  .content,
+  .sale-receipt-page {
+    display: block !important;
+    width: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  .sidebar,
+  .topbar,
+  .mobile-nav,
+  .sale-receipt-actions {
+    display: none !important;
   }
 
   .print-only,
@@ -4362,15 +4483,16 @@ select.form-input {
 
   .print-only,
   .sale-receipt {
-    position: absolute;
-    inset: 0 auto auto 0 !important;
+    position: fixed;
+    inset: 0 auto auto 50% !important;
+    transform: translateX(-50%) !important;
     display: grid !important;
-    width: 190mm !important;
-    max-width: 190mm !important;
+    width: 186mm !important;
+    max-width: 186mm !important;
     min-height: auto !important;
     margin: 0 !important;
     padding: 0 !important;
-    gap: 8mm !important;
+    gap: 6mm !important;
     box-shadow: none !important;
     border: 0 !important;
     border-radius: 0 !important;
@@ -4403,7 +4525,7 @@ select.form-input {
 
   .sale-receipt-grid {
     display: grid !important;
-    grid-template-columns: repeat(3, 1fr) !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 4mm !important;
   }
 
@@ -4451,8 +4573,8 @@ select.form-input {
   }
 
   .sale-signatures {
-    gap: 18mm !important;
-    padding-top: 9mm !important;
+    gap: 14mm !important;
+    padding-top: 7mm !important;
   }
 
   .sale-signatures span {

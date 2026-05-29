@@ -139,11 +139,6 @@ export default async function ReciboVendaPage({ params }: { params: Promise<{ id
               <strong>{sale.createdBy.name}</strong>
               <small>{sale.paymentMethod || "Nao informado"}</small>
             </div>
-            <div>
-              <span>Deposito</span>
-              <strong>{sale.warehouse.code} - {sale.warehouse.name}</strong>
-              <small>{sale.status === "ATIVA" ? "Baixa automatica do estoque" : "Estoque estornado no cancelamento"}</small>
-            </div>
           </section>
 
           <table className="sale-receipt-table">
@@ -191,11 +186,6 @@ export default async function ReciboVendaPage({ params }: { params: Promise<{ id
                 <span>Valor recebido</span>
                 <strong>{money(receivable.receivedAmount)}</strong>
                 <small>Contas a receber</small>
-              </div>
-              <div>
-                <span>Documento</span>
-                <strong>{receivable.documentNumber || sale.number}</strong>
-                <small>Vinculado ao recibo de venda</small>
               </div>
             </section>
           ) : null}

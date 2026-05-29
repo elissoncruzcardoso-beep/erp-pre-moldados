@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AccountReceivableStatus, Prisma } from "@prisma/client";
-import { ArrowLeft, ArrowUpCircle, CircleDollarSign, Filter, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ArrowUpCircle, CircleDollarSign, ExternalLink, Filter, ReceiptText, ShieldCheck } from "lucide-react";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
 import { AccountReceiptForm } from "../account-receipt-form";
@@ -11,10 +11,19 @@ import { FinanceModuleTabs } from "../_components/finance-module-tabs";
 export const dynamic = "force-dynamic";
 
 const receivableStatusLabels: Record<string, string> = {
-  ABERTO: "Aberto",
-  FATURADO: "Faturado",
+  ABERTO: "Em aberto",
+  FATURADO: "A receber",
   RECEBIDO: "Recebido",
   CANCELADO: "Cancelado"
+};
+
+const filterStatusLabels: Record<string, string> = {
+  ABERTOS: "Em aberto e a receber",
+  ABERTO: "Somente em aberto",
+  FATURADO: "Somente a receber",
+  RECEBIDO: "Recebidos",
+  CANCELADO: "Cancelados",
+  TODOS: "Todos"
 };
 
 function decimalToNumber(value: unknown) {
@@ -105,6 +114,7 @@ export default async function ContasReceberPage({ searchParams }: PageProps) {
         { number: { contains: search, mode: "insensitive" } },
         { documentNumber: { contains: search, mode: "insensitive" } },
         { description: { contains: search, mode: "insensitive" } },
+        { directSale: { is: { number: { contains: search, mode: "insensitive" } } } },
         { customer: { name: { contains: search, mode: "insensitive" } } }
       ]
     });
@@ -185,7 +195,11 @@ export default async function ContasReceberPage({ searchParams }: PageProps) {
       <section className="product-section-card finance-filter-panel">
         <form action="/financeiro/contas-receber">
           <div className="table-header product-card-header">
-            <div><p className="eyebrow">Filtros</p><h2>Consulta de recebiveis</h2></div>
+            <div>
+              <p className="eyebrow">Filtros</p>
+              <h2>Consulta de recebiveis</h2>
+              <small className="product-detail">Status atual: {filterStatusLabels[statusFilter] || statusFilter}</small>
+            </div>
             <div className="button-row">
               <Link className="secondary-button" href="/financeiro/contas-receber">Limpar</Link>
               <button className="secondary-button" type="submit"><Filter size={17} />Filtrar</button>
@@ -195,9 +209,9 @@ export default async function ContasReceberPage({ searchParams }: PageProps) {
             <label className="field">
               <span>Status</span>
               <select className="form-input" name="status" defaultValue={statusFilter}>
-                <option value="ABERTOS">Abertos e faturados</option>
-                <option value="ABERTO">Somente abertos</option>
-                <option value="FATURADO">Somente faturados</option>
+                <option value="ABERTOS">Em aberto e a receber</option>
+                <option value="ABERTO">Somente em aberto</option>
+                <option value="FATURADO">Somente a receber</option>
                 <option value="RECEBIDO">Recebidos</option>
                 <option value="CANCELADO">Cancelados</option>
                 <option value="TODOS">Todos</option>
@@ -264,6 +278,7 @@ export default async function ContasReceberPage({ searchParams }: PageProps) {
                   <th className="number-cell">Valor</th>
                   <th className="number-cell">Recebido</th>
                   <th>Vencimento</th>
+                  <th>Origem</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -275,10 +290,26 @@ export default async function ContasReceberPage({ searchParams }: PageProps) {
                     <td className="mono number-cell">{formatCurrency(receivable.amount)}</td>
                     <td className="mono number-cell">{formatCurrency(receivable.receivedAmount)}</td>
                     <td>{receivable.dueDate.toLocaleDateString("pt-BR")}</td>
+                    <td>
+                      {receivable.directSale ? (
+                        <div className="finance-origin-cell">
+                          <span className="badge blue">
+                            <ReceiptText size={13} />
+                            Venda direta
+                          </span>
+                          <Link className="finance-origin-link" href={`/vendas/recibos/${receivable.directSale.id}`}>
+                            {receivable.directSale.number}
+                            <ExternalLink size={13} />
+                          </Link>
+                        </div>
+                      ) : (
+                        <span className="badge gray">Manual</span>
+                      )}
+                    </td>
                     <td><span className={badgeForStatus(receivable.status)}>{receivableStatusLabels[receivable.status] || receivable.status}</span></td>
                   </tr>
                 ))}
-                {receivables.length === 0 ? <tr><td colSpan={6}>Nenhuma conta a receber criada ainda.</td></tr> : null}
+                {receivables.length === 0 ? <tr><td colSpan={7}>Nenhuma conta a receber criada ainda.</td></tr> : null}
               </tbody>
             </table>
           </div>
