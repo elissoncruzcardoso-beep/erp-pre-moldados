@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
+import { apiForbidden, apiUnauthorized } from "@/lib/api/responses";
 import { getSession, type SessionUser } from "@/lib/auth/session";
 import type { PermissionKey } from "@/lib/permissions/permissions";
 
@@ -81,16 +82,15 @@ export async function requireApiSession({
 
   if (!session) {
     return {
-      response: NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 })
+      response: apiUnauthorized()
     };
   }
 
   if (!canAccess(session, options)) {
     return {
-      response: NextResponse.json({ error: forbiddenMessage }, { status: 403 })
+      response: apiForbidden(forbiddenMessage)
     };
   }
 
   return { session };
 }
-

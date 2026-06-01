@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
 import { AuditAction } from "@prisma/client";
 import { z } from "zod";
+import { apiForbidden, apiSuccess, apiUnauthorized, apiValidationError, handleApiError } from "@/lib/api/responses";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
 import { increaseStockBalance, toDecimal } from "@/lib/stock/transactions";
@@ -87,11 +87,11 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
   const session = await getSession();
 
   if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
+    return apiUnauthorized();
   }
 
   if (!session.permissions.includes("estoque.move")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para editar recibos." }, { status: 403 });
+    return apiForbidden("Voce nao tem permissao para editar recibos.");
   }
 
   const { id } = await context.params;
@@ -99,7 +99,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
   const parsed = updateSaleSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Revise os dados do recibo." }, { status: 400 });
+    return apiValidationError("Revise os dados do recibo.", parsed.error.flatten());
   }
 
   const input = parsed.data;
@@ -193,11 +193,9 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       return updated;
     });
 
-    return NextResponse.json({ sale: result });
+    return apiSuccess({ sale: result });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Nao foi possivel editar o recibo.";
-
-    return NextResponse.json({ error: message }, { status: 400 });
+    return handleApiError(error, "Nao foi possivel editar o recibo.");
   }
 }
 
@@ -205,11 +203,11 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   const session = await getSession();
 
   if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
+    return apiUnauthorized();
   }
 
   if (!session.permissions.includes("estoque.move")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para cancelar recibos." }, { status: 403 });
+    return apiForbidden("Voce nao tem permissao para cancelar recibos.");
   }
 
   const { id } = await context.params;
@@ -217,7 +215,7 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   const parsed = cancelSaleSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Revise o motivo do cancelamento." }, { status: 400 });
+    return apiValidationError("Revise o motivo do cancelamento.", parsed.error.flatten());
   }
 
   const prisma = getPrisma();
@@ -355,10 +353,8 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
       return updated;
     });
 
-    return NextResponse.json({ sale: result });
+    return apiSuccess({ sale: result });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Nao foi possivel cancelar o recibo.";
-
-    return NextResponse.json({ error: message }, { status: 400 });
+    return handleApiError(error, "Nao foi possivel cancelar o recibo.");
   }
 }

@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
-import { getSession } from "@/lib/auth/session";
+import { apiError, apiSuccess, apiValidationError } from "@/lib/api/responses";
+import { requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
 import { productionBatchReleaseSchema } from "@/lib/validations/production";
 
@@ -37,22 +37,19 @@ async function addFinishedGoodsBalance(
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
+  const auth = await requireApiSession({
+    permission: "producao.manage",
+    forbiddenMessage: "Voce nao tem permissao para liberar lote."
+  });
 
-  if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
-  }
-
-  if (!session.permissions.includes("producao.manage")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para liberar lote." }, { status: 403 });
-  }
+  if (auth.response) return auth.response;
 
   const { id } = await params;
   const body = await request.json().catch(() => null);
   const parsed = productionBatchReleaseSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Revise os campos de liberacao do lote." }, { status: 400 });
+    return apiValidationError("Revise os campos de liberacao do lote.", parsed.error.flatten());
   }
 
   const prisma = getPrisma();
@@ -110,7 +107,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           releasedQuantity: nextReleasedQuantity,
           status: nextStatus,
           releasedAt: new Date(),
-          releasedById: session.userId,
+          releasedById: auth.session.userId,
           releaseResponsible: input.releaseResponsible.trim(),
           releaseNote: input.releaseNote?.trim() || null
         }
@@ -127,7 +124,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           totalCost,
           targetWarehouseId: finishedWarehouse.id,
           lotId: productionLot.id,
-          userId: session.userId,
+          userId: auth.session.userId,
           document: batch.code,
           justification: `Liberacao de lote de producao ${batch.code} para retirada.`
         }
@@ -135,7 +132,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
       await tx.auditLog.create({
         data: {
-          userId: session.userId,
+          userId: auth.session.userId,
           module: "Producao",
           action: AuditAction.UPDATE,
           entity: "ProductionBatch",
@@ -160,9 +157,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return updated;
     });
 
-    return NextResponse.json({ batch: result });
+    return apiSuccess({ batch: result });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Nao foi possivel liberar o lote.";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return apiError(message, { status: 400 });
   }
 }

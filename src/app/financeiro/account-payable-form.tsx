@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FilePlus2 } from "lucide-react";
+import { fetchJson, isApiRequestError } from "@/lib/api-client";
 import { formatValidationError } from "@/lib/validations/client";
 import { accountPayableSchema } from "@/lib/validations/purchase";
 
@@ -45,17 +46,19 @@ export function AccountPayableForm({ receipts }: Props) {
     }
 
     setLoading(true);
-    const response = await fetch("/api/financeiro/contas-pagar", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(parsed.data)
-    });
-    const data = await response.json().catch(() => null);
-    setLoading(false);
 
-    if (!response.ok) {
-      setError(data?.error || "Nao foi possivel gerar a conta a pagar.");
+    try {
+      await fetchJson("/api/financeiro/contas-pagar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed.data)
+      }, "Nao foi possivel gerar a conta a pagar.");
+    } catch (requestError) {
+      setError(isApiRequestError(requestError) ? requestError.message : "Nao foi possivel gerar a conta a pagar.");
+      setLoading(false);
       return;
+    } finally {
+      setLoading(false);
     }
 
     setSuccess("Conta a pagar gerada a partir do recebimento.");

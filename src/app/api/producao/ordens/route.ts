@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
-import { getSession } from "@/lib/auth/session";
+import { apiConflict, apiError, apiSuccess, apiValidationError } from "@/lib/api/responses";
+import { requireApiSession } from "@/lib/auth/guards";
 import { makeAutomaticCode, normalizeManualCode } from "@/lib/codes/auto-code";
 import { getPrisma } from "@/lib/db/prisma";
 import { productionOrderSchema } from "@/lib/validations/production";
@@ -14,21 +14,18 @@ const defaultStages = [
 ];
 
 export async function POST(request: Request) {
-  const session = await getSession();
+  const auth = await requireApiSession({
+    permission: "producao.manage",
+    forbiddenMessage: "Voce nao tem permissao para criar ordens de producao."
+  });
 
-  if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
-  }
-
-  if (!session.permissions.includes("producao.manage")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para criar ordens de producao." }, { status: 403 });
-  }
+  if (auth.response) return auth.response;
 
   const body = await request.json().catch(() => null);
   const parsed = productionOrderSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Revise os campos obrigatorios da OP." }, { status: 400 });
+    return apiValidationError("Revise os campos obrigatorios da OP.", parsed.error.flatten());
   }
 
   const prisma = getPrisma();
@@ -83,7 +80,7 @@ export async function POST(request: Request) {
 
       await tx.auditLog.create({
         data: {
-          userId: session.userId,
+          userId: auth.session.userId,
           module: "Producao",
           action: AuditAction.CREATE,
           entity: "ProductionOrder",
@@ -100,13 +97,13 @@ export async function POST(request: Request) {
       return createdOrder;
     });
 
-    return NextResponse.json({ order }, { status: 201 });
+    return apiSuccess({ order }, { status: 201 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "Ja existe uma OP com este numero." }, { status: 409 });
+      return apiConflict("Ja existe uma OP com este numero.");
     }
 
     const message = error instanceof Error ? error.message : "Nao foi possivel criar a ordem de producao.";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return apiError(message, { status: 400 });
   }
 }

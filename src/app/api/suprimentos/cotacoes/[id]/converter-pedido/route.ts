@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
+import { apiConflict, apiError, apiForbidden, apiSuccess, apiUnauthorized, handleApiError } from "@/lib/api/responses";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
 
@@ -25,11 +25,11 @@ export async function POST(_request: Request, context: RouteContext) {
   const session = await getSession();
 
   if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
+    return apiUnauthorized();
   }
 
   if (!session.permissions.includes("suprimentos.manage")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para converter pedidos." }, { status: 403 });
+    return apiForbidden("Voce nao tem permissao para converter pedidos.");
   }
 
   const { id } = await context.params;
@@ -146,28 +146,28 @@ export async function POST(_request: Request, context: RouteContext) {
       return created;
     });
 
-    return NextResponse.json({ order }, { status: 201 });
+    return apiSuccess({ order }, { status: 201 });
   } catch (error) {
     if (error instanceof Error && error.message === "QUOTE_NOT_FOUND") {
-      return NextResponse.json({ error: "Cotacao nao encontrada." }, { status: 404 });
+      return apiError("Cotacao nao encontrada.", { status: 404 });
     }
 
     if (error instanceof Error && error.message === "QUOTE_NOT_APPROVED") {
-      return NextResponse.json({ error: "Apenas cotacao aprovada pode virar pedido de compra." }, { status: 409 });
+      return apiConflict("Apenas cotacao aprovada pode virar pedido de compra.");
     }
 
     if (error instanceof Error && error.message === "ORDER_ALREADY_EXISTS") {
-      return NextResponse.json({ error: "Esta cotacao ja possui pedido de compra." }, { status: 409 });
+      return apiConflict("Esta cotacao ja possui pedido de compra.");
     }
 
     if (error instanceof Error && error.message === "REQUEST_WITHOUT_ITEMS") {
-      return NextResponse.json({ error: "Solicitacao sem itens nao pode virar pedido." }, { status: 409 });
+      return apiConflict("Solicitacao sem itens nao pode virar pedido.");
     }
 
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "Ja existe um pedido com este numero. Tente novamente." }, { status: 409 });
+      return apiConflict("Ja existe um pedido com este numero. Tente novamente.");
     }
 
-    return NextResponse.json({ error: "Nao foi possivel converter a cotacao em pedido." }, { status: 500 });
+    return handleApiError(error, "Nao foi possivel converter a cotacao em pedido.");
   }
 }

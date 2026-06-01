@@ -1,29 +1,28 @@
-import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
-import { getSession } from "@/lib/auth/session";
+import {
+  apiConflict,
+  apiSuccess,
+  apiValidationError,
+  handleApiError
+} from "@/lib/api/responses";
+import { requireApiSession } from "@/lib/auth/guards";
 import { makeItemCode, normalizeManualCode } from "@/lib/codes/auto-code";
 import { getPrisma } from "@/lib/db/prisma";
 import { productSchema } from "@/lib/validations/product";
 
 export async function POST(request: Request) {
-  const session = await getSession();
+  const auth = await requireApiSession({
+    permission: "produtos.manage",
+    forbiddenMessage: "Voce nao tem permissao para cadastrar produtos."
+  });
 
-  if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
-  }
-
-  if (!session.permissions.includes("produtos.manage")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para cadastrar produtos." }, { status: 403 });
-  }
+  if (auth.response) return auth.response;
 
   const body = await request.json().catch(() => null);
   const parsed = productSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Revise os campos obrigatorios do produto." },
-      { status: 400 }
-    );
+    return apiValidationError("Revise os campos obrigatorios do produto.", parsed.error.flatten());
   }
 
   const prisma = getPrisma();
@@ -53,7 +52,7 @@ export async function POST(request: Request) {
     await prisma.auditLog
       .create({
         data: {
-          userId: session.userId,
+          userId: auth.session.userId,
           module: "Produtos",
           action: AuditAction.CREATE,
           entity: "Item",
@@ -68,12 +67,12 @@ export async function POST(request: Request) {
       })
       .catch(() => null);
 
-    return NextResponse.json({ item }, { status: 201 });
+    return apiSuccess({ item }, { status: 201 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "Ja existe um produto com este codigo." }, { status: 409 });
+      return apiConflict("Ja existe um produto com este codigo.");
     }
 
-    return NextResponse.json({ error: "Nao foi possivel cadastrar o produto." }, { status: 500 });
+    return handleApiError(error, "Nao foi possivel cadastrar o produto.");
   }
 }

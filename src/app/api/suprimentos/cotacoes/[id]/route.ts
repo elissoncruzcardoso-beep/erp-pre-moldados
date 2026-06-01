@@ -1,5 +1,13 @@
-import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
+import {
+  apiConflict,
+  apiError,
+  apiForbidden,
+  apiSuccess,
+  apiUnauthorized,
+  apiValidationError,
+  handleApiError
+} from "@/lib/api/responses";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
 import { purchaseQuoteSchema } from "@/lib/validations/purchase";
@@ -46,18 +54,18 @@ export async function PATCH(request: Request, context: RouteContext) {
   const session = await getSession();
 
   if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
+    return apiUnauthorized();
   }
 
   if (!session.permissions.includes("suprimentos.manage")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para editar cotacoes." }, { status: 403 });
+    return apiForbidden("Voce nao tem permissao para editar cotacoes.");
   }
 
   const body = await request.json().catch(() => null);
   const parsed = purchaseQuoteSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Revise os campos da cotacao." }, { status: 400 });
+    return apiValidationError("Revise os campos da cotacao.", parsed.error.flatten());
   }
 
   const { id } = await context.params;
@@ -150,29 +158,29 @@ export async function PATCH(request: Request, context: RouteContext) {
       return updated;
     });
 
-    return NextResponse.json({ quote });
+    return apiSuccess({ quote });
   } catch (error) {
     if (error instanceof Error && error.message === "QUOTE_NOT_FOUND") {
-      return NextResponse.json({ error: "Cotacao nao encontrada." }, { status: 404 });
+      return apiError("Cotacao nao encontrada.", { status: 404 });
     }
 
     if (error instanceof Error && error.message === "QUOTE_HAS_ORDER") {
-      return NextResponse.json({ error: "Cotacao com pedido gerado nao pode ser editada." }, { status: 409 });
+      return apiConflict("Cotacao com pedido gerado nao pode ser editada.");
     }
 
     if (error instanceof Error && error.message === "PURCHASE_REQUEST_MISMATCH") {
-      return NextResponse.json({ error: "A solicitacao da cotacao nao pode ser alterada." }, { status: 409 });
+      return apiConflict("A solicitacao da cotacao nao pode ser alterada.");
     }
 
     if (error instanceof Error && error.message === "QUOTE_ITEM_INVALID") {
-      return NextResponse.json({ error: "Revise os itens da cotacao. Ha item invalido ou valor inconsistente." }, { status: 400 });
+      return apiValidationError("Revise os itens da cotacao. Ha item invalido ou valor inconsistente.");
     }
 
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "Ja existe uma cotacao com este numero." }, { status: 409 });
+      return apiConflict("Ja existe uma cotacao com este numero.");
     }
 
-    return NextResponse.json({ error: "Nao foi possivel editar a cotacao." }, { status: 500 });
+    return handleApiError(error, "Nao foi possivel editar a cotacao.");
   }
 }
 
@@ -180,11 +188,11 @@ export async function DELETE(_request: Request, context: RouteContext) {
   const session = await getSession();
 
   if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
+    return apiUnauthorized();
   }
 
   if (!session.permissions.includes("suprimentos.manage")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para excluir cotacoes." }, { status: 403 });
+    return apiForbidden("Voce nao tem permissao para excluir cotacoes.");
   }
 
   const { id } = await context.params;
@@ -242,16 +250,16 @@ export async function DELETE(_request: Request, context: RouteContext) {
       });
     });
 
-    return NextResponse.json({ ok: true });
+    return apiSuccess({});
   } catch (error) {
     if (error instanceof Error && error.message === "QUOTE_NOT_FOUND") {
-      return NextResponse.json({ error: "Cotacao nao encontrada." }, { status: 404 });
+      return apiError("Cotacao nao encontrada.", { status: 404 });
     }
 
     if (error instanceof Error && error.message === "QUOTE_HAS_ORDER") {
-      return NextResponse.json({ error: "Cotacao com pedido gerado nao pode ser excluida." }, { status: 409 });
+      return apiConflict("Cotacao com pedido gerado nao pode ser excluida.");
     }
 
-    return NextResponse.json({ error: "Nao foi possivel excluir a cotacao." }, { status: 500 });
+    return handleApiError(error, "Nao foi possivel excluir a cotacao.");
   }
 }

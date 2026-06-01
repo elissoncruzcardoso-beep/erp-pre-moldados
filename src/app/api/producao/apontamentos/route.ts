@@ -1,26 +1,23 @@
-import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
-import { getSession } from "@/lib/auth/session";
+import { apiError, apiSuccess, apiValidationError } from "@/lib/api/responses";
+import { requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
 import { consumeApprovedCompositionForProduction } from "@/lib/production/consume-composition";
 import { productionNoteSchema } from "@/lib/validations/production";
 
 export async function POST(request: Request) {
-  const session = await getSession();
+  const auth = await requireApiSession({
+    permission: "producao.manage",
+    forbiddenMessage: "Voce nao tem permissao para apontar producao."
+  });
 
-  if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
-  }
-
-  if (!session.permissions.includes("producao.manage")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para apontar producao." }, { status: 403 });
-  }
+  if (auth.response) return auth.response;
 
   const body = await request.json().catch(() => null);
   const parsed = productionNoteSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Revise os campos do apontamento." }, { status: 400 });
+    return apiValidationError("Revise os campos do apontamento.", parsed.error.flatten());
   }
 
   const input = parsed.data;
@@ -46,7 +43,7 @@ export async function POST(request: Request) {
       const note = await tx.productionNote.create({
         data: {
           productionOrderId: input.productionOrderId,
-          userId: session.userId,
+          userId: auth.session.userId,
           stage: input.stage,
           producedQuantity,
           lossQuantity,
@@ -62,7 +59,7 @@ export async function POST(request: Request) {
         ? await consumeApprovedCompositionForProduction(tx, {
             productId: order.productId,
             producedQuantity,
-            userId: session.userId,
+            userId: auth.session.userId,
             document: order.number,
             productionOrderId: order.id,
             justification: `Consumo automatico pela ficha tecnica no apontamento da OP ${order.number}.`
@@ -111,7 +108,7 @@ export async function POST(request: Request) {
 
       await tx.auditLog.create({
         data: {
-          userId: session.userId,
+          userId: auth.session.userId,
           module: "Producao",
           action: AuditAction.UPDATE,
           entity: "ProductionNote",
@@ -132,10 +129,10 @@ export async function POST(request: Request) {
       return note;
     });
 
-    return NextResponse.json({ note: result }, { status: 201 });
+    return apiSuccess({ note: result }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Nao foi possivel registrar o apontamento.";
 
-    return NextResponse.json({ error: message }, { status: 400 });
+    return apiError(message, { status: 400 });
   }
 }

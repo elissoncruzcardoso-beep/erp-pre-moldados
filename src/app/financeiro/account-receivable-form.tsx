@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CircleDollarSign } from "lucide-react";
+import { fetchJson, isApiRequestError } from "@/lib/api-client";
 import { formatValidationError } from "@/lib/validations/client";
 import { accountReceivableSchema } from "@/lib/validations/purchase";
 
@@ -43,17 +44,19 @@ export function AccountReceivableForm({ customers }: Props) {
     }
 
     setLoading(true);
-    const response = await fetch("/api/financeiro/contas-receber", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(parsed.data)
-    });
-    const data = await response.json().catch(() => null);
-    setLoading(false);
 
-    if (!response.ok) {
-      setError(data?.error || "Nao foi possivel gerar a conta a receber.");
+    try {
+      await fetchJson("/api/financeiro/contas-receber", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed.data)
+      }, "Nao foi possivel gerar a conta a receber.");
+    } catch (requestError) {
+      setError(isApiRequestError(requestError) ? requestError.message : "Nao foi possivel gerar a conta a receber.");
+      setLoading(false);
       return;
+    } finally {
+      setLoading(false);
     }
 
     setSuccess("Conta a receber criada.");

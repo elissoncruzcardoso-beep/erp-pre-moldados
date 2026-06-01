@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
+import { apiError, apiForbidden, apiSuccess, apiUnauthorized, apiValidationError, handleApiError } from "@/lib/api/responses";
 import { getSession } from "@/lib/auth/session";
 import { makeAutomaticCode } from "@/lib/codes/auto-code";
 import { getPrisma } from "@/lib/db/prisma";
@@ -109,18 +109,18 @@ export async function POST(request: Request) {
   const session = await getSession();
 
   if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
+    return apiUnauthorized();
   }
 
   if (!session.permissions.includes("estoque.move")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para vender pelo estoque." }, { status: 403 });
+    return apiForbidden("Voce nao tem permissao para vender pelo estoque.");
   }
 
   const body = await request.json().catch(() => null);
   const parsed = stockSaleSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Revise os dados da venda." }, { status: 400 });
+    return apiValidationError("Revise os dados da venda.", parsed.error.flatten());
   }
 
   const input = parsed.data;
@@ -134,7 +134,7 @@ export async function POST(request: Request) {
   const finalTotal = grossTotal.minus(discount);
 
   if (finalTotal.lessThan(0)) {
-    return NextResponse.json({ error: "O desconto nao pode ser maior que o total bruto." }, { status: 400 });
+    return apiError("O desconto nao pode ser maior que o total bruto.");
   }
 
   const prisma = getPrisma();
@@ -333,9 +333,8 @@ export async function POST(request: Request) {
       return { ...sale, accountReceivable: receivable };
     });
 
-    return NextResponse.json({ receipt: receiptPayload(result) }, { status: 201 });
+    return apiSuccess({ receipt: receiptPayload(result) }, { status: 201 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Nao foi possivel registrar a venda.";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return handleApiError(error, "Nao foi possivel registrar a venda.");
   }
 }

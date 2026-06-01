@@ -1,5 +1,13 @@
-import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
+import {
+  apiConflict,
+  apiError,
+  apiForbidden,
+  apiSuccess,
+  apiUnauthorized,
+  apiValidationError,
+  handleApiError
+} from "@/lib/api/responses";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
 import { purchaseOrderUpdateSchema } from "@/lib/validations/purchase";
@@ -12,18 +20,18 @@ export async function PATCH(request: Request, context: RouteContext) {
   const session = await getSession();
 
   if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
+    return apiUnauthorized();
   }
 
   if (!session.permissions.includes("suprimentos.manage")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para editar pedidos." }, { status: 403 });
+    return apiForbidden("Voce nao tem permissao para editar pedidos.");
   }
 
   const body = await request.json().catch(() => null);
   const parsed = purchaseOrderUpdateSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Revise os campos do pedido." }, { status: 400 });
+    return apiValidationError("Revise os campos do pedido.", parsed.error.flatten());
   }
 
   const { id } = await context.params;
@@ -114,25 +122,25 @@ export async function PATCH(request: Request, context: RouteContext) {
       return updated;
     });
 
-    return NextResponse.json({ order });
+    return apiSuccess({ order });
   } catch (error) {
     if (error instanceof Error && error.message === "ORDER_NOT_FOUND") {
-      return NextResponse.json({ error: "Pedido nao encontrado." }, { status: 404 });
+      return apiError("Pedido nao encontrado.", { status: 404 });
     }
 
     if (error instanceof Error && error.message === "ORDER_HAS_RECEIPTS") {
-      return NextResponse.json({ error: "Pedido com recebimento/nota fiscal nao pode ser editado." }, { status: 409 });
+      return apiConflict("Pedido com recebimento/nota fiscal nao pode ser editado.");
     }
 
     if (error instanceof Error && error.message === "ORDER_ITEM_INVALID") {
-      return NextResponse.json({ error: "Item invalido no pedido." }, { status: 400 });
+      return apiValidationError("Item invalido no pedido.");
     }
 
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "Ja existe um pedido com este numero." }, { status: 409 });
+      return apiConflict("Ja existe um pedido com este numero.");
     }
 
-    return NextResponse.json({ error: "Nao foi possivel editar o pedido." }, { status: 500 });
+    return handleApiError(error, "Nao foi possivel editar o pedido.");
   }
 }
 
@@ -140,11 +148,11 @@ export async function DELETE(_request: Request, context: RouteContext) {
   const session = await getSession();
 
   if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
+    return apiUnauthorized();
   }
 
   if (!session.permissions.includes("suprimentos.manage")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para excluir pedidos." }, { status: 403 });
+    return apiForbidden("Voce nao tem permissao para excluir pedidos.");
   }
 
   const { id } = await context.params;
@@ -201,16 +209,16 @@ export async function DELETE(_request: Request, context: RouteContext) {
       });
     });
 
-    return NextResponse.json({ ok: true });
+    return apiSuccess({});
   } catch (error) {
     if (error instanceof Error && error.message === "ORDER_NOT_FOUND") {
-      return NextResponse.json({ error: "Pedido nao encontrado." }, { status: 404 });
+      return apiError("Pedido nao encontrado.", { status: 404 });
     }
 
     if (error instanceof Error && error.message === "ORDER_HAS_RECEIPTS") {
-      return NextResponse.json({ error: "Pedido com recebimento/nota fiscal nao pode ser excluido." }, { status: 409 });
+      return apiConflict("Pedido com recebimento/nota fiscal nao pode ser excluido.");
     }
 
-    return NextResponse.json({ error: "Nao foi possivel excluir o pedido." }, { status: 500 });
+    return handleApiError(error, "Nao foi possivel excluir o pedido.");
   }
 }

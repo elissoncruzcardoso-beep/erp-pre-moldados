@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { AccountPayableStatus, Prisma } from "@prisma/client";
 import { ArrowDownCircle, ArrowLeft, Banknote, Filter, ShieldCheck } from "lucide-react";
 import { PaginationControls } from "@/components/pagination-controls";
-import { PrototypeAction } from "@/components/prototype-action";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
 import { decimalToNumber, formatMoney } from "@/lib/formatters";
@@ -21,11 +20,38 @@ const payableStatusLabels: Record<string, string> = {
   CANCELADO: "Cancelado"
 };
 
+const filterStatusLabels: Record<string, string> = {
+  ABERTOS: "Abertos e programados",
+  ABERTO: "Somente abertos",
+  PROGRAMADO: "Somente programados",
+  PAGO: "Pagos",
+  CANCELADO: "Cancelados",
+  TODOS: "Todos"
+};
+
 function badgeForStatus(status: string) {
   if (status === "PAGO") return "badge green";
   if (status === "CANCELADO") return "badge red";
   if (status === "PROGRAMADO") return "badge blue";
   return "badge orange";
+}
+
+function parseFilterDate(value?: string) {
+  if (!value) return null;
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function endOfDay(value?: string) {
+  const date = parseFilterDate(value);
+  if (!date) return null;
+  date.setHours(23, 59, 59, 999);
+  return date;
+}
+
+function firstParam(params: SearchParamsLike, key: string) {
+  const value = params[key];
+  return Array.isArray(value) ? value[0] || "" : value || "";
 }
 
 type PageProps = {
@@ -39,19 +65,74 @@ export default async function ContasPagarPage({ searchParams }: PageProps) {
   if (!session.permissions.includes("financeiro.view")) redirect("/dashboard");
 
   const params = (await searchParams) || {};
+  const statusFilter = firstParam(params, "status") || "ABERTOS";
+  const supplierFilter = firstParam(params, "supplierId");
+  const startDate = firstParam(params, "startDate");
+  const endDate = firstParam(params, "endDate");
+  const originFilter = firstParam(params, "origin") || "TODAS";
+  const search = firstParam(params, "q").trim();
   const pagination = parsePagination(params, {
     pageParam: "pagarPage",
     defaultPageSize: 12,
     maxPageSize: 80
   });
   const prisma = getPrisma();
+  const where: Prisma.AccountPayableWhereInput = {};
+  const andFilters: Prisma.AccountPayableWhereInput[] = [];
+
+  if (statusFilter === "ABERTOS") {
+    andFilters.push({ status: { in: [AccountPayableStatus.ABERTO, AccountPayableStatus.PROGRAMADO] } });
+  } else if (statusFilter !== "TODOS") {
+    andFilters.push({ status: statusFilter as AccountPayableStatus });
+  }
+
+  if (supplierFilter) {
+    andFilters.push({ supplierId: supplierFilter });
+  }
+
+  const dueFrom = parseFilterDate(startDate);
+  const dueTo = endOfDay(endDate);
+  if (dueFrom || dueTo) {
+    andFilters.push({
+      dueDate: {
+        ...(dueFrom ? { gte: dueFrom } : {}),
+        ...(dueTo ? { lte: dueTo } : {})
+      }
+    });
+  }
+
+  if (originFilter === "NF") {
+    andFilters.push({ purchaseReceiptId: { not: "" } });
+  } else if (originFilter === "MANUAL") {
+    andFilters.push({ purchaseReceiptId: "" });
+  }
+
+  if (search) {
+    andFilters.push({
+      OR: [
+        { number: { contains: search, mode: "insensitive" } },
+        { documentNumber: { contains: search, mode: "insensitive" } },
+        { description: { contains: search, mode: "insensitive" } },
+        { supplier: { name: { contains: search, mode: "insensitive" } } },
+        { purchaseReceipt: { is: { number: { contains: search, mode: "insensitive" } } } },
+        { purchaseReceipt: { is: { invoiceNumber: { contains: search, mode: "insensitive" } } } },
+        { purchaseReceipt: { is: { purchaseOrder: { is: { number: { contains: search, mode: "insensitive" } } } } } }
+      ]
+    });
+  }
+
+  if (andFilters.length > 0) {
+    where.AND = andFilters;
+  }
+
   const openPayablesWhere: Prisma.AccountPayableWhereInput = {
     status: { in: [AccountPayableStatus.ABERTO, AccountPayableStatus.PROGRAMADO] }
   };
   const next30 = new Date();
   next30.setDate(next30.getDate() + 30);
-  const [payables, payablesCount, payableStats, dueNext30Stats, payableOptionsSource, pendingReceipts, payments] = await Promise.all([
+  const [payables, payablesCount, payableStats, dueNext30Stats, payableOptionsSource, pendingReceipts, payments, suppliers] = await Promise.all([
     prisma.accountPayable.findMany({
+      where,
       include: {
         supplier: true,
         payments: true,
@@ -67,7 +148,7 @@ export default async function ContasPagarPage({ searchParams }: PageProps) {
       skip: pagination.skip,
       take: pagination.pageSize
     }),
-    prisma.accountPayable.count(),
+    prisma.accountPayable.count({ where }),
     prisma.accountPayable.aggregate({
       where: openPayablesWhere,
       _count: { _all: true },
@@ -102,6 +183,10 @@ export default async function ContasPagarPage({ searchParams }: PageProps) {
       include: { accountPayable: { include: { supplier: true } }, paidBy: true },
       orderBy: { paymentDate: "desc" },
       take: 20
+    }),
+    prisma.supplier.findMany({
+      where: { active: true },
+      orderBy: { name: "asc" }
     })
   ]);
 
@@ -159,16 +244,60 @@ export default async function ContasPagarPage({ searchParams }: PageProps) {
       </section>
 
       <section className="product-section-card finance-filter-panel">
-        <div className="table-header product-card-header">
-          <div><p className="eyebrow">Filtros</p><h2>Consulta de pagamentos</h2></div>
-          <PrototypeAction className="secondary-button" message="Filtros reais serao conectados depois."><Filter size={17} />Filtrar</PrototypeAction>
-        </div>
-        <div className="report-filter-grid">
-          <div className="field"><span>Status</span><div className="input-like">Abertos</div></div>
-          <div className="field"><span>Fornecedor</span><div className="input-like">Todos</div></div>
-          <div className="field"><span>Periodo</span><div className="input-like">Vencimento</div></div>
-          <div className="field"><span>Origem</span><div className="input-like">Recebimento/NF</div></div>
-        </div>
+        <form action="/financeiro/contas-pagar">
+          <div className="table-header product-card-header">
+            <div>
+              <p className="eyebrow">Filtros</p>
+              <h2>Consulta de pagamentos</h2>
+              <small className="product-detail">Status atual: {filterStatusLabels[statusFilter] || statusFilter}</small>
+            </div>
+            <div className="button-row">
+              <Link className="secondary-button" href="/financeiro/contas-pagar">Limpar</Link>
+              <button className="secondary-button" type="submit"><Filter size={17} />Filtrar</button>
+            </div>
+          </div>
+          <div className="report-filter-grid">
+            <label className="field">
+              <span>Status</span>
+              <select className="form-input" name="status" defaultValue={statusFilter}>
+                <option value="ABERTOS">Abertos e programados</option>
+                <option value="ABERTO">Somente abertos</option>
+                <option value="PROGRAMADO">Somente programados</option>
+                <option value="PAGO">Pagos</option>
+                <option value="CANCELADO">Cancelados</option>
+                <option value="TODOS">Todos</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Fornecedor</span>
+              <select className="form-input" name="supplierId" defaultValue={supplierFilter}>
+                <option value="">Todos</option>
+                {suppliers.map((supplier) => (
+                  <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Vencimento inicial</span>
+              <input className="form-input mono" type="date" name="startDate" defaultValue={startDate} />
+            </label>
+            <label className="field">
+              <span>Vencimento final</span>
+              <input className="form-input mono" type="date" name="endDate" defaultValue={endDate} />
+            </label>
+            <label className="field">
+              <span>Origem</span>
+              <select className="form-input" name="origin" defaultValue={originFilter}>
+                <option value="TODAS">Todas</option>
+                <option value="NF">Recebimento/NF</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Buscar</span>
+              <input className="form-input" name="q" defaultValue={search} placeholder="Titulo, documento, fornecedor ou pedido" />
+            </label>
+          </div>
+        </form>
       </section>
 
       <section className="finance-action-grid two-columns">

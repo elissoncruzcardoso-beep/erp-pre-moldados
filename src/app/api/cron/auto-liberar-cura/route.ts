@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiError, apiSuccess, apiUnauthorized } from "@/lib/api/responses";
 import { getPrisma } from "@/lib/db/prisma";
 import { autoReleaseCuredBatches } from "@/lib/production/auto-release-cured-batches";
 
@@ -16,7 +16,7 @@ function isAuthorized(request: Request) {
 
 export async function GET(request: Request) {
   if (!isAuthorized(request)) {
-    return NextResponse.json({ error: "Cron nao autorizado." }, { status: 401 });
+    return apiUnauthorized("Cron nao autorizado.");
   }
 
   const prisma = getPrisma();
@@ -26,10 +26,7 @@ export async function GET(request: Request) {
   });
 
   if (!user || user.status !== "ACTIVE") {
-    return NextResponse.json(
-      { error: `Usuario do cron nao encontrado ou inativo: ${cronUserEmail}` },
-      { status: 500 }
-    );
+    return apiError(`Usuario do cron nao encontrado ou inativo: ${cronUserEmail}`, { status: 500 });
   }
 
   const result = await autoReleaseCuredBatches({
@@ -38,8 +35,7 @@ export async function GET(request: Request) {
     limit: 200
   });
 
-  return NextResponse.json({
-    ok: true,
+  return apiSuccess({
     source: "vercel-cron",
     ...result
   });

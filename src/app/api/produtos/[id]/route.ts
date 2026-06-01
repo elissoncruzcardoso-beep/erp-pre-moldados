@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
 import { AuditAction } from "@prisma/client";
 import { z } from "zod";
-import { getSession } from "@/lib/auth/session";
+import { apiError, apiSuccess, apiValidationError } from "@/lib/api/responses";
+import { requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
 import { calculateBatchReadyAt } from "@/lib/production/auto-release-cured-batches";
 
@@ -14,22 +14,19 @@ const productUpdateSchema = z.object({
 });
 
 export async function PATCH(request: Request, context: RouteContext) {
-  const session = await getSession();
+  const auth = await requireApiSession({
+    anyPermission: ["produtos.manage", "cadastros.manage"],
+    forbiddenMessage: "Voce nao tem permissao para alterar produtos."
+  });
 
-  if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
-  }
-
-  if (!session.permissions.includes("produtos.manage") && !session.permissions.includes("cadastros.manage")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para alterar produtos." }, { status: 403 });
-  }
+  if (auth.response) return auth.response;
 
   const { id } = await context.params;
   const body = await request.json().catch(() => null);
   const parsed = productUpdateSchema.safeParse(body);
 
   if (!parsed.success || parsed.data.curingHours === undefined) {
-    return NextResponse.json({ error: "Informe um tempo de cura valido." }, { status: 400 });
+    return apiValidationError("Informe um tempo de cura valido.", parsed.success ? undefined : parsed.error.flatten());
   }
 
   const prisma = getPrisma();
@@ -77,7 +74,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 
       await tx.auditLog.create({
         data: {
-          userId: session.userId,
+          userId: auth.session.userId,
           module: "Produtos",
           action: AuditAction.UPDATE,
           entity: "Item",
@@ -95,9 +92,9 @@ export async function PATCH(request: Request, context: RouteContext) {
       return { item, recalculatedOpenBatches: openBatches.length };
     });
 
-    return NextResponse.json(result);
+    return apiSuccess(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Nao foi possivel atualizar o produto.";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return apiError(message, { status: 400 });
   }
 }

@@ -1,5 +1,12 @@
-import { NextResponse } from "next/server";
 import { AuditAction, Prisma, type Warehouse } from "@prisma/client";
+import {
+  apiConflict,
+  apiError,
+  apiForbidden,
+  apiSuccess,
+  apiUnauthorized,
+  apiValidationError
+} from "@/lib/api/responses";
 import { getSession } from "@/lib/auth/session";
 import { makeAutomaticCode, normalizeManualCode } from "@/lib/codes/auto-code";
 import { getPrisma } from "@/lib/db/prisma";
@@ -139,14 +146,11 @@ export async function POST(request: Request) {
   const session = await getSession();
 
   if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
+    return apiUnauthorized();
   }
 
   if (!session.permissions.includes("suprimentos.manage") || !session.permissions.includes("estoque.move")) {
-    return NextResponse.json(
-      { error: "Voce precisa de permissao de Suprimentos e Estoque para receber pedido." },
-      { status: 403 }
-    );
+    return apiForbidden("Voce precisa de permissao de Suprimentos e Estoque para receber pedido.");
   }
 
   const body = await request.json().catch(() => null);
@@ -155,7 +159,7 @@ export async function POST(request: Request) {
     const parsedBatch = purchaseReceiptBatchSchema.safeParse(body);
 
     if (!parsedBatch.success) {
-      return NextResponse.json({ error: "Revise os campos da nota fiscal e dos itens recebidos." }, { status: 400 });
+      return apiValidationError("Revise os campos da nota fiscal e dos itens recebidos.", parsedBatch.error.flatten());
     }
 
     const input = parsedBatch.data;
@@ -339,10 +343,10 @@ export async function POST(request: Request) {
         return createdReceipts;
       });
 
-      return NextResponse.json({ receipts }, { status: 201 });
+      return apiSuccess({ receipts }, { status: 201 });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        return NextResponse.json({ error: "Ja existe recebimento com este codigo interno." }, { status: 409 });
+        return apiConflict("Ja existe recebimento com este codigo interno.");
       }
 
       const messages: Record<string, string> = {
@@ -357,14 +361,14 @@ export async function POST(request: Request) {
 
       const message = error instanceof Error ? messages[error.message] || error.message : "Nao foi possivel registrar a nota fiscal.";
 
-      return NextResponse.json({ error: message }, { status: 400 });
+      return apiError(message, { status: 400 });
     }
   }
 
   const parsed = purchaseReceiptSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Revise os campos do recebimento." }, { status: 400 });
+    return apiValidationError("Revise os campos do recebimento.", parsed.error.flatten());
   }
 
   const input = parsed.data;
@@ -372,7 +376,7 @@ export async function POST(request: Request) {
   const acceptedQuantity = new Prisma.Decimal(input.acceptedQuantity);
 
   if (acceptedQuantity.greaterThan(receivedQuantity)) {
-    return NextResponse.json({ error: "Quantidade aceita nao pode ser maior que a recebida." }, { status: 400 });
+    return apiValidationError("Quantidade aceita nao pode ser maior que a recebida.");
   }
 
   const prisma = getPrisma();
@@ -533,10 +537,10 @@ export async function POST(request: Request) {
       return receiptRecord;
     });
 
-    return NextResponse.json({ receipt }, { status: 201 });
+    return apiSuccess({ receipt }, { status: 201 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "Ja existe recebimento com este numero." }, { status: 409 });
+      return apiConflict("Ja existe recebimento com este numero.");
     }
 
     const messages: Record<string, string> = {
@@ -549,6 +553,6 @@ export async function POST(request: Request) {
 
     const message = error instanceof Error ? messages[error.message] || error.message : "Nao foi possivel registrar o recebimento.";
 
-    return NextResponse.json({ error: message }, { status: 400 });
+    return apiError(message, { status: 400 });
   }
 }

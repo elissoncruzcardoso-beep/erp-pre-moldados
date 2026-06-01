@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PackageCheck } from "lucide-react";
+import { fetchJson, isApiRequestError } from "@/lib/api-client";
 import { formatMoney } from "@/lib/formatters";
 
 type OrderItemOption = {
@@ -130,17 +131,19 @@ export function PurchaseReceiptForm({ orders, warehouses }: Props) {
     };
 
     setLoading(true);
-    const response = await fetch("/api/suprimentos/recebimentos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    const data = await response.json().catch(() => null);
-    setLoading(false);
 
-    if (!response.ok) {
-      setError(data?.error || "Nao foi possivel registrar a nota fiscal.");
+    try {
+      await fetchJson("/api/suprimentos/recebimentos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      }, "Nao foi possivel registrar a nota fiscal.");
+    } catch (requestError) {
+      setError(isApiRequestError(requestError) ? requestError.message : "Nao foi possivel registrar a nota fiscal.");
+      setLoading(false);
       return;
+    } finally {
+      setLoading(false);
     }
 
     setSuccess("Nota fiscal conferida, estoque atualizado e titulo de contas a pagar gerado.");

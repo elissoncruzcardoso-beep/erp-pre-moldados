@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
 import { AuditAction } from "@prisma/client";
 import { z } from "zod";
+import { apiError, apiSuccess, apiUnauthorized, apiValidationError } from "@/lib/api/responses";
 import { getPrisma } from "@/lib/db/prisma";
 import {
   buildProductionBatchCode,
@@ -56,14 +56,14 @@ function assertTelegramSecret(request: Request) {
 
 export async function POST(request: Request) {
   if (!assertTelegramSecret(request)) {
-    return NextResponse.json({ error: "Webhook nao autorizado." }, { status: 401 });
+    return apiUnauthorized("Webhook nao autorizado.");
   }
 
   const body = await request.json().catch(() => null);
   const parsedUpdate = telegramUpdateSchema.safeParse(body);
 
   if (!parsedUpdate.success) {
-    return NextResponse.json({ ok: false, error: "Payload do Telegram invalido." }, { status: 400 });
+    return apiValidationError("Payload do Telegram invalido.", parsedUpdate.error.flatten());
   }
 
   const update = parsedUpdate.data;
@@ -72,7 +72,7 @@ export async function POST(request: Request) {
   const chatId = message?.chat?.id;
 
   if (!text) {
-    return NextResponse.json({ ok: true, ignored: true });
+    return apiSuccess({ ignored: true });
   }
 
   const prisma = getPrisma();
@@ -82,7 +82,7 @@ export async function POST(request: Request) {
   if (!botUser || botUser.status !== "ACTIVE") {
     const reply = "Nao encontrei um usuario ativo para registrar o diario no ERP.";
     await sendTelegramMessage(chatId, reply);
-    return NextResponse.json({ ok: false, error: reply });
+    return apiError(reply, { status: 400 });
   }
 
   const products = await prisma.item.findMany({
@@ -127,7 +127,7 @@ export async function POST(request: Request) {
       "Tampa D80: 8"
     ].join("\n");
     await sendTelegramMessage(chatId, reply);
-    return NextResponse.json({ ok: false, error: "Nenhum item reconhecido.", unmatchedItems: parsed.unmatchedItems });
+    return apiError("Nenhum item reconhecido.", { status: 400, details: { unmatchedItems: parsed.unmatchedItems } });
   }
 
   const result = await prisma.$transaction(async (tx) => {
@@ -226,8 +226,7 @@ export async function POST(request: Request) {
 
   await sendTelegramMessage(chatId, reply);
 
-  return NextResponse.json({
-    ok: true,
+  return apiSuccess({
     dailyLogId: result.log.id,
     items: result.items,
     unmatchedItems: parsed.unmatchedItems

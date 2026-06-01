@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
+import { apiConflict, apiForbidden, apiSuccess, apiUnauthorized, apiValidationError, handleApiError } from "@/lib/api/responses";
 import { getSession } from "@/lib/auth/session";
 import { makeAutomaticCode, normalizeManualCode } from "@/lib/codes/auto-code";
 import { getPrisma } from "@/lib/db/prisma";
@@ -9,18 +9,18 @@ export async function POST(request: Request) {
   const session = await getSession();
 
   if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
+    return apiUnauthorized();
   }
 
   if (!session.permissions.includes("financeiro.manage")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para criar contas a pagar." }, { status: 403 });
+    return apiForbidden("Voce nao tem permissao para criar contas a pagar.");
   }
 
   const body = await request.json().catch(() => null);
   const parsed = accountPayableSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Revise os campos da conta a pagar." }, { status: 400 });
+    return apiValidationError("Revise os campos da conta a pagar.", parsed.error.flatten());
   }
 
   const input = parsed.data;
@@ -101,10 +101,10 @@ export async function POST(request: Request) {
       return created;
     });
 
-    return NextResponse.json({ payable }, { status: 201 });
+    return apiSuccess({ payable }, { status: 201 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "Ja existe uma conta a pagar com este numero ou recebimento." }, { status: 409 });
+      return apiConflict("Ja existe uma conta a pagar com este numero ou recebimento.");
     }
 
     const messages: Record<string, string> = {
@@ -116,6 +116,6 @@ export async function POST(request: Request) {
 
     const message = error instanceof Error ? messages[error.message] || error.message : "Nao foi possivel criar a conta a pagar.";
 
-    return NextResponse.json({ error: message }, { status: 400 });
+    return handleApiError(new Error(message), "Nao foi possivel criar a conta a pagar.");
   }
 }

@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
+import { apiConflict, apiError, apiForbidden, apiSuccess, apiUnauthorized, apiValidationError } from "@/lib/api/responses";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
 import { purchaseRequestSchema } from "@/lib/validations/purchase";
@@ -12,18 +12,18 @@ export async function PATCH(request: Request, context: RouteContext) {
   const session = await getSession();
 
   if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
+    return apiUnauthorized();
   }
 
   if (!session.permissions.includes("suprimentos.manage")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para editar solicitacoes." }, { status: 403 });
+    return apiForbidden("Voce nao tem permissao para editar solicitacoes.");
   }
 
   const body = await request.json().catch(() => null);
   const parsed = purchaseRequestSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Revise os campos da solicitacao de compra." }, { status: 400 });
+    return apiValidationError("Revise os campos da solicitacao de compra.", parsed.error.flatten());
   }
 
   const { id } = await context.params;
@@ -98,21 +98,21 @@ export async function PATCH(request: Request, context: RouteContext) {
       return updated;
     });
 
-    return NextResponse.json({ request: requestRecord });
+    return apiSuccess({ request: requestRecord });
   } catch (error) {
     if (error instanceof Error && error.message === "REQUEST_NOT_FOUND") {
-      return NextResponse.json({ error: "Solicitacao nao encontrada." }, { status: 404 });
+      return apiError("Solicitacao nao encontrada.", { status: 404 });
     }
 
     if (error instanceof Error && error.message === "REQUEST_LOCKED") {
-      return NextResponse.json({ error: "Solicitacao com cotacao ou pedido nao pode ser editada." }, { status: 409 });
+      return apiConflict("Solicitacao com cotacao ou pedido nao pode ser editada.");
     }
 
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "Ja existe uma solicitacao com este numero." }, { status: 409 });
+      return apiConflict("Ja existe uma solicitacao com este numero.");
     }
 
-    return NextResponse.json({ error: "Nao foi possivel editar a solicitacao." }, { status: 500 });
+    return apiError("Nao foi possivel editar a solicitacao.", { status: 500 });
   }
 }
 
@@ -120,11 +120,11 @@ export async function DELETE(_request: Request, context: RouteContext) {
   const session = await getSession();
 
   if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
+    return apiUnauthorized();
   }
 
   if (!session.permissions.includes("suprimentos.manage")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para excluir solicitacoes." }, { status: 403 });
+    return apiForbidden("Voce nao tem permissao para excluir solicitacoes.");
   }
 
   const { id } = await context.params;
@@ -170,16 +170,16 @@ export async function DELETE(_request: Request, context: RouteContext) {
       });
     });
 
-    return NextResponse.json({ ok: true });
+    return apiSuccess({});
   } catch (error) {
     if (error instanceof Error && error.message === "REQUEST_NOT_FOUND") {
-      return NextResponse.json({ error: "Solicitacao nao encontrada." }, { status: 404 });
+      return apiError("Solicitacao nao encontrada.", { status: 404 });
     }
 
     if (error instanceof Error && error.message === "REQUEST_LOCKED") {
-      return NextResponse.json({ error: "Solicitacao com cotacao ou pedido nao pode ser excluida." }, { status: 409 });
+      return apiConflict("Solicitacao com cotacao ou pedido nao pode ser excluida.");
     }
 
-    return NextResponse.json({ error: "Nao foi possivel excluir a solicitacao." }, { status: 500 });
+    return apiError("Nao foi possivel excluir a solicitacao.", { status: 500 });
   }
 }

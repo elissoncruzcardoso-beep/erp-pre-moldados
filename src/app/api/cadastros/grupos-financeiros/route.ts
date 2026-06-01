@@ -1,25 +1,22 @@
-import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
-import { getSession } from "@/lib/auth/session";
+import { apiConflict, apiSuccess, apiValidationError, handleApiError } from "@/lib/api/responses";
+import { requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
 import { financialGroupSchema } from "@/lib/validations/cadastros";
 
 export async function POST(request: Request) {
-  const session = await getSession();
+  const auth = await requireApiSession({
+    permission: "cadastros.manage",
+    forbiddenMessage: "Voce nao tem permissao para gerenciar cadastros."
+  });
 
-  if (!session) {
-    return NextResponse.json({ error: "Sessão expirada. Entre novamente." }, { status: 401 });
-  }
-
-  if (!session.permissions.includes("cadastros.manage")) {
-    return NextResponse.json({ error: "Você não tem permissão para gerenciar cadastros." }, { status: 403 });
-  }
+  if (auth.response) return auth.response;
 
   const body = await request.json().catch(() => null);
   const parsed = financialGroupSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Revise os campos do grupo financeiro." }, { status: 400 });
+    return apiValidationError("Revise os campos do grupo financeiro.", parsed.error.flatten());
   }
 
   const prisma = getPrisma();
@@ -49,7 +46,7 @@ export async function POST(request: Request) {
 
     await prisma.auditLog.create({
       data: {
-        userId: session.userId,
+        userId: auth.session.userId,
         module: "Cadastros",
         action: AuditAction.UPDATE,
         entity: "FinancialGroup",
@@ -58,12 +55,12 @@ export async function POST(request: Request) {
       }
     }).catch(() => null);
 
-    return NextResponse.json({ group }, { status: 201 });
+    return apiSuccess({ group }, { status: 201 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "Já existe um grupo financeiro com este código." }, { status: 409 });
+      return apiConflict("Ja existe um grupo financeiro com este codigo.");
     }
 
-    return NextResponse.json({ error: "Não foi possível salvar o grupo financeiro." }, { status: 500 });
+    return handleApiError(error, "Nao foi possivel salvar o grupo financeiro.");
   }
 }

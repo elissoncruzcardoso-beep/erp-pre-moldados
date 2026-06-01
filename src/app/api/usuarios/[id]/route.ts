@@ -1,8 +1,14 @@
-import { NextResponse } from "next/server";
 import { AuditAction, Prisma, UserStatus } from "@prisma/client";
 import { z } from "zod";
+import {
+  apiConflict,
+  apiError,
+  apiSuccess,
+  apiValidationError,
+  handleApiError
+} from "@/lib/api/responses";
 import { hashPassword } from "@/lib/auth/password";
-import { getSession } from "@/lib/auth/session";
+import { requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
 
 const updateUserSchema = z.object({
@@ -19,26 +25,23 @@ type RouteContext = {
 };
 
 export async function PUT(request: Request, context: RouteContext) {
-  const session = await getSession();
+  const auth = await requireApiSession({
+    permission: "usuarios.manage",
+    forbiddenMessage: "Voce nao tem permissao para alterar usuarios."
+  });
 
-  if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
-  }
-
-  if (!session.permissions.includes("usuarios.manage")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para alterar usuarios." }, { status: 403 });
-  }
+  if (auth.response) return auth.response;
 
   const { id } = await context.params;
   const body = await request.json().catch(() => null);
   const parsed = updateUserSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Revise os dados do usuario." }, { status: 400 });
+    return apiValidationError("Revise os dados do usuario.", parsed.error.flatten());
   }
 
-  if (id === session.userId && parsed.data.status !== UserStatus.ACTIVE) {
-    return NextResponse.json({ error: "Voce nao pode inativar seu proprio usuario." }, { status: 400 });
+  if (id === auth.session.userId && parsed.data.status !== UserStatus.ACTIVE) {
+    return apiError("Voce nao pode inativar seu proprio usuario.", { status: 400 });
   }
 
   const prisma = getPrisma();
@@ -48,11 +51,11 @@ export async function PUT(request: Request, context: RouteContext) {
   ]);
 
   if (!current) {
-    return NextResponse.json({ error: "Usuario nao encontrado." }, { status: 404 });
+    return apiError("Usuario nao encontrado.", { status: 404 });
   }
 
   if (!role) {
-    return NextResponse.json({ error: "Perfil informado nao existe." }, { status: 400 });
+    return apiError("Perfil informado nao existe.", { status: 400 });
   }
 
   try {
@@ -72,7 +75,7 @@ export async function PUT(request: Request, context: RouteContext) {
     await prisma.auditLog
       .create({
         data: {
-          userId: session.userId,
+          userId: auth.session.userId,
           module: "Usuarios",
           action: AuditAction.UPDATE,
           entity: "User",
@@ -98,38 +101,35 @@ export async function PUT(request: Request, context: RouteContext) {
       })
       .catch(() => null);
 
-    return NextResponse.json({ user });
+    return apiSuccess({ user });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "Ja existe usuario com este e-mail." }, { status: 409 });
+      return apiConflict("Ja existe usuario com este e-mail.");
     }
 
-    return NextResponse.json({ error: "Nao foi possivel atualizar o usuario." }, { status: 500 });
+    return handleApiError(error, "Nao foi possivel atualizar o usuario.");
   }
 }
 
 export async function DELETE(_request: Request, context: RouteContext) {
-  const session = await getSession();
+  const auth = await requireApiSession({
+    permission: "usuarios.manage",
+    forbiddenMessage: "Voce nao tem permissao para inativar usuarios."
+  });
 
-  if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
-  }
-
-  if (!session.permissions.includes("usuarios.manage")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para inativar usuarios." }, { status: 403 });
-  }
+  if (auth.response) return auth.response;
 
   const { id } = await context.params;
 
-  if (id === session.userId) {
-    return NextResponse.json({ error: "Voce nao pode inativar seu proprio usuario." }, { status: 400 });
+  if (id === auth.session.userId) {
+    return apiError("Voce nao pode inativar seu proprio usuario.", { status: 400 });
   }
 
   const prisma = getPrisma();
   const current = await prisma.user.findUnique({ where: { id } });
 
   if (!current) {
-    return NextResponse.json({ error: "Usuario nao encontrado." }, { status: 404 });
+    return apiError("Usuario nao encontrado.", { status: 404 });
   }
 
   const nextStatus = current.status === UserStatus.ACTIVE ? UserStatus.INACTIVE : UserStatus.ACTIVE;
@@ -142,7 +142,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
   await prisma.auditLog
     .create({
       data: {
-        userId: session.userId,
+        userId: auth.session.userId,
         module: "Usuarios",
         action: nextStatus === UserStatus.ACTIVE ? AuditAction.UPDATE : AuditAction.DELETE,
         entity: "User",
@@ -153,5 +153,5 @@ export async function DELETE(_request: Request, context: RouteContext) {
     })
     .catch(() => null);
 
-  return NextResponse.json({ user });
+  return apiSuccess({ user });
 }

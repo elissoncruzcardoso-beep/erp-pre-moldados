@@ -1,5 +1,12 @@
-import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
+import {
+  apiConflict,
+  apiForbidden,
+  apiSuccess,
+  apiUnauthorized,
+  apiValidationError,
+  handleApiError
+} from "@/lib/api/responses";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
 import { paymentMethodSchema } from "@/lib/validations/cadastros";
@@ -8,18 +15,18 @@ export async function POST(request: Request) {
   const session = await getSession();
 
   if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
+    return apiUnauthorized();
   }
 
   if (!session.permissions.includes("cadastros.manage")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para gerenciar cadastros." }, { status: 403 });
+    return apiForbidden("Voce nao tem permissao para gerenciar cadastros.");
   }
 
   const body = await request.json().catch(() => null);
   const parsed = paymentMethodSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Revise os campos da forma de pagamento." }, { status: 400 });
+    return apiValidationError("Revise os campos da forma de pagamento.", parsed.error.flatten());
   }
 
   const prisma = getPrisma();
@@ -42,12 +49,12 @@ export async function POST(request: Request) {
       }
     }).catch(() => null);
 
-    return NextResponse.json({ paymentMethod }, { status: 201 });
+    return apiSuccess({ paymentMethod }, { status: 201 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "Ja existe forma de pagamento com este codigo." }, { status: 409 });
+      return apiConflict("Ja existe forma de pagamento com este codigo.");
     }
 
-    return NextResponse.json({ error: "Nao foi possivel salvar a forma de pagamento." }, { status: 500 });
+    return handleApiError(error, "Nao foi possivel salvar a forma de pagamento.");
   }
 }

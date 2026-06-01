@@ -1,6 +1,12 @@
-import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
-import { getSession } from "@/lib/auth/session";
+import {
+  apiConflict,
+  apiError,
+  apiSuccess,
+  apiValidationError,
+  handleApiError
+} from "@/lib/api/responses";
+import { requireApiSession } from "@/lib/auth/guards";
 import { normalizeManualCode } from "@/lib/codes/auto-code";
 import { getPrisma } from "@/lib/db/prisma";
 import { compositionSchema } from "@/lib/validations/product";
@@ -10,17 +16,10 @@ type RouteContext = {
 };
 
 async function requireProductManager() {
-  const session = await getSession();
-
-  if (!session) {
-    return { response: NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 }) };
-  }
-
-  if (!session.permissions.includes("produtos.manage")) {
-    return { response: NextResponse.json({ error: "Voce nao tem permissao para alterar composicoes." }, { status: 403 }) };
-  }
-
-  return { session };
+  return requireApiSession({
+    permission: "produtos.manage",
+    forbiddenMessage: "Voce nao tem permissao para alterar composicoes."
+  });
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
@@ -33,7 +32,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   const parsed = compositionSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Revise os campos da ficha tecnica." }, { status: 400 });
+    return apiValidationError("Revise os campos da ficha tecnica.", parsed.error.flatten());
   }
 
   const input = parsed.data;
@@ -124,10 +123,10 @@ export async function PATCH(request: Request, context: RouteContext) {
       return updated;
     });
 
-    return NextResponse.json({ composition });
+    return apiSuccess({ composition });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "Ja existe uma composicao com este codigo." }, { status: 409 });
+      return apiConflict("Ja existe uma composicao com este codigo.");
     }
 
     const messages: Record<string, string> = {
@@ -139,7 +138,11 @@ export async function PATCH(request: Request, context: RouteContext) {
     };
     const message = error instanceof Error ? messages[error.message] || error.message : "Nao foi possivel alterar a composicao.";
 
-    return NextResponse.json({ error: message }, { status: 400 });
+    if (error instanceof Error && messages[error.message]) {
+      return apiError(message, { status: 400 });
+    }
+
+    return handleApiError(error, "Nao foi possivel alterar a composicao.");
   }
 }
 
@@ -182,7 +185,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
       });
     });
 
-    return NextResponse.json({ ok: true });
+    return apiSuccess({});
   } catch (error) {
     const messages: Record<string, string> = {
       COMPOSITION_NOT_FOUND: "Ficha tecnica nao encontrada.",
@@ -190,6 +193,6 @@ export async function DELETE(_request: Request, context: RouteContext) {
     };
     const message = error instanceof Error ? messages[error.message] || error.message : "Nao foi possivel excluir a composicao.";
 
-    return NextResponse.json({ error: message }, { status: 400 });
+    return apiError(message, { status: 400 });
   }
 }

@@ -511,6 +511,18 @@ h3 {
   align-items: center;
 }
 
+.error-boundary-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+}
+
+.error-boundary-card {
+  width: min(720px, 100%);
+  border-left: 4px solid var(--accent-orange, #ff6f00);
+}
+
 .danger-text {
   color: var(--danger);
 }

@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
+import { apiForbidden, apiSuccess, apiUnauthorized, apiValidationError, handleApiError } from "@/lib/api/responses";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
 import { accountReceiptSchema } from "@/lib/validations/purchase";
@@ -8,18 +8,18 @@ export async function POST(request: Request) {
   const session = await getSession();
 
   if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
+    return apiUnauthorized();
   }
 
   if (!session.permissions.includes("financeiro.manage")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para baixar contas a receber." }, { status: 403 });
+    return apiForbidden("Voce nao tem permissao para baixar contas a receber.");
   }
 
   const body = await request.json().catch(() => null);
   const parsed = accountReceiptSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Revise os campos do recebimento." }, { status: 400 });
+    return apiValidationError("Revise os campos do recebimento.", parsed.error.flatten());
   }
 
   const input = parsed.data;
@@ -106,7 +106,7 @@ export async function POST(request: Request) {
       return created;
     });
 
-    return NextResponse.json({ receipt }, { status: 201 });
+    return apiSuccess({ receipt }, { status: 201 });
   } catch (error) {
     const messages: Record<string, string> = {
       RECEIVABLE_NOT_FOUND: "Conta a receber nao encontrada.",
@@ -116,6 +116,6 @@ export async function POST(request: Request) {
 
     const message = error instanceof Error ? messages[error.message] || error.message : "Nao foi possivel registrar o recebimento.";
 
-    return NextResponse.json({ error: message }, { status: 400 });
+    return handleApiError(new Error(message), "Nao foi possivel registrar o recebimento.");
   }
 }

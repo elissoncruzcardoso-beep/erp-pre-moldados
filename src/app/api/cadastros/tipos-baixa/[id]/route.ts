@@ -1,21 +1,18 @@
-import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
-import { getSession } from "@/lib/auth/session";
+import { apiConflict, apiError, apiSuccess, apiValidationError, handleApiError } from "@/lib/api/responses";
+import { requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
 import { financialSettlementTypeSchema } from "@/lib/validations/cadastros";
 
 async function requireManageSession() {
-  const session = await getSession();
+  const auth = await requireApiSession({
+    permission: "cadastros.manage",
+    forbiddenMessage: "Voce nao tem permissao para gerenciar cadastros."
+  });
 
-  if (!session) {
-    return { error: NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 }) };
-  }
+  if (auth.response) return { error: auth.response };
 
-  if (!session.permissions.includes("cadastros.manage")) {
-    return { error: NextResponse.json({ error: "Voce nao tem permissao para gerenciar cadastros." }, { status: 403 }) };
-  }
-
-  return { session };
+  return { session: auth.session };
 }
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -27,7 +24,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
   const parsed = financialSettlementTypeSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Revise os campos do tipo de baixa." }, { status: 400 });
+    return apiValidationError("Revise os campos do tipo de baixa.", parsed.error.flatten());
   }
 
   const prisma = getPrisma();
@@ -49,13 +46,13 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       }
     }).catch(() => null);
 
-    return NextResponse.json({ settlementType });
+    return apiSuccess({ settlementType });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "Ja existe tipo de baixa com este codigo." }, { status: 409 });
+      return apiConflict("Ja existe tipo de baixa com este codigo.");
     }
 
-    return NextResponse.json({ error: "Nao foi possivel atualizar o tipo de baixa." }, { status: 500 });
+    return handleApiError(error, "Nao foi possivel atualizar o tipo de baixa.");
   }
 }
 
@@ -68,7 +65,7 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
   const current = await prisma.financialSettlementType.findUnique({ where: { id } });
 
   if (!current) {
-    return NextResponse.json({ error: "Tipo de baixa nao encontrado." }, { status: 404 });
+    return apiError("Tipo de baixa nao encontrado.", { status: 404 });
   }
 
   const settlementType = await prisma.financialSettlementType.update({
@@ -87,5 +84,5 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
     }
   }).catch(() => null);
 
-  return NextResponse.json({ settlementType });
+  return apiSuccess({ settlementType });
 }

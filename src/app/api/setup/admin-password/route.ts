@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
 import { z } from "zod";
+import { apiError, apiSuccess, apiValidationError } from "@/lib/api/responses";
 import { getPrisma } from "@/lib/db/prisma";
 import { hashPassword } from "@/lib/auth/password";
 
@@ -10,17 +10,14 @@ const setupSchema = z.object({
 
 export async function POST(request: Request) {
   if (process.env.NODE_ENV === "production") {
-    return NextResponse.json({ error: "Setup do administrador desativado em producao." }, { status: 404 });
+    return apiError("Setup do administrador desativado em producao.", { status: 404 });
   }
 
   const body = await request.json().catch(() => null);
   const parsed = setupSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Informe um e-mail valido e uma senha com pelo menos 12 caracteres." },
-      { status: 400 }
-    );
+    return apiValidationError("Informe um e-mail valido e uma senha com pelo menos 12 caracteres.", parsed.error.flatten());
   }
 
   const prisma = getPrisma();
@@ -40,7 +37,7 @@ export async function POST(request: Request) {
   });
 
   if (!user || user.role.name !== "Administrador") {
-    return NextResponse.json({ error: "Administrador inicial nao encontrado." }, { status: 404 });
+    return apiError("Administrador inicial nao encontrado.", { status: 404 });
   }
 
   await prisma.user.update({
@@ -51,8 +48,7 @@ export async function POST(request: Request) {
     }
   });
 
-  return NextResponse.json({
-    ok: true,
+  return apiSuccess({
     reset: Boolean(user.passwordHash),
     user: {
       name: user.name,

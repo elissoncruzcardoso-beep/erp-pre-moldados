@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { AuditAction } from "@prisma/client";
+import { apiUnauthorized, apiValidationError } from "@/lib/api/responses";
 import { getPrisma } from "@/lib/db/prisma";
 import { verifyPassword } from "@/lib/auth/password";
 import { createSessionToken, setSessionCookie } from "@/lib/auth/session";
@@ -16,7 +17,7 @@ export async function POST(request: Request) {
   const parsed = loginSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Informe e-mail e senha validos." }, { status: 400 });
+    return apiValidationError("Informe e-mail e senha validos.", parsed.error.flatten());
   }
 
   const prisma = getPrisma();
@@ -36,13 +37,13 @@ export async function POST(request: Request) {
   });
 
   if (!user || user.status !== "ACTIVE" || !user.passwordHash) {
-    return NextResponse.json({ error: "Acesso nao autorizado." }, { status: 401 });
+    return apiUnauthorized("Acesso nao autorizado.");
   }
 
   const validPassword = verifyPassword(parsed.data.password, user.passwordHash);
 
   if (!validPassword) {
-    return NextResponse.json({ error: "Acesso nao autorizado." }, { status: 401 });
+    return apiUnauthorized("Acesso nao autorizado.");
   }
 
   const permissions = user.role.permissions.map((item) => item.permission.key as PermissionKey);
@@ -67,6 +68,7 @@ export async function POST(request: Request) {
     .catch(() => null);
 
   const response = NextResponse.json({
+    ok: true,
     user: {
       name: user.name,
       email: user.email,

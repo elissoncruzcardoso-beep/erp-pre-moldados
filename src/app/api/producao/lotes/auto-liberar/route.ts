@@ -1,22 +1,19 @@
-import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
+import { apiSuccess } from "@/lib/api/responses";
+import { requireApiSession } from "@/lib/auth/guards";
 import { autoReleaseCuredBatches } from "@/lib/production/auto-release-cured-batches";
 
 export async function POST() {
-  const session = await getSession();
+  const auth = await requireApiSession({
+    permission: "producao.manage",
+    forbiddenMessage: "Voce nao tem permissao para liberar cura automaticamente."
+  });
 
-  if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
-  }
-
-  if (!session.permissions.includes("producao.manage")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para liberar cura automaticamente." }, { status: 403 });
-  }
+  if (auth.response) return auth.response;
 
   const result = await autoReleaseCuredBatches({
-    userId: session.userId,
+    userId: auth.session.userId,
     responsible: "Sistema - cura automatica"
   });
 
-  return NextResponse.json(result);
+  return apiSuccess(result);
 }

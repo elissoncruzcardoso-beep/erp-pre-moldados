@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
+import { apiConflict, apiError, apiForbidden, apiSuccess, apiUnauthorized, apiValidationError } from "@/lib/api/responses";
 import { getSession } from "@/lib/auth/session";
 import { makeAutomaticCode } from "@/lib/codes/auto-code";
 import { getPrisma } from "@/lib/db/prisma";
@@ -9,18 +9,18 @@ export async function POST(request: Request) {
   const session = await getSession();
 
   if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
+    return apiUnauthorized();
   }
 
   if (!session.permissions.includes("suprimentos.manage")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para criar solicitacoes." }, { status: 403 });
+    return apiForbidden("Voce nao tem permissao para criar solicitacoes.");
   }
 
   const body = await request.json().catch(() => null);
   const parsed = purchaseRequestSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Revise os campos da solicitacao de compra." }, { status: 400 });
+    return apiValidationError("Revise os campos da solicitacao de compra.", parsed.error.flatten());
   }
 
   const input = parsed.data;
@@ -78,12 +78,12 @@ export async function POST(request: Request) {
       return created;
     });
 
-    return NextResponse.json({ request: requestRecord }, { status: 201 });
+    return apiSuccess({ request: requestRecord }, { status: 201 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "Ja existe uma solicitacao com este numero." }, { status: 409 });
+      return apiConflict("Ja existe uma solicitacao com este numero.");
     }
 
-    return NextResponse.json({ error: "Nao foi possivel criar a solicitacao." }, { status: 500 });
+    return apiError("Nao foi possivel criar a solicitacao.", { status: 500 });
   }
 }

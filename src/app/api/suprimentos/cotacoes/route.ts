@@ -1,5 +1,13 @@
-import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
+import {
+  apiConflict,
+  apiError,
+  apiForbidden,
+  apiSuccess,
+  apiUnauthorized,
+  apiValidationError,
+  handleApiError
+} from "@/lib/api/responses";
 import { getSession } from "@/lib/auth/session";
 import { makeAutomaticCode } from "@/lib/codes/auto-code";
 import { getPrisma } from "@/lib/db/prisma";
@@ -9,18 +17,18 @@ export async function POST(request: Request) {
   const session = await getSession();
 
   if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
+    return apiUnauthorized();
   }
 
   if (!session.permissions.includes("suprimentos.manage")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para criar cotacoes." }, { status: 403 });
+    return apiForbidden("Voce nao tem permissao para criar cotacoes.");
   }
 
   const body = await request.json().catch(() => null);
   const parsed = purchaseQuoteSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Revise os campos da cotacao de precos." }, { status: 400 });
+    return apiValidationError("Revise os campos da cotacao de precos.", parsed.error.flatten());
   }
 
   const input = parsed.data;
@@ -123,20 +131,20 @@ export async function POST(request: Request) {
       return created;
     });
 
-    return NextResponse.json({ quote }, { status: 201 });
+    return apiSuccess({ quote }, { status: 201 });
   } catch (error) {
     if (error instanceof Error && error.message === "PURCHASE_REQUEST_NOT_FOUND") {
-      return NextResponse.json({ error: "Solicitacao de compra nao encontrada." }, { status: 404 });
+      return apiError("Solicitacao de compra nao encontrada.", { status: 404 });
     }
 
     if (error instanceof Error && error.message === "QUOTE_ITEM_INVALID") {
-      return NextResponse.json({ error: "Revise os itens da cotacao. Ha item invalido ou valor inconsistente." }, { status: 400 });
+      return apiValidationError("Revise os itens da cotacao. Ha item invalido ou valor inconsistente.");
     }
 
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "Ja existe uma cotacao com este numero." }, { status: 409 });
+      return apiConflict("Ja existe uma cotacao com este numero.");
     }
 
-    return NextResponse.json({ error: "Nao foi possivel criar a cotacao." }, { status: 500 });
+    return handleApiError(error, "Nao foi possivel criar a cotacao.");
   }
 }

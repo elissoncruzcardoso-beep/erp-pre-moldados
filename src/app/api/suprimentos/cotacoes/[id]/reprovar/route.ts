@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
 import { AuditAction } from "@prisma/client";
+import { apiConflict, apiError, apiForbidden, apiSuccess, apiUnauthorized, handleApiError } from "@/lib/api/responses";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
 
@@ -11,11 +11,11 @@ export async function PATCH(_request: Request, context: RouteContext) {
   const session = await getSession();
 
   if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
+    return apiUnauthorized();
   }
 
   if (!session.permissions.includes("suprimentos.manage")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para reprovar cotacoes." }, { status: 403 });
+    return apiForbidden("Voce nao tem permissao para reprovar cotacoes.");
   }
 
   const { id } = await context.params;
@@ -71,16 +71,16 @@ export async function PATCH(_request: Request, context: RouteContext) {
       return updated;
     });
 
-    return NextResponse.json({ quote });
+    return apiSuccess({ quote });
   } catch (error) {
     if (error instanceof Error && error.message === "QUOTE_NOT_FOUND") {
-      return NextResponse.json({ error: "Cotacao nao encontrada." }, { status: 404 });
+      return apiError("Cotacao nao encontrada.", { status: 404 });
     }
 
     if (error instanceof Error && error.message === "QUOTE_HAS_ORDER") {
-      return NextResponse.json({ error: "Cotacao com pedido gerado nao pode ser reprovada." }, { status: 409 });
+      return apiConflict("Cotacao com pedido gerado nao pode ser reprovada.");
     }
 
-    return NextResponse.json({ error: "Nao foi possivel reprovar a cotacao." }, { status: 500 });
+    return handleApiError(error, "Nao foi possivel reprovar a cotacao.");
   }
 }

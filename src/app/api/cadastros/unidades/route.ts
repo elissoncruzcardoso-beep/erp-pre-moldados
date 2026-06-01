@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
+import { apiConflict, apiSuccess, apiValidationError, handleApiError } from "@/lib/api/responses";
 import { requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
 import { unitOfMeasureSchema } from "@/lib/validations/cadastros";
@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   const parsed = unitOfMeasureSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Revise os campos da unidade de medida." }, { status: 400 });
+    return apiValidationError("Revise os campos da unidade de medida.", parsed.error.flatten());
   }
 
   const prisma = getPrisma();
@@ -48,12 +48,12 @@ export async function POST(request: Request) {
       }
     }).catch(() => null);
 
-    return NextResponse.json({ unit }, { status: 201 });
+    return apiSuccess({ unit }, { status: 201 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "Ja existe uma unidade com este codigo." }, { status: 409 });
+      return apiConflict("Ja existe uma unidade com este codigo.");
     }
 
-    return NextResponse.json({ error: "Nao foi possivel salvar a unidade." }, { status: 500 });
+    return handleApiError(error, "Nao foi possivel salvar a unidade.");
   }
 }

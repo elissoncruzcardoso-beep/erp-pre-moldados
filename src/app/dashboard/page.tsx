@@ -21,9 +21,9 @@ export const dynamic = "force-dynamic";
 
 const movementLabels: Record<string, string> = {
   ENTRADA_COMPRA: "Entrada de compra",
-  SAIDA_PRODUCAO: "SaÃ­da para produÃ§Ã£o",
-  ENTRADA_PRODUCAO: "Entrada de produÃ§Ã£o",
-  TRANSFERENCIA: "TransferÃªncia",
+  SAIDA_PRODUCAO: "Saída para produção",
+  ENTRADA_PRODUCAO: "Entrada de produção",
+  TRANSFERENCIA: "Transferência",
   AJUSTE_POSITIVO: "Ajuste positivo",
   AJUSTE_NEGATIVO: "Ajuste negativo",
   RESERVA: "Reserva",
@@ -198,10 +198,10 @@ export default async function DashboardPage() {
       <section className="page-head dashboard-hero">
         <div>
           <p className="eyebrow">Dashboard operacional</p>
-          <h1>Central de fÃ¡brica, cura e caixa</h1>
+          <h1>Central de fábrica, cura e caixa</h1>
           <p className="lead">
-            Painel em tempo real para acompanhar peÃ§as em cura, liberaÃ§Ã£o para retirada,
-            recebimentos, saÃ­das financeiras e movimentos de materiais.
+            Painel em tempo real para acompanhar peças em cura, liberação para retirada,
+            recebimentos, saídas financeiras e movimentos de materiais.
           </p>
         </div>
         <div className="button-row">
@@ -211,7 +211,7 @@ export default async function DashboardPage() {
           </span>
           <Link href="/producao" className="primary-button">
             <Factory size={17} />
-            ProduÃ§Ã£o
+            Produção
           </Link>
         </div>
       </section>
@@ -219,14 +219,14 @@ export default async function DashboardPage() {
       <section className="grid-12 dashboard-modern">
         <article className="metric-card futuristic-card accent-blue span-3">
           <div className="metric-top">
-            <span className="mono">PeÃ§as em cura</span>
+            <span className="mono">Peças em cura</span>
             <Clock3 size={22} />
           </div>
           <strong className="metric-value">{curingBatchStats._count._all}</strong>
-          <span className="metric-sub">{formatQuantity(curingQuantity)} peÃ§as em controle de cura/qualidade</span>
+          <span className="metric-sub">{formatQuantity(curingQuantity)} peças em controle de cura/qualidade</span>
           <details className="dashboard-details">
             <summary>
-              <Link href="/producao/pecas-em-cura?status=cura">Abrir pÃ¡gina</Link>
+              <Link href="/producao/pecas-em-cura?status=cura">Abrir página</Link>
             </summary>
             <div className="mini-list">
               {recentCuringBatches.map((batch) => (
@@ -238,21 +238,21 @@ export default async function DashboardPage() {
                   <span className="badge blue">{formatQuantity(batch.curingQuantity)} {batch.item.unit.code}</span>
                 </Link>
               ))}
-              {recentCuringBatches.length === 0 ? <p className="metric-sub">Nenhuma peÃ§a em cura neste momento.</p> : null}
+              {recentCuringBatches.length === 0 ? <p className="metric-sub">Nenhuma peça em cura neste momento.</p> : null}
             </div>
           </details>
         </article>
 
         <article className="metric-card futuristic-card accent-blue span-3">
           <div className="metric-top">
-            <span className="mono">Aptas Ã  retirada</span>
+            <span className="mono">Aptas à retirada</span>
             <PackageCheck size={22} />
           </div>
           <strong className="metric-value">{readyBatchStats._count._all}</strong>
-          <span className="metric-sub">{formatQuantity(readyQuantity)} peÃ§as prontas em lista</span>
+          <span className="metric-sub">{formatQuantity(readyQuantity)} peças prontas em lista</span>
           <details className="dashboard-details">
             <summary>
-              <Link href="/producao/pecas-em-cura?status=apta">Abrir pÃ¡gina</Link>
+              <Link href="/producao/pecas-em-cura?status=apta">Abrir página</Link>
             </summary>
             <div className="mini-list">
               {recentReadyBatches.map((batch) => (
@@ -264,7 +264,7 @@ export default async function DashboardPage() {
                   <span className="badge green">{formatQuantity(batch.releasedQuantity)} {batch.item.unit.code}</span>
                 </Link>
               ))}
-              {recentReadyBatches.length === 0 ? <p className="metric-sub">Nenhuma peÃ§a apta para retirada.</p> : null}
+              {recentReadyBatches.length === 0 ? <p className="metric-sub">Nenhuma peça apta para retirada.</p> : null}
             </div>
           </details>
         </article>
@@ -281,7 +281,7 @@ export default async function DashboardPage() {
 
         <article className="metric-card futuristic-card accent-orange span-3">
           <div className="metric-top">
-            <span className="mono">SaÃ­das financeiras</span>
+            <span className="mono">Saídas financeiras</span>
             <ArrowUpRight size={22} />
           </div>
           <strong className="metric-value">{formatMoney(paymentTotal)}</strong>
@@ -293,7 +293,7 @@ export default async function DashboardPage() {
           <div className="table-header">
             <div>
               <p className="eyebrow">Atividades recentes</p>
-              <h2>PeÃ§as prontas em lista</h2>
+              <h2>Peças prontas em lista</h2>
             </div>
             <span className="badge green">{readyBatchStats._count._all} lotes</span>
           </div>
@@ -301,7 +301,7 @@ export default async function DashboardPage() {
             <thead>
               <tr>
                 <th>Lote</th>
-                <th>PeÃ§a</th>
+                <th>Peça</th>
                 <th>Qtd. pronta</th>
                 <th>Data</th>
                 <th>Status</th>
@@ -319,7 +319,7 @@ export default async function DashboardPage() {
               ))}
               {recentReadyBatches.length === 0 ? (
                 <tr>
-                  <td colSpan={5}>Nenhuma peÃ§a pronta encontrada.</td>
+                  <td colSpan={5}>Nenhuma peça pronta encontrada.</td>
                 </tr>
               ) : null}
             </tbody>
@@ -327,8 +327,8 @@ export default async function DashboardPage() {
         </section>
 
         <article className="card dashboard-panel accent-orange span-4">
-          <p className="eyebrow">Alertas crÃ­ticos</p>
-          <h2>Entradas e saÃ­das de materiais</h2>
+          <p className="eyebrow">Alertas críticos</p>
+          <h2>Entradas e saídas de materiais</h2>
           <div className="split-list dashboard-movement-list">
             {stockMovements.slice(0, 8).map((movement) => {
               const isEntry = entryMovementTypes.has(movement.type);
@@ -339,7 +339,7 @@ export default async function DashboardPage() {
                   <div>
                     <strong>{movement.item.description}</strong>
                     <div className="metric-sub">
-                      {movementLabels[movement.type] || movement.type} â€¢ {warehouse || "Sem depÃ³sito"}
+                      {movementLabels[movement.type] || movement.type} • {warehouse || "Sem depósito"}
                     </div>
                   </div>
                   <span className={isEntry ? "badge green" : "badge orange"}>
@@ -348,11 +348,11 @@ export default async function DashboardPage() {
                 </div>
               );
             })}
-            {stockMovements.length === 0 ? <p className="metric-sub">Nenhuma movimentaÃ§Ã£o de material registrada.</p> : null}
+            {stockMovements.length === 0 ? <p className="metric-sub">Nenhuma movimentação de material registrada.</p> : null}
           </div>
           <div className="dashboard-balance-line">
             <span><Boxes size={16} /> Entradas: {entryMovementCount}</span>
-            <span>SaÃ­das: {exitMovementCount}</span>
+            <span>Saídas: {exitMovementCount}</span>
           </div>
         </article>
 
@@ -360,7 +360,7 @@ export default async function DashboardPage() {
           <div className="table-header">
             <div>
               <p className="eyebrow">Recebimentos financeiros</p>
-              <h2>Ãšltimas entradas</h2>
+              <h2>Últimas entradas</h2>
             </div>
             <WalletCards size={22} color="#1b6b45" />
           </div>
@@ -394,8 +394,8 @@ export default async function DashboardPage() {
         <section className="table-shell dashboard-panel span-6">
           <div className="table-header">
             <div>
-              <p className="eyebrow">SaÃ­das financeiras</p>
-              <h2>Ãšltimos pagamentos</h2>
+              <p className="eyebrow">Saídas financeiras</p>
+              <h2>Últimos pagamentos</h2>
             </div>
             <CheckCircle2 size={22} color="#ff6f00" />
           </div>
@@ -419,7 +419,7 @@ export default async function DashboardPage() {
               ))}
               {accountPayments.length === 0 ? (
                 <tr>
-                  <td colSpan={4}>Nenhuma saÃ­da financeira registrada.</td>
+                  <td colSpan={4}>Nenhuma saída financeira registrada.</td>
                 </tr>
               ) : null}
             </tbody>

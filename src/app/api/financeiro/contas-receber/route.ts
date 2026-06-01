@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
+import { apiConflict, apiForbidden, apiSuccess, apiUnauthorized, apiValidationError, handleApiError } from "@/lib/api/responses";
 import { getSession } from "@/lib/auth/session";
 import { makeAutomaticCode, normalizeManualCode } from "@/lib/codes/auto-code";
 import { getPrisma } from "@/lib/db/prisma";
@@ -9,18 +9,18 @@ export async function POST(request: Request) {
   const session = await getSession();
 
   if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
+    return apiUnauthorized();
   }
 
   if (!session.permissions.includes("financeiro.manage")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para criar contas a receber." }, { status: 403 });
+    return apiForbidden("Voce nao tem permissao para criar contas a receber.");
   }
 
   const body = await request.json().catch(() => null);
   const parsed = accountReceivableSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Revise os campos da conta a receber." }, { status: 400 });
+    return apiValidationError("Revise os campos da conta a receber.", parsed.error.flatten());
   }
 
   const input = parsed.data;
@@ -61,12 +61,12 @@ export async function POST(request: Request) {
       }
     });
 
-    return NextResponse.json({ receivable }, { status: 201 });
+    return apiSuccess({ receivable }, { status: 201 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "Ja existe uma conta a receber com este numero." }, { status: 409 });
+      return apiConflict("Ja existe uma conta a receber com este numero.");
     }
 
-    return NextResponse.json({ error: "Nao foi possivel criar a conta a receber." }, { status: 400 });
+    return handleApiError(error, "Nao foi possivel criar a conta a receber.");
   }
 }

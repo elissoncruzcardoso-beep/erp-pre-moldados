@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
-import { getSession } from "@/lib/auth/session";
+import { apiConflict, apiError, apiSuccess, apiValidationError } from "@/lib/api/responses";
+import { requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
 import { calculateBatchReadyAt } from "@/lib/production/auto-release-cured-batches";
 import { consumeApprovedCompositionForProduction } from "@/lib/production/consume-composition";
@@ -16,21 +16,18 @@ function buildBatchCode(logDate: Date, sequence: number) {
 }
 
 export async function POST(request: Request) {
-  const session = await getSession();
+  const auth = await requireApiSession({
+    permission: "producao.manage",
+    forbiddenMessage: "Voce nao tem permissao para registrar diario de producao."
+  });
 
-  if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
-  }
-
-  if (!session.permissions.includes("producao.manage")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para registrar diario de producao." }, { status: 403 });
-  }
+  if (auth.response) return auth.response;
 
   const body = await request.json().catch(() => null);
   const parsed = productionDailyLogSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Revise os campos do diario de producao." }, { status: 400 });
+    return apiValidationError("Revise os campos do diario de producao.", parsed.error.flatten());
   }
 
   const input = parsed.data;
@@ -84,7 +81,7 @@ export async function POST(request: Request) {
           weatherMorning: input.weatherMorning.trim(),
           weatherAfternoon: input.weatherAfternoon.trim(),
           observation: input.observation?.trim() || null,
-          createdById: session.userId,
+          createdById: auth.session.userId,
           items: {
             create: input.items.map((item) => ({
               itemId: item.itemId,
@@ -128,7 +125,7 @@ export async function POST(request: Request) {
         const consumptionSummary = await consumeApprovedCompositionForProduction(tx, {
           productId: item.itemId,
           producedQuantity: quantity,
-          userId: session.userId,
+          userId: auth.session.userId,
           document: batchCode,
           justification: `Consumo automatico pela ficha tecnica no Diario de Producao ${log.logDate.toLocaleDateString("pt-BR")}.`
         });
@@ -143,7 +140,7 @@ export async function POST(request: Request) {
 
       await tx.auditLog.create({
         data: {
-          userId: session.userId,
+          userId: auth.session.userId,
           module: "Producao",
           action: AuditAction.CREATE,
           entity: "ProductionDailyLog",
@@ -168,16 +165,13 @@ export async function POST(request: Request) {
       return log;
     });
 
-    return NextResponse.json({ dailyLog: result }, { status: 201 });
+    return apiSuccess({ dailyLog: result }, { status: 201 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json(
-        { error: "Ja existe um diario de producao seu para esta data." },
-        { status: 409 }
-      );
+      return apiConflict("Ja existe um diario de producao seu para esta data.");
     }
 
     const message = error instanceof Error ? error.message : "Nao foi possivel registrar o diario de producao.";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return apiError(message, { status: 400 });
   }
 }

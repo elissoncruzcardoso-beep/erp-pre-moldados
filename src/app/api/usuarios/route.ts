@@ -1,33 +1,36 @@
-import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
+import {
+  apiConflict,
+  apiError,
+  apiSuccess,
+  apiValidationError,
+  handleApiError
+} from "@/lib/api/responses";
 import { hashPassword } from "@/lib/auth/password";
-import { getSession } from "@/lib/auth/session";
+import { requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
 import { userSchema } from "@/lib/validations/user";
 
 export async function POST(request: Request) {
-  const session = await getSession();
+  const auth = await requireApiSession({
+    permission: "usuarios.manage",
+    forbiddenMessage: "Voce nao tem permissao para criar usuarios."
+  });
 
-  if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
-  }
-
-  if (!session.permissions.includes("usuarios.manage")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para criar usuarios." }, { status: 403 });
-  }
+  if (auth.response) return auth.response;
 
   const body = await request.json().catch(() => null);
   const parsed = userSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Revise nome, e-mail, senha, perfil e status." }, { status: 400 });
+    return apiValidationError("Revise nome, e-mail, senha, perfil e status.", parsed.error.flatten());
   }
 
   const prisma = getPrisma();
   const role = await prisma.role.findUnique({ where: { id: parsed.data.roleId } });
 
   if (!role) {
-    return NextResponse.json({ error: "Perfil informado nao existe." }, { status: 400 });
+    return apiError("Perfil informado nao existe.", { status: 400 });
   }
 
   try {
@@ -46,7 +49,7 @@ export async function POST(request: Request) {
     await prisma.auditLog
       .create({
         data: {
-          userId: session.userId,
+          userId: auth.session.userId,
           module: "Usuarios",
           action: AuditAction.CREATE,
           entity: "User",
@@ -63,12 +66,12 @@ export async function POST(request: Request) {
       })
       .catch(() => null);
 
-    return NextResponse.json({ user }, { status: 201 });
+    return apiSuccess({ user }, { status: 201 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "Ja existe usuario com este e-mail." }, { status: 409 });
+      return apiConflict("Ja existe usuario com este e-mail.");
     }
 
-    return NextResponse.json({ error: "Nao foi possivel criar o usuario." }, { status: 500 });
+    return handleApiError(error, "Nao foi possivel criar o usuario.");
   }
 }

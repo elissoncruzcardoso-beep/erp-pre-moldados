@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Printer, ShoppingCart, Trash2 } from "lucide-react";
 import { SaleReceiptDocument } from "@/app/vendas/_components/sale-receipt-document";
+import { fetchJson, isApiRequestError } from "@/lib/api-client";
 import { formatMoney, formatQuantityWithUnit } from "@/lib/formatters";
 import { formatValidationError } from "@/lib/validations/client";
 import { stockSaleSchema } from "@/lib/validations/sales";
@@ -76,6 +77,10 @@ type SaleReceipt = {
     dueDateLabel: string;
     receivedAmount: string;
   } | null;
+};
+
+type SaleResponse = {
+  receipt: SaleReceipt;
 };
 
 type SaleLine = {
@@ -408,17 +413,20 @@ export function StockSaleForm({ items, warehouses, customers, paymentMethods, ba
     }
 
     setLoading(true);
-    const response = await fetch("/api/estoque/vendas", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(parsed.data)
-    });
-    const data = await response.json().catch(() => ({}));
-    setLoading(false);
+    let data: SaleResponse;
 
-    if (!response.ok) {
-      setError(data.error || "Nao foi possivel registrar a venda.");
+    try {
+      data = await fetchJson<SaleResponse>("/api/estoque/vendas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed.data)
+      }, "Nao foi possivel registrar a venda.");
+    } catch (requestError) {
+      setError(isApiRequestError(requestError) ? requestError.message : "Nao foi possivel registrar a venda.");
+      setLoading(false);
       return;
+    } finally {
+      setLoading(false);
     }
 
     setReceipt(data.receipt);

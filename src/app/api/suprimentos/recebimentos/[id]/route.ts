@@ -1,5 +1,13 @@
-import { NextResponse } from "next/server";
 import { AuditAction, Prisma, type Warehouse } from "@prisma/client";
+import {
+  apiConflict,
+  apiError,
+  apiForbidden,
+  apiSuccess,
+  apiUnauthorized,
+  apiValidationError,
+  handleApiError
+} from "@/lib/api/responses";
 import { getSession } from "@/lib/auth/session";
 import { normalizeManualCode } from "@/lib/codes/auto-code";
 import { getPrisma } from "@/lib/db/prisma";
@@ -74,18 +82,18 @@ export async function PATCH(request: Request, context: RouteContext) {
   const session = await getSession();
 
   if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
+    return apiUnauthorized();
   }
 
   if (!session.permissions.includes("suprimentos.manage")) {
-    return NextResponse.json({ error: "Voce nao tem permissao para editar notas fiscais." }, { status: 403 });
+    return apiForbidden("Voce nao tem permissao para editar notas fiscais.");
   }
 
   const body = await request.json().catch(() => null);
   const parsed = purchaseReceiptUpdateSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Revise os campos da nota fiscal." }, { status: 400 });
+    return apiValidationError("Revise os campos da nota fiscal.", parsed.error.flatten());
   }
 
   const { id } = await context.params;
@@ -156,21 +164,21 @@ export async function PATCH(request: Request, context: RouteContext) {
       return updated;
     });
 
-    return NextResponse.json({ receipt });
+    return apiSuccess({ receipt });
   } catch (error) {
     if (error instanceof Error && error.message === "RECEIPT_NOT_FOUND") {
-      return NextResponse.json({ error: "Nota fiscal/recebimento nao encontrado." }, { status: 404 });
+      return apiError("Nota fiscal/recebimento nao encontrado.", { status: 404 });
     }
 
     if (error instanceof Error && error.message === "RECEIPT_HAS_PAYABLE") {
-      return NextResponse.json({ error: "Nota fiscal com conta a pagar nao pode ser editada." }, { status: 409 });
+      return apiConflict("Nota fiscal com conta a pagar nao pode ser editada.");
     }
 
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "Ja existe recebimento com este numero." }, { status: 409 });
+      return apiConflict("Ja existe recebimento com este numero.");
     }
 
-    return NextResponse.json({ error: "Nao foi possivel editar a nota fiscal." }, { status: 500 });
+    return handleApiError(error, "Nao foi possivel editar a nota fiscal.");
   }
 }
 
@@ -178,11 +186,11 @@ export async function DELETE(_request: Request, context: RouteContext) {
   const session = await getSession();
 
   if (!session) {
-    return NextResponse.json({ error: "Sessao expirada. Entre novamente." }, { status: 401 });
+    return apiUnauthorized();
   }
 
   if (!session.permissions.includes("suprimentos.manage") || !session.permissions.includes("estoque.move")) {
-    return NextResponse.json({ error: "Voce precisa de permissao de Suprimentos e Estoque para excluir nota fiscal." }, { status: 403 });
+    return apiForbidden("Voce precisa de permissao de Suprimentos e Estoque para excluir nota fiscal.");
   }
 
   const { id } = await context.params;
@@ -260,20 +268,20 @@ export async function DELETE(_request: Request, context: RouteContext) {
       });
     });
 
-    return NextResponse.json({ ok: true });
+    return apiSuccess({});
   } catch (error) {
     if (error instanceof Error && error.message === "RECEIPT_NOT_FOUND") {
-      return NextResponse.json({ error: "Nota fiscal/recebimento nao encontrado." }, { status: 404 });
+      return apiError("Nota fiscal/recebimento nao encontrado.", { status: 404 });
     }
 
     if (error instanceof Error && error.message === "RECEIPT_HAS_PAYABLE") {
-      return NextResponse.json({ error: "Nota fiscal com conta a pagar nao pode ser excluida." }, { status: 409 });
+      return apiConflict("Nota fiscal com conta a pagar nao pode ser excluida.");
     }
 
     if (error instanceof Error && error.message === "STOCK_INSUFFICIENT") {
-      return NextResponse.json({ error: "Saldo insuficiente para estornar esta nota fiscal." }, { status: 409 });
+      return apiConflict("Saldo insuficiente para estornar esta nota fiscal.");
     }
 
-    return NextResponse.json({ error: "Nao foi possivel excluir a nota fiscal." }, { status: 500 });
+    return handleApiError(error, "Nao foi possivel excluir a nota fiscal.");
   }
 }

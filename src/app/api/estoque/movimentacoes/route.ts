@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
 import { AuditAction } from "@prisma/client";
+import { apiError, apiSuccess, apiValidationError, handleApiError } from "@/lib/api/responses";
 import { requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
 import {
@@ -24,17 +24,17 @@ export async function POST(request: Request) {
   const parsed = stockMovementSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Revise os campos da movimentacao." }, { status: 400 });
+    return apiValidationError("Revise os campos da movimentacao.", parsed.error.flatten());
   }
 
   const input = parsed.data;
 
   if ((negativeStockMovementTypes.has(input.type) || input.type === "RESERVA" || input.type === "TRANSFERENCIA") && !input.originWarehouseId) {
-    return NextResponse.json({ error: "Informe o deposito de origem." }, { status: 400 });
+    return apiError("Informe o deposito de origem.");
   }
 
   if ((positiveStockMovementTypes.has(input.type) || input.type === "TRANSFERENCIA") && !input.targetWarehouseId) {
-    return NextResponse.json({ error: "Informe o deposito de destino." }, { status: 400 });
+    return apiError("Informe o deposito de destino.");
   }
 
   const prisma = getPrisma();
@@ -111,10 +111,8 @@ export async function POST(request: Request) {
       return movement;
     });
 
-    return NextResponse.json({ movement: result }, { status: 201 });
+    return apiSuccess({ movement: result }, { status: 201 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Nao foi possivel registrar a movimentacao.";
-
-    return NextResponse.json({ error: message }, { status: 400 });
+    return handleApiError(error, "Nao foi possivel registrar a movimentacao.");
   }
 }

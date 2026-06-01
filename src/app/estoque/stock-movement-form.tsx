@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowDownUp } from "lucide-react";
+import { fetchJson, isApiRequestError } from "@/lib/api-client";
 import { formatValidationError } from "@/lib/validations/client";
 import { stockMovementSchema } from "@/lib/validations/stock";
 
@@ -68,17 +69,19 @@ export function StockMovementForm({ items, warehouses }: StockMovementFormProps)
     }
 
     setLoading(true);
-    const response = await fetch("/api/estoque/movimentacoes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(parsed.data)
-    });
-    const data = await response.json().catch(() => ({}));
-    setLoading(false);
 
-    if (!response.ok) {
-      setError(data.error || "Nao foi possivel registrar a movimentacao.");
+    try {
+      await fetchJson("/api/estoque/movimentacoes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed.data)
+      }, "Nao foi possivel registrar a movimentacao.");
+    } catch (requestError) {
+      setError(isApiRequestError(requestError) ? requestError.message : "Nao foi possivel registrar a movimentacao.");
+      setLoading(false);
       return;
+    } finally {
+      setLoading(false);
     }
 
     event.currentTarget.reset();

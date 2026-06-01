@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CircleDollarSign } from "lucide-react";
+import { fetchJson, isApiRequestError } from "@/lib/api-client";
 import { formatValidationError } from "@/lib/validations/client";
 import { accountReceiptSchema } from "@/lib/validations/purchase";
 
@@ -38,17 +39,19 @@ export function AccountReceiptForm({ receivables }: Props) {
     }
 
     setLoading(true);
-    const response = await fetch("/api/financeiro/recebimentos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(parsed.data)
-    });
-    const data = await response.json().catch(() => null);
-    setLoading(false);
 
-    if (!response.ok) {
-      setError(data?.error || "Nao foi possivel registrar o recebimento.");
+    try {
+      await fetchJson("/api/financeiro/recebimentos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed.data)
+      }, "Nao foi possivel registrar o recebimento.");
+    } catch (requestError) {
+      setError(isApiRequestError(requestError) ? requestError.message : "Nao foi possivel registrar o recebimento.");
+      setLoading(false);
       return;
+    } finally {
+      setLoading(false);
     }
 
     setSuccess("Recebimento registrado e titulo atualizado.");
