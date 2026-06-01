@@ -70,16 +70,26 @@ export function CompositionForm({ products, materials, mode = "create", composit
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const selectedProduct = products.find((product) => product.id === productId);
-  const suggestedCode = useMemo(() => makeCompositionCode(selectedProduct), [selectedProduct]);
-  const compositionTotal = lines.reduce((total, line) => {
-    const material = materials.find((item) => item.id === line.itemId);
-    const quantity = Number(line.quantity || 0);
-    const lossPercent = Number(line.lossPercent || 0);
-    const unitCost = material?.standardCost || 0;
+  const productsById = useMemo(() => {
+    return new Map(products.map((product) => [product.id, product]));
+  }, [products]);
 
-    return total + quantity * (1 + lossPercent / 100) * unitCost;
-  }, 0);
+  const materialsById = useMemo(() => {
+    return new Map(materials.map((material) => [material.id, material]));
+  }, [materials]);
+
+  const selectedProduct = productsById.get(productId);
+  const suggestedCode = useMemo(() => makeCompositionCode(selectedProduct), [selectedProduct]);
+  const compositionTotal = useMemo(() => {
+    return lines.reduce((total, line) => {
+      const material = materialsById.get(line.itemId);
+      const quantity = Number(line.quantity || 0);
+      const lossPercent = Number(line.lossPercent || 0);
+      const unitCost = material?.standardCost || 0;
+
+      return total + quantity * (1 + lossPercent / 100) * unitCost;
+    }, 0);
+  }, [lines, materialsById]);
 
   function updateLine(index: number, field: keyof CompositionLine, value: string) {
     setLines((current) =>
@@ -163,7 +173,7 @@ export function CompositionForm({ products, materials, mode = "create", composit
               value={productId}
               onChange={(event) => {
                 const nextProductId = event.target.value;
-                const nextProduct = products.find((product) => product.id === nextProductId);
+                const nextProduct = productsById.get(nextProductId);
                 setProductId(nextProductId);
                 if (!isEdit) {
                   setCuringHours(String(nextProduct?.curingHours ?? 24));
@@ -243,7 +253,7 @@ export function CompositionForm({ products, materials, mode = "create", composit
           </div>
 
           {lines.map((line, index) => {
-            const material = materials.find((item) => item.id === line.itemId);
+            const material = materialsById.get(line.itemId);
             const quantity = Number(line.quantity || 0);
             const lossPercent = Number(line.lossPercent || 0);
             const unitCost = material?.standardCost || 0;

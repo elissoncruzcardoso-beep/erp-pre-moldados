@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { AuditAction, Prisma } from "@prisma/client";
+import { AuditAction } from "@prisma/client";
 import { z } from "zod";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
+import { increaseStockBalance, toDecimal } from "@/lib/stock/transactions";
 
 const updateSaleSchema = z.object({
   customerName: z.string().trim().min(2).max(120),
@@ -82,29 +83,6 @@ function parseRestockLines(value: unknown, fallback: RestockLine): RestockLine[]
   return parsed.length > 0 ? parsed : [fallback];
 }
 
-async function addBalance(
-  tx: ReturnType<typeof getPrisma>,
-  itemId: string,
-  warehouseId: string,
-  lotId: string | null,
-  quantity: Prisma.Decimal
-) {
-  const current = await tx.stockBalance.findFirst({
-    where: { itemId, warehouseId, lotId }
-  });
-
-  if (current) {
-    return tx.stockBalance.update({
-      where: { id: current.id },
-      data: { quantity: current.quantity.plus(quantity) }
-    });
-  }
-
-  return tx.stockBalance.create({
-    data: { itemId, warehouseId, lotId, quantity }
-  });
-}
-
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
   const session = await getSession();
 
@@ -126,8 +104,8 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
 
   const input = parsed.data;
   const prisma = getPrisma();
-  const unitPrice = new Prisma.Decimal(input.unitPrice);
-  const discount = new Prisma.Decimal(input.discount);
+  const unitPrice = toDecimal(input.unitPrice);
+  const discount = toDecimal(input.discount);
 
   try {
     const result = await prisma.$transaction(async (tx) => {
@@ -269,10 +247,6 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
 
       const receivable = sale.accountsReceivable[0];
 
-      if (receivable && receivable.receipts.length > 0) {
-        throw new Error("Este recibo possui baixa financeira. Cancele ou estorne o recebimento antes de cancelar a venda.");
-      }
-
       const restockLines = parseRestockLines(sale.consumedLots, {
         itemId: sale.itemId,
         warehouseId: sale.warehouseId,
@@ -285,21 +259,21 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
 
       for (const restockLine of restockLines) {
         if (restockLine.consumedLots.length === 0) {
-          await addBalance(
-            tx as ReturnType<typeof getPrisma>,
+          await increaseStockBalance(
+            tx,
             restockLine.itemId,
             restockLine.warehouseId,
-            null,
-            new Prisma.Decimal(restockLine.quantity)
+            toDecimal(restockLine.quantity),
+            null
           );
         } else {
           for (const consumedLot of restockLine.consumedLots) {
-            await addBalance(
-              tx as ReturnType<typeof getPrisma>,
+            await increaseStockBalance(
+              tx,
               restockLine.itemId,
               restockLine.warehouseId,
-              consumedLot.lotId,
-              new Prisma.Decimal(consumedLot.quantity)
+              toDecimal(consumedLot.quantity),
+              consumedLot.lotId
             );
           }
         }
@@ -308,9 +282,9 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
           data: {
             type: "ESTORNO",
             itemId: restockLine.itemId,
-            quantity: new Prisma.Decimal(restockLine.quantity),
-            unitCost: new Prisma.Decimal(restockLine.unitPrice),
-            totalCost: new Prisma.Decimal(restockLine.finalTotal),
+            quantity: toDecimal(restockLine.quantity),
+            unitCost: toDecimal(restockLine.unitPrice),
+            totalCost: toDecimal(restockLine.finalTotal),
             targetWarehouseId: restockLine.warehouseId,
             userId: session.userId,
             document: `${sale.number}-EST`,
@@ -335,6 +309,8 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
           where: { id: receivable.id },
           data: {
             status: "CANCELADO",
+            receivedAmount: toDecimal(0),
+            receivedAt: null,
             note: parsed.data.reason || `Cancelado junto com o recibo ${sale.number}`
           }
         });
@@ -349,10 +325,27 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
           entityId: id,
           previousValue: {
             status: sale.status,
-            number: sale.number
+            number: sale.number,
+            accountReceivable: receivable
+              ? {
+                  id: receivable.id,
+                  number: receivable.number,
+                  status: receivable.status,
+                  receivedAmount: receivable.receivedAmount.toString(),
+                  receiptCount: receivable.receipts.length
+                }
+              : null
           },
           newValue: {
             status: updated.status,
+            accountReceivable: receivable
+              ? {
+                  id: receivable.id,
+                  number: receivable.number,
+                  status: "CANCELADO",
+                  receivedAmount: "0"
+                }
+              : null,
             reversalMovementIds: reversalIds
           },
           justification: parsed.data.reason || "Cancelamento de recibo com estorno de estoque"

@@ -1,5 +1,7 @@
 import { FileSearch, Trophy } from "lucide-react";
+import { PaginationControls } from "@/components/pagination-controls";
 import { getPrisma } from "@/lib/db/prisma";
+import { getPaginationMeta, parsePagination, type SearchParamsLike } from "@/lib/pagination";
 import { SuprimentosNav } from "../_components/suprimentos-nav";
 import {
   decimalToNumber,
@@ -15,10 +17,25 @@ import { QuoteTabs } from "./quote-tabs";
 
 export const dynamic = "force-dynamic";
 
-export default async function CotacoesPage() {
+type CotacoesPageProps = {
+  searchParams?: Promise<SearchParamsLike>;
+};
+
+export default async function CotacoesPage({ searchParams }: CotacoesPageProps) {
   await requireSuprimentosSession("/suprimentos/cotacoes");
   const prisma = getPrisma();
-  const [requests, suppliers, quotes] = await Promise.all([
+  const params = (await searchParams) || {};
+  const quotePagination = parsePagination(params, {
+    pageParam: "cotacoesPage",
+    defaultPageSize: 12,
+    maxPageSize: 60
+  });
+  const mapPagination = parsePagination(params, {
+    pageParam: "mapaPage",
+    defaultPageSize: 6,
+    maxPageSize: 30
+  });
+  const [requests, suppliers, quotes, quotesCount, mapQuotes] = await Promise.all([
     prisma.purchaseRequest.findMany({
       where: {
         status: { in: ["ABERTA", "EM_COTACAO"] }
@@ -65,7 +82,36 @@ export default async function CotacoesPage() {
         createdBy: true
       },
       orderBy: { createdAt: "desc" },
-      take: 30
+      skip: quotePagination.skip,
+      take: quotePagination.pageSize
+    }),
+    prisma.purchaseQuote.count(),
+    prisma.purchaseQuote.findMany({
+      include: {
+        supplier: true,
+        items: {
+          include: {
+            supplier: true,
+            item: {
+              include: { unit: true }
+            }
+          }
+        },
+        purchaseOrder: true,
+        purchaseRequest: {
+          include: {
+            items: {
+              include: {
+                item: {
+                  include: { unit: true }
+                }
+              }
+            }
+          }
+        },
+        createdBy: true
+      },
+      orderBy: { createdAt: "desc" }
     })
   ]);
 
@@ -122,12 +168,12 @@ export default async function CotacoesPage() {
     };
   };
   const quoteGroups = Array.from(
-    quotes.reduce((map, quote) => {
+    mapQuotes.reduce((map, quote) => {
       const current = map.get(quote.purchaseRequestId) || [];
       current.push(quote);
       map.set(quote.purchaseRequestId, current);
       return map;
-    }, new Map<string, typeof quotes>())
+    }, new Map<string, typeof mapQuotes>())
   )
     .map(([purchaseRequestId, groupQuotes]) => {
       const winner = groupQuotes.reduce((best, current) => {
@@ -166,6 +212,12 @@ export default async function CotacoesPage() {
       };
     })
     .sort((a, b) => b.quotes[0].createdAt.getTime() - a.quotes[0].createdAt.getTime());
+  const quotePaginationMeta = getPaginationMeta(quotesCount, quotePagination.page, quotePagination.pageSize);
+  const mapPaginationMeta = getPaginationMeta(quoteGroups.length, mapPagination.page, mapPagination.pageSize);
+  const paginatedQuoteGroups = quoteGroups.slice(
+    (mapPaginationMeta.page - 1) * mapPaginationMeta.pageSize,
+    mapPaginationMeta.page * mapPaginationMeta.pageSize
+  );
 
   return (
     <>
@@ -177,7 +229,7 @@ export default async function CotacoesPage() {
         </div>
         <span className="status-pill">
           <FileSearch size={16} />
-          {quotes.length} cotacoes
+          {quotesCount} cotacoes
         </span>
       </section>
 
@@ -205,7 +257,7 @@ export default async function CotacoesPage() {
               <span className="badge blue">{quoteGroups.length} solicitacoes cotadas</span>
             </div>
 
-            {quoteGroups.map((group) => (
+            {paginatedQuoteGroups.map((group) => (
               <article className="comparison-map-card" key={group.purchaseRequestId}>
                 <div className="comparison-map-head">
                   <div>
@@ -354,6 +406,12 @@ export default async function CotacoesPage() {
                 <p className="metric-sub">Crie uma cotacao com dois ou tres fornecedores para liberar a analise de vencedor.</p>
               </article>
             ) : null}
+            <PaginationControls
+              pathname="/suprimentos/cotacoes"
+              params={params}
+              meta={mapPaginationMeta}
+              pageParam="mapaPage"
+            />
           </section>
         }
         list={
@@ -363,7 +421,7 @@ export default async function CotacoesPage() {
                 <p className="eyebrow">Cotacoes</p>
                 <h2>Lista e ajustes</h2>
               </div>
-              <span className="badge blue">{quotes.length} registros</span>
+              <span className="badge blue">{quotesCount} registros</span>
             </div>
             <div className="supply-record-stack">
               {quotes.map((quote) => {
@@ -430,6 +488,12 @@ export default async function CotacoesPage() {
                 </article>
               ) : null}
             </div>
+            <PaginationControls
+              pathname="/suprimentos/cotacoes"
+              params={params}
+              meta={quotePaginationMeta}
+              pageParam="cotacoesPage"
+            />
           </section>
         }
       />

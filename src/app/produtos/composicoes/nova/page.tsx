@@ -2,17 +2,10 @@ import { redirect } from "next/navigation";
 import { ArrowLeft, ClipboardList, ShieldCheck } from "lucide-react";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
+import { decimalToNumber } from "@/lib/formatters";
 import { CompositionForm } from "../../composition-form";
 
 export const dynamic = "force-dynamic";
-
-function decimalToNumber(value: unknown) {
-  if (value && typeof value === "object" && "toString" in value) {
-    return Number(value.toString());
-  }
-
-  return Number(value ?? 0);
-}
 
 export default async function NovaComposicaoPage() {
   const session = await getSession();

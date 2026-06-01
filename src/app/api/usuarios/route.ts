@@ -1,18 +1,9 @@
 import { NextResponse } from "next/server";
-import { AuditAction, Prisma, UserStatus } from "@prisma/client";
-import { z } from "zod";
+import { AuditAction, Prisma } from "@prisma/client";
 import { hashPassword } from "@/lib/auth/password";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
-
-const userSchema = z.object({
-  name: z.string().trim().min(3).max(120),
-  email: z.string().trim().email().max(160),
-  password: z.string().min(8).max(120),
-  roleId: z.string().min(1),
-  department: z.string().trim().max(80).optional().nullable(),
-  status: z.nativeEnum(UserStatus).default(UserStatus.ACTIVE)
-});
+import { userSchema } from "@/lib/validations/user";
 
 export async function POST(request: Request) {
   const session = await getSession();

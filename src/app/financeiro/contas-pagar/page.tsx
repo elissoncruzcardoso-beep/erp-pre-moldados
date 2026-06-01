@@ -1,9 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AccountPayableStatus, Prisma } from "@prisma/client";
 import { ArrowDownCircle, ArrowLeft, Banknote, Filter, ShieldCheck } from "lucide-react";
+import { PaginationControls } from "@/components/pagination-controls";
 import { PrototypeAction } from "@/components/prototype-action";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
+import { decimalToNumber, formatMoney } from "@/lib/formatters";
+import { getPaginationMeta, parsePagination, type SearchParamsLike } from "@/lib/pagination";
 import { AccountPayableForm } from "../account-payable-form";
 import { AccountPaymentForm } from "../account-payment-form";
 import { FinanceModuleTabs } from "../_components/finance-module-tabs";
@@ -17,15 +21,6 @@ const payableStatusLabels: Record<string, string> = {
   CANCELADO: "Cancelado"
 };
 
-function decimalToNumber(value: unknown) {
-  if (value && typeof value === "object" && "toString" in value) return Number(value.toString());
-  return Number(value ?? 0);
-}
-
-function formatCurrency(value: unknown) {
-  return decimalToNumber(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
 function badgeForStatus(status: string) {
   if (status === "PAGO") return "badge green";
   if (status === "CANCELADO") return "badge red";
@@ -33,14 +28,29 @@ function badgeForStatus(status: string) {
   return "badge orange";
 }
 
-export default async function ContasPagarPage() {
+type PageProps = {
+  searchParams?: Promise<SearchParamsLike>;
+};
+
+export default async function ContasPagarPage({ searchParams }: PageProps) {
   const session = await getSession();
 
   if (!session) redirect("/login?next=/financeiro/contas-pagar");
   if (!session.permissions.includes("financeiro.view")) redirect("/dashboard");
 
+  const params = (await searchParams) || {};
+  const pagination = parsePagination(params, {
+    pageParam: "pagarPage",
+    defaultPageSize: 12,
+    maxPageSize: 80
+  });
   const prisma = getPrisma();
-  const [payables, pendingReceipts, payments] = await Promise.all([
+  const openPayablesWhere: Prisma.AccountPayableWhereInput = {
+    status: { in: [AccountPayableStatus.ABERTO, AccountPayableStatus.PROGRAMADO] }
+  };
+  const next30 = new Date();
+  next30.setDate(next30.getDate() + 30);
+  const [payables, payablesCount, payableStats, dueNext30Stats, payableOptionsSource, pendingReceipts, payments] = await Promise.all([
     prisma.accountPayable.findMany({
       include: {
         supplier: true,
@@ -54,7 +64,27 @@ export default async function ContasPagarPage() {
         createdBy: true
       },
       orderBy: { dueDate: "asc" },
-      take: 40
+      skip: pagination.skip,
+      take: pagination.pageSize
+    }),
+    prisma.accountPayable.count(),
+    prisma.accountPayable.aggregate({
+      where: openPayablesWhere,
+      _count: { _all: true },
+      _sum: { amount: true }
+    }),
+    prisma.accountPayable.aggregate({
+      where: {
+        ...openPayablesWhere,
+        dueDate: { lte: next30 }
+      },
+      _sum: { amount: true }
+    }),
+    prisma.accountPayable.findMany({
+      where: openPayablesWhere,
+      include: { supplier: true, payments: true },
+      orderBy: { dueDate: "asc" },
+      take: 100
     }),
     prisma.purchaseReceipt.findMany({
       where: {
@@ -75,13 +105,10 @@ export default async function ContasPagarPage() {
     })
   ]);
 
-  const openPayables = payables.filter((payable) => payable.status === "ABERTO" || payable.status === "PROGRAMADO");
-  const payableTotal = openPayables.reduce((sum, payable) => sum + decimalToNumber(payable.amount), 0);
+  const payableTotal = decimalToNumber(payableStats._sum.amount);
   const paidTotal = payments.reduce((sum, payment) => sum + decimalToNumber(payment.amount), 0);
-  const next30 = new Date();
-  next30.setDate(next30.getDate() + 30);
-  const dueNext30 = openPayables.filter((payable) => payable.dueDate <= next30).reduce((sum, payable) => sum + decimalToNumber(payable.amount), 0);
-  const payableOptions = openPayables.map((payable) => {
+  const dueNext30 = decimalToNumber(dueNext30Stats._sum.amount);
+  const payableOptions = payableOptionsSource.map((payable) => {
     const paid = payable.payments.reduce((sum, payment) => sum + decimalToNumber(payment.amount), 0);
     return {
       id: payable.id,
@@ -90,6 +117,7 @@ export default async function ContasPagarPage() {
       remainingAmount: Math.max(decimalToNumber(payable.amount) - paid, 0)
     };
   }).filter((payable) => payable.remainingAmount > 0);
+  const paginationMeta = getPaginationMeta(payablesCount, pagination.page, pagination.pageSize);
 
   return (
     <>
@@ -110,17 +138,17 @@ export default async function ContasPagarPage() {
       <section className="product-metric-grid finance-metric-grid">
         <article className="product-metric-card accent-orange">
           <div className="metric-top"><span className="mono">Aberto</span><Banknote size={22} /></div>
-          <strong className="metric-value">{formatCurrency(payableTotal)}</strong>
-          <span className="metric-sub">{openPayables.length} titulo(s) em aberto</span>
+          <strong className="metric-value">{formatMoney(payableTotal)}</strong>
+          <span className="metric-sub">{payableStats._count._all} titulo(s) em aberto</span>
         </article>
         <article className="product-metric-card accent-blue">
           <div className="metric-top"><span className="mono">Pago</span><ArrowDownCircle size={22} /></div>
-          <strong className="metric-value">{formatCurrency(paidTotal)}</strong>
+          <strong className="metric-value">{formatMoney(paidTotal)}</strong>
           <span className="metric-sub">{payments.length} baixa(s) recentes</span>
         </article>
         <article className="product-metric-card accent-orange">
           <div className="metric-top"><span className="mono">Proximos 30 dias</span><Banknote size={22} /></div>
-          <strong className="metric-value">{formatCurrency(dueNext30)}</strong>
+          <strong className="metric-value">{formatMoney(dueNext30)}</strong>
           <span className="metric-sub">Vencimentos em curto prazo</span>
         </article>
         <article className="product-metric-card accent-gray">
@@ -166,7 +194,7 @@ export default async function ContasPagarPage() {
         <div className="table-shell product-table-shell">
           <div className="table-header">
             <div><p className="eyebrow">Saidas</p><h2>Contas a pagar reais</h2></div>
-            <span className="badge blue">{payables.length} registros</span>
+            <span className="badge blue">{payablesCount} registros</span>
           </div>
           <div className="table-scroll">
             <table className="technical-items-table finance-data-table">
@@ -187,8 +215,8 @@ export default async function ContasPagarPage() {
                     <td className="mono">{payable.number}</td>
                     <td><strong>{payable.supplier.name}</strong><small className="product-detail">{payable.documentNumber || "-"}</small></td>
                     <td><span className="mono">{payable.purchaseReceipt.purchaseOrder.number}</span><small className="product-detail">{payable.purchaseReceipt.purchaseOrderItem.item.description}</small></td>
-                    <td className="mono number-cell">{formatCurrency(payable.amount)}</td>
-                    <td className="mono number-cell">{formatCurrency(payable.paidAmount)}</td>
+                    <td className="mono number-cell">{formatMoney(payable.amount)}</td>
+                    <td className="mono number-cell">{formatMoney(payable.paidAmount)}</td>
                     <td>{payable.dueDate.toLocaleDateString("pt-BR")}</td>
                     <td><span className={badgeForStatus(payable.status)}>{payableStatusLabels[payable.status] || payable.status}</span></td>
                   </tr>
@@ -197,6 +225,12 @@ export default async function ContasPagarPage() {
               </tbody>
             </table>
           </div>
+          <PaginationControls
+            pathname="/financeiro/contas-pagar"
+            params={params}
+            meta={paginationMeta}
+            pageParam="pagarPage"
+          />
         </div>
       </section>
     </>

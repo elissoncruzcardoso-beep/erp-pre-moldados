@@ -1,33 +1,56 @@
 import { FileText } from "lucide-react";
+import { PaginationControls } from "@/components/pagination-controls";
 import { getPrisma } from "@/lib/db/prisma";
+import { getPaginationMeta, parsePagination, type SearchParamsLike } from "@/lib/pagination";
 import { SuprimentosNav } from "../_components/suprimentos-nav";
 import { decimalToNumber, formatCurrency, orderStatusLabels, requireSuprimentosSession } from "../_lib";
 import { PurchaseOrderActions } from "../purchase-order-actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function PedidosPage() {
+type PedidosPageProps = {
+  searchParams?: Promise<SearchParamsLike>;
+};
+
+export default async function PedidosPage({ searchParams }: PedidosPageProps) {
   await requireSuprimentosSession("/suprimentos/pedidos");
-  const prisma = getPrisma();
-  const orders = await prisma.purchaseOrder.findMany({
-    include: {
-      supplier: true,
-      purchaseQuote: true,
-      purchaseRequest: true,
-      items: {
-        include: {
-          item: {
-            include: { unit: true }
-          },
-          receipts: true
-        }
-      },
-      createdBy: true
-    },
-    orderBy: { createdAt: "desc" },
-    take: 40
+  const params = (await searchParams) || {};
+  const pagination = parsePagination(params, {
+    pageParam: "pedidosPage",
+    defaultPageSize: 12,
+    maxPageSize: 60
   });
-  const issuedOrders = orders.filter((order) => order.status === "EMITIDO" || order.status === "ENVIADO").length;
+  const prisma = getPrisma();
+  const [orders, ordersCount, issuedOrders] = await Promise.all([
+    prisma.purchaseOrder.findMany({
+      include: {
+        supplier: true,
+        purchaseQuote: true,
+        purchaseRequest: true,
+        items: {
+          include: {
+            item: {
+              include: { unit: true }
+            },
+            receipts: true
+          },
+        },
+        createdBy: true
+      },
+      orderBy: { createdAt: "desc" },
+      skip: pagination.skip,
+      take: pagination.pageSize
+    }),
+    prisma.purchaseOrder.count(),
+    prisma.purchaseOrder.count({
+      where: {
+        status: {
+          in: ["EMITIDO", "ENVIADO"]
+        }
+      }
+    })
+  ]);
+  const paginationMeta = getPaginationMeta(ordersCount, pagination.page, pagination.pageSize);
 
   return (
     <>
@@ -51,7 +74,7 @@ export default async function PedidosPage() {
             <p className="eyebrow">Pedidos de compra</p>
             <h2>Pedidos gerados por cotacao aprovada</h2>
           </div>
-          <span className="badge blue">{orders.length} registros</span>
+          <span className="badge blue">{ordersCount} registros</span>
         </div>
         <div className="supply-record-stack">
           {orders.map((order) => {
@@ -131,6 +154,12 @@ export default async function PedidosPage() {
             </article>
           ) : null}
         </div>
+        <PaginationControls
+          pathname="/suprimentos/pedidos"
+          params={params}
+          meta={paginationMeta}
+          pageParam="pedidosPage"
+        />
       </section>
     </>
   );

@@ -3,6 +3,8 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Save } from "lucide-react";
+import { formatValidationError } from "@/lib/validations/client";
+import { userSchema } from "@/lib/validations/user";
 
 type RoleOption = {
   id: string;
@@ -23,21 +25,29 @@ export function UserForm({ roles }: UserFormProps) {
     event.preventDefault();
     setError("");
     setMessage("");
-    setLoading(true);
 
     const form = event.currentTarget;
     const formData = new FormData(form);
+    const payload = {
+      name: formData.get("name"),
+      email: formData.get("email"),
+      password: formData.get("password"),
+      roleId: formData.get("roleId"),
+      department: formData.get("department") || undefined,
+      status: formData.get("status") || "ACTIVE"
+    };
+    const parsed = userSchema.safeParse(payload);
+
+    if (!parsed.success) {
+      setError(formatValidationError(parsed.error));
+      return;
+    }
+
+    setLoading(true);
     const response = await fetch("/api/usuarios", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: formData.get("name"),
-        email: formData.get("email"),
-        password: formData.get("password"),
-        roleId: formData.get("roleId"),
-        department: formData.get("department") || undefined,
-        status: formData.get("status") || "ACTIVE"
-      })
+      body: JSON.stringify(parsed.data)
     });
     const data = await response.json().catch(() => ({}));
     setLoading(false);

@@ -2,24 +2,13 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowDownUp, ClipboardCheck, PackageSearch, ReceiptText, ScanLine } from "lucide-react";
 import { getSession } from "@/lib/auth/session";
+import { PaginationControls } from "@/components/pagination-controls";
 import { getPrisma } from "@/lib/db/prisma";
+import { decimalToNumber, formatQuantity } from "@/lib/formatters";
+import { getPaginationMeta, parsePagination, type SearchParamsLike } from "@/lib/pagination";
 import { StockMovementForm } from "./stock-movement-form";
 
 export const dynamic = "force-dynamic";
-
-function decimalToNumber(value: unknown) {
-  if (value && typeof value === "object" && "toString" in value) {
-    return Number(value.toString());
-  }
-
-  return Number(value ?? 0);
-}
-
-function formatQuantity(value: unknown) {
-  return decimalToNumber(value).toLocaleString("pt-BR", {
-    maximumFractionDigits: 3
-  });
-}
 
 const movementLabels: Record<string, string> = {
   ENTRADA_COMPRA: "Entrada compra",
@@ -32,7 +21,11 @@ const movementLabels: Record<string, string> = {
   ESTORNO: "Estorno"
 };
 
-export default async function EstoquePage() {
+type EstoquePageProps = {
+  searchParams?: Promise<SearchParamsLike>;
+};
+
+export default async function EstoquePage({ searchParams }: EstoquePageProps) {
   const session = await getSession();
 
   if (!session) {
@@ -44,7 +37,19 @@ export default async function EstoquePage() {
   }
 
   const prisma = getPrisma();
-  const [items, warehouses, balances, movements, lotsCount] = await Promise.all([
+  const params = (await searchParams) || {};
+  const balancePagination = parsePagination(params, {
+    pageParam: "saldosPage",
+    defaultPageSize: 12,
+    maxPageSize: 60
+  });
+  const movementPagination = parsePagination(params, {
+    pageParam: "movimentosPage",
+    defaultPageSize: 12,
+    maxPageSize: 60
+  });
+
+  const [items, warehouses, balances, movements, movementsCount, lotsCount] = await Promise.all([
     prisma.item.findMany({
       where: {
         active: true,
@@ -83,8 +88,10 @@ export default async function EstoquePage() {
         user: true
       },
       orderBy: { createdAt: "desc" },
-      take: 12
+      skip: movementPagination.skip,
+      take: movementPagination.pageSize
     }),
+    prisma.stockMovement.count(),
     prisma.lot.count()
   ]);
 
@@ -133,6 +140,12 @@ export default async function EstoquePage() {
   const reservedTotal = consolidatedBalances.reduce((total, balance) => total + balance.reserved, 0);
   const stockTotal = consolidatedBalances.reduce((total, balance) => total + balance.quantity, 0);
   const reservedPercent = stockTotal > 0 ? Math.round((reservedTotal / stockTotal) * 100) : 0;
+  const balancePaginationMeta = getPaginationMeta(consolidatedBalances.length, balancePagination.page, balancePagination.pageSize);
+  const movementPaginationMeta = getPaginationMeta(movementsCount, movementPagination.page, movementPagination.pageSize);
+  const paginatedBalances = consolidatedBalances.slice(
+    (balancePaginationMeta.page - 1) * balancePaginationMeta.pageSize,
+    balancePaginationMeta.page * balancePaginationMeta.pageSize
+  );
 
   return (
     <>
@@ -175,8 +188,8 @@ export default async function EstoquePage() {
         </article>
         <article className="metric-card accent-blue span-3">
           <div className="metric-top"><span className="mono">Movimentos</span><ClipboardCheck size={22} /></div>
-          <strong className="metric-value">{movements.length}</strong>
-          <span className="metric-sub">Ultimos registros de estoque</span>
+          <strong className="metric-value">{movementsCount}</strong>
+          <span className="metric-sub">Registros de estoque</span>
         </article>
       </section>
 
@@ -201,7 +214,7 @@ export default async function EstoquePage() {
               </tr>
             </thead>
             <tbody>
-              {consolidatedBalances.map((balance) => {
+              {paginatedBalances.map((balance) => {
                 const minimumStock = decimalToNumber(balance.item.minimumStock);
                 const isCritical = minimumStock > 0 && balance.quantity <= minimumStock;
 
@@ -223,13 +236,19 @@ export default async function EstoquePage() {
                   </tr>
                 );
               })}
-              {consolidatedBalances.length === 0 ? (
+              {paginatedBalances.length === 0 ? (
                 <tr>
                   <td colSpan={6}>Nenhum saldo registrado. Use o formulario para fazer a primeira entrada.</td>
                 </tr>
               ) : null}
             </tbody>
           </table>
+          <PaginationControls
+            pathname="/estoque"
+            params={params}
+            meta={balancePaginationMeta}
+            pageParam="saldosPage"
+          />
         </section>
 
         <aside className="product-side-stack span-4">
@@ -290,6 +309,12 @@ export default async function EstoquePage() {
               ) : null}
             </tbody>
           </table>
+          <PaginationControls
+            pathname="/estoque"
+            params={params}
+            meta={movementPaginationMeta}
+            pageParam="movimentosPage"
+          />
         </section>
       </section>
     </>

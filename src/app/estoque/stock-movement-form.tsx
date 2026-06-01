@@ -3,6 +3,8 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowDownUp } from "lucide-react";
+import { formatValidationError } from "@/lib/validations/client";
+import { stockMovementSchema } from "@/lib/validations/stock";
 
 type StockItem = {
   id: string;
@@ -46,22 +48,30 @@ export function StockMovementForm({ items, warehouses }: StockMovementFormProps)
     event.preventDefault();
     setError("");
     setMessage("");
-    setLoading(true);
 
     const formData = new FormData(event.currentTarget);
+    const payload = {
+      type,
+      itemId: formData.get("itemId"),
+      quantity: formData.get("quantity"),
+      unitCost: formData.get("unitCost") || 0,
+      originWarehouseId: formData.get("originWarehouseId") || undefined,
+      targetWarehouseId: formData.get("targetWarehouseId") || undefined,
+      document: formData.get("document") || undefined,
+      justification: formData.get("justification") || undefined
+    };
+    const parsed = stockMovementSchema.safeParse(payload);
+
+    if (!parsed.success) {
+      setError(formatValidationError(parsed.error));
+      return;
+    }
+
+    setLoading(true);
     const response = await fetch("/api/estoque/movimentacoes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type,
-        itemId: formData.get("itemId"),
-        quantity: formData.get("quantity"),
-        unitCost: formData.get("unitCost") || 0,
-        originWarehouseId: formData.get("originWarehouseId") || undefined,
-        targetWarehouseId: formData.get("targetWarehouseId") || undefined,
-        document: formData.get("document") || undefined,
-        justification: formData.get("justification") || undefined
-      })
+      body: JSON.stringify(parsed.data)
     });
     const data = await response.json().catch(() => ({}));
     setLoading(false);

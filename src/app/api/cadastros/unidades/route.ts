@@ -1,20 +1,18 @@
 import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
-import { getSession } from "@/lib/auth/session";
+import { requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
 import { unitOfMeasureSchema } from "@/lib/validations/cadastros";
 
 export async function POST(request: Request) {
-  const session = await getSession();
+  const auth = await requireApiSession({
+    permission: "cadastros.manage",
+    forbiddenMessage: "Voce nao tem permissao para gerenciar cadastros."
+  });
 
-  if (!session) {
-    return NextResponse.json({ error: "Sessão expirada. Entre novamente." }, { status: 401 });
-  }
+  if (auth.response) return auth.response;
 
-  if (!session.permissions.includes("cadastros.manage")) {
-    return NextResponse.json({ error: "Você não tem permissão para gerenciar cadastros." }, { status: 403 });
-  }
-
+  const { session } = auth;
   const body = await request.json().catch(() => null);
   const parsed = unitOfMeasureSchema.safeParse(body);
 
@@ -53,9 +51,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ unit }, { status: 201 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "Já existe uma unidade com este código." }, { status: 409 });
+      return NextResponse.json({ error: "Ja existe uma unidade com este codigo." }, { status: 409 });
     }
 
-    return NextResponse.json({ error: "Não foi possível salvar a unidade." }, { status: 500 });
+    return NextResponse.json({ error: "Nao foi possivel salvar a unidade." }, { status: 500 });
   }
 }

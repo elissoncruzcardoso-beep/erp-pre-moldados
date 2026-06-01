@@ -1,34 +1,13 @@
 import { NextResponse } from "next/server";
 import { AuditAction, Prisma } from "@prisma/client";
-import { z } from "zod";
 import { getSession } from "@/lib/auth/session";
 import { makeAutomaticCode } from "@/lib/codes/auto-code";
 import { getPrisma } from "@/lib/db/prisma";
+import { parseSaleLines } from "@/lib/sales/parse-sale-lines";
+import { consumeStockFromWarehouse } from "@/lib/stock/transactions";
+import { stockSaleSchema, type SaleItemInput } from "@/lib/validations/sales";
 
-const saleItemSchema = z.object({
-  itemId: z.string().min(1),
-  warehouseId: z.string().min(1),
-  quantity: z.coerce.number().positive(),
-  unitPrice: z.coerce.number().min(0),
-  discount: z.coerce.number().min(0).default(0)
-});
-
-const stockSaleSchema = z.object({
-  customerId: z.string().optional(),
-  customerName: z.string().trim().min(2).max(120),
-  customerDocument: z.string().trim().max(40).optional(),
-  itemId: z.string().min(1),
-  warehouseId: z.string().min(1),
-  quantity: z.coerce.number().positive(),
-  unitPrice: z.coerce.number().min(0),
-  discount: z.coerce.number().min(0).default(0),
-  items: z.array(saleItemSchema).optional(),
-  paymentMethod: z.string().trim().max(60).optional(),
-  settleNow: z.coerce.boolean().default(false),
-  note: z.string().trim().max(240).optional()
-});
-
-type SaleLineInput = z.infer<typeof saleItemSchema>;
+type SaleLineInput = SaleItemInput;
 
 type SaleLineSnapshot = {
   itemId: string;
@@ -51,32 +30,6 @@ function formatDate(value: Date) {
     dateStyle: "short",
     timeStyle: "short"
   });
-}
-
-function parseSaleLines(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
-
-  const saleItems = (value as Record<string, unknown>).saleItems;
-  if (!Array.isArray(saleItems)) return [];
-
-  return saleItems
-    .map((line) => {
-      if (!line || typeof line !== "object") return null;
-      const record = line as Record<string, unknown>;
-      return {
-        itemId: String(record.itemId || ""),
-        itemCode: String(record.itemCode || ""),
-        description: String(record.description || ""),
-        unitCode: String(record.unitCode || "UN"),
-        warehouse: String(record.warehouse || ""),
-        quantity: String(record.quantity || "0"),
-        unitPrice: String(record.unitPrice || "0"),
-        grossTotal: String(record.grossTotal || "0"),
-        discount: String(record.discount || "0"),
-        finalTotal: String(record.finalTotal || "0")
-      };
-    })
-    .filter((line): line is NonNullable<typeof line> => Boolean(line));
 }
 
 function receiptPayload(sale: {
@@ -230,64 +183,17 @@ export async function POST(request: Request) {
           throw new Error(`O desconto do item ${item.code} nao pode ser maior que o total bruto.`);
         }
 
-        const balances = await tx.stockBalance.findMany({
-          where: { itemId: line.itemId, warehouseId: line.warehouseId },
-          include: { lot: true },
-          orderBy: [{ lot: { createdAt: "asc" } }, { updatedAt: "asc" }]
-        });
-        const availableQuantity = balances.reduce((total, balance) => {
-          const available = balance.quantity.minus(balance.reserved);
-          return available.greaterThan(0) ? total.plus(available) : total;
-        }, new Prisma.Decimal(0));
-
-        if (!warehouse.allowsNegative && availableQuantity.minus(quantity).lessThan(0)) {
-          throw new Error(`Saldo insuficiente para vender ${item.code}. Disponivel neste deposito: ${availableQuantity.toString()} ${item.unit.code}.`);
-        }
-
-        let remainingQuantity = quantity;
-        const consumedLots: SaleLineSnapshot["consumedLots"] = [];
-
-        for (const balance of balances) {
-          if (remainingQuantity.lessThanOrEqualTo(0)) break;
-
-          const available = balance.quantity.minus(balance.reserved);
-          if (available.lessThanOrEqualTo(0)) continue;
-
-          const consumed = available.greaterThanOrEqualTo(remainingQuantity) ? remainingQuantity : available;
-
-          await tx.stockBalance.update({
-            where: { id: balance.id },
-            data: { quantity: balance.quantity.minus(consumed) }
-          });
-
-          consumedLots.push({
-            lotId: balance.lotId,
-            lotCode: balance.lot?.code || "SEM_LOTE",
-            quantity: consumed.toString()
-          });
-          remainingQuantity = remainingQuantity.minus(consumed);
-        }
-
-        if (remainingQuantity.greaterThan(0) && warehouse.allowsNegative) {
-          const balanceWithoutLot = balances.find((balance) => !balance.lotId);
-
-          if (balanceWithoutLot) {
-            await tx.stockBalance.update({
-              where: { id: balanceWithoutLot.id },
-              data: { quantity: balanceWithoutLot.quantity.minus(remainingQuantity) }
-            });
-          } else {
-            await tx.stockBalance.create({
-              data: {
-                itemId: line.itemId,
-                warehouseId: line.warehouseId,
-                quantity: new Prisma.Decimal(0).minus(remainingQuantity)
-              }
-            });
+        const consumedLots = await consumeStockFromWarehouse(tx, {
+          itemId: line.itemId,
+          warehouse,
+          quantity
+        }).catch((error) => {
+          if (error instanceof Error && error.message.startsWith("Saldo insuficiente.")) {
+            throw new Error(`Saldo insuficiente para vender ${item.code}. ${error.message.replace("Saldo insuficiente. ", "")} ${item.unit.code}.`);
           }
 
-          consumedLots.push({ lotId: null, lotCode: "SALDO_NEGATIVO", quantity: remainingQuantity.toString() });
-        }
+          throw error;
+        });
 
         const movement = await tx.stockMovement.create({
           data: {

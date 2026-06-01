@@ -4,8 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",
-    "prebuild": "prisma generate",
+    "prebuild": "npm run security:check-sql && prisma generate",
     "build": "next build",
+    "security:check-sql": "node scripts/check-no-raw-sql.mjs",
+    "backup:full": "powershell -ExecutionPolicy Bypass -File scripts/backup/backup-full-postgres.ps1",
+    "backup:incremental": "node scripts/backup/export-incremental.mjs",
     "start": "next start",
     "lint": "next lint",
     "db:generate": "prisma generate",

@@ -2,8 +2,12 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AccountReceivableStatus, Prisma } from "@prisma/client";
 import { ArrowLeft, ArrowUpCircle, CircleDollarSign, ExternalLink, Filter, ReceiptText, ShieldCheck } from "lucide-react";
+import { PaginationControls } from "@/components/pagination-controls";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
+import { findRecentActiveAccountReceipts } from "@/lib/finance/queries";
+import { decimalToNumber, formatMoney } from "@/lib/formatters";
+import { getPaginationMeta, parsePagination, type SearchParamsLike } from "@/lib/pagination";
 import { AccountReceiptForm } from "../account-receipt-form";
 import { AccountReceivableForm } from "../account-receivable-form";
 import { FinanceModuleTabs } from "../_components/finance-module-tabs";
@@ -26,15 +30,6 @@ const filterStatusLabels: Record<string, string> = {
   TODOS: "Todos"
 };
 
-function decimalToNumber(value: unknown) {
-  if (value && typeof value === "object" && "toString" in value) return Number(value.toString());
-  return Number(value ?? 0);
-}
-
-function formatCurrency(value: unknown) {
-  return decimalToNumber(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
 function badgeForStatus(status: string) {
   if (status === "RECEBIDO") return "badge green";
   if (status === "CANCELADO") return "badge red";
@@ -56,10 +51,10 @@ function endOfDay(value?: string) {
 }
 
 type PageProps = {
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+  searchParams?: Promise<SearchParamsLike>;
 };
 
-function firstParam(params: Record<string, string | string[] | undefined>, key: string) {
+function firstParam(params: SearchParamsLike, key: string) {
   const value = params[key];
   return Array.isArray(value) ? value[0] || "" : value || "";
 }
@@ -77,6 +72,11 @@ export default async function ContasReceberPage({ searchParams }: PageProps) {
   const startDate = firstParam(params, "startDate");
   const endDate = firstParam(params, "endDate");
   const search = firstParam(params, "q").trim();
+  const pagination = parsePagination(params, {
+    pageParam: "receberPage",
+    defaultPageSize: 12,
+    maxPageSize: 80
+  });
 
   const where: Prisma.AccountReceivableWhereInput = {};
   const andFilters: Prisma.AccountReceivableWhereInput[] = [];
@@ -125,25 +125,41 @@ export default async function ContasReceberPage({ searchParams }: PageProps) {
   }
 
   const prisma = getPrisma();
-  const [receivables, customers, accountReceipts] = await Promise.all([
+  const openWhere: Prisma.AccountReceivableWhereInput = {
+    ...where,
+    AND: [
+      ...(Array.isArray(where.AND) ? where.AND : []),
+      { status: { in: ["ABERTO", "FATURADO"] } }
+    ]
+  };
+
+  const [receivables, receivablesCount, receivableStats, openReceivableOptionsSource, customers, accountReceipts] = await Promise.all([
     prisma.accountReceivable.findMany({
       where,
       include: { customer: true, createdBy: true, receipts: true, directSale: true },
       orderBy: { dueDate: "asc" },
-      take: 80
+      skip: pagination.skip,
+      take: pagination.pageSize
+    }),
+    prisma.accountReceivable.count({ where }),
+    prisma.accountReceivable.aggregate({
+      where: openWhere,
+      _count: { _all: true },
+      _sum: { amount: true }
+    }),
+    prisma.accountReceivable.findMany({
+      where: openWhere,
+      include: { customer: true, receipts: true },
+      orderBy: { dueDate: "asc" },
+      take: 100
     }),
     prisma.customer.findMany({ where: { active: true }, orderBy: { code: "asc" } }),
-    prisma.accountReceipt.findMany({
-      include: { accountReceivable: { include: { customer: true } }, receivedBy: true },
-      orderBy: { receiptDate: "desc" },
-      take: 20
-    })
+    findRecentActiveAccountReceipts(prisma, 20)
   ]);
 
-  const openReceivables = receivables.filter((receivable) => receivable.status === "ABERTO" || receivable.status === "FATURADO");
-  const receivableTotal = openReceivables.reduce((sum, receivable) => sum + decimalToNumber(receivable.amount), 0);
+  const receivableTotal = decimalToNumber(receivableStats._sum.amount);
   const receivedTotal = accountReceipts.reduce((sum, receipt) => sum + decimalToNumber(receipt.amount), 0);
-  const receivableOptions = openReceivables.map((receivable) => {
+  const receivableOptions = openReceivableOptionsSource.map((receivable) => {
     const received = receivable.receipts.reduce((sum, receipt) => sum + decimalToNumber(receipt.amount), 0);
     return {
       id: receivable.id,
@@ -152,6 +168,7 @@ export default async function ContasReceberPage({ searchParams }: PageProps) {
       remainingAmount: Math.max(decimalToNumber(receivable.amount) - received, 0)
     };
   }).filter((receivable) => receivable.remainingAmount > 0);
+  const paginationMeta = getPaginationMeta(receivablesCount, pagination.page, pagination.pageSize);
 
   return (
     <>
@@ -172,12 +189,12 @@ export default async function ContasReceberPage({ searchParams }: PageProps) {
       <section className="product-metric-grid finance-metric-grid">
         <article className="product-metric-card accent-blue">
           <div className="metric-top"><span className="mono">Aberto</span><CircleDollarSign size={22} /></div>
-          <strong className="metric-value">{formatCurrency(receivableTotal)}</strong>
-          <span className="metric-sub">{openReceivables.length} titulo(s) em aberto</span>
+          <strong className="metric-value">{formatMoney(receivableTotal)}</strong>
+          <span className="metric-sub">{receivableStats._count._all} titulo(s) em aberto</span>
         </article>
         <article className="product-metric-card accent-blue">
           <div className="metric-top"><span className="mono">Recebido</span><ArrowUpCircle size={22} /></div>
-          <strong className="metric-value">{formatCurrency(receivedTotal)}</strong>
+          <strong className="metric-value">{formatMoney(receivedTotal)}</strong>
           <span className="metric-sub">{accountReceipts.length} baixa(s) recentes</span>
         </article>
         <article className="product-metric-card accent-gray">
@@ -267,7 +284,7 @@ export default async function ContasReceberPage({ searchParams }: PageProps) {
         <div className="table-shell product-table-shell">
           <div className="table-header">
             <div><p className="eyebrow">Entradas</p><h2>Contas a receber</h2></div>
-            <span className="badge blue">{receivables.length} registro(s) filtrado(s)</span>
+            <span className="badge blue">{receivablesCount} registro(s) filtrado(s)</span>
           </div>
           <div className="table-scroll">
             <table className="technical-items-table finance-data-table">
@@ -287,8 +304,8 @@ export default async function ContasReceberPage({ searchParams }: PageProps) {
                   <tr key={receivable.id}>
                     <td className="mono">{receivable.number}</td>
                     <td><strong>{receivable.customer.name}</strong><small className="product-detail">{receivable.description}</small></td>
-                    <td className="mono number-cell">{formatCurrency(receivable.amount)}</td>
-                    <td className="mono number-cell">{formatCurrency(receivable.receivedAmount)}</td>
+                    <td className="mono number-cell">{formatMoney(receivable.amount)}</td>
+                    <td className="mono number-cell">{formatMoney(receivable.receivedAmount)}</td>
                     <td>{receivable.dueDate.toLocaleDateString("pt-BR")}</td>
                     <td>
                       {receivable.directSale ? (
@@ -313,6 +330,12 @@ export default async function ContasReceberPage({ searchParams }: PageProps) {
               </tbody>
             </table>
           </div>
+          <PaginationControls
+            pathname="/financeiro/contas-receber"
+            params={params}
+            meta={paginationMeta}
+            pageParam="receberPage"
+          />
         </div>
       </section>
     </>

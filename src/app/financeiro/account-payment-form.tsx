@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
+import { formatValidationError } from "@/lib/validations/client";
+import { accountPaymentSchema } from "@/lib/validations/purchase";
 
 type PayableOption = {
   id: string;
@@ -25,15 +27,21 @@ export function AccountPaymentForm({ payables }: Props) {
     event.preventDefault();
     setError("");
     setSuccess("");
-    setLoading(true);
 
     const formData = new FormData(event.currentTarget);
     const payload = Object.fromEntries(formData.entries());
+    const parsed = accountPaymentSchema.safeParse(payload);
 
+    if (!parsed.success) {
+      setError(formatValidationError(parsed.error));
+      return;
+    }
+
+    setLoading(true);
     const response = await fetch("/api/financeiro/pagamentos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(parsed.data)
     });
     const data = await response.json().catch(() => null);
     setLoading(false);

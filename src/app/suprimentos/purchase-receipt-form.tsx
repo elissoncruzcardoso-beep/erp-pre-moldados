@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PackageCheck } from "lucide-react";
+import { formatMoney } from "@/lib/formatters";
 
 type OrderItemOption = {
   id: string;
@@ -39,13 +40,7 @@ type LineValues = Record<string, {
   unitCost: number;
 }>;
 
-function formatCurrency(value: number) {
-  return value.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    maximumFractionDigits: 2
-  });
-}
+const formatCurrency = formatMoney;
 
 export function PurchaseReceiptForm({ orders, warehouses }: Props) {
   const router = useRouter();

@@ -3,23 +3,10 @@ import { redirect } from "next/navigation";
 import { Bot, CalendarDays, CloudSun, Factory, PackageCheck, ShieldCheck, Users } from "lucide-react";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
+import { decimalToNumber, formatQuantity } from "@/lib/formatters";
 import { ProductionDailyLogForm } from "./production-daily-log-form";
 
 export const dynamic = "force-dynamic";
-
-function decimalToNumber(value: unknown) {
-  if (value && typeof value === "object" && "toString" in value) {
-    return Number(value.toString());
-  }
-
-  return Number(value ?? 0);
-}
-
-function formatQuantity(value: unknown) {
-  return decimalToNumber(value).toLocaleString("pt-BR", {
-    maximumFractionDigits: 3
-  });
-}
 
 function formatLogDate(value: Date) {
   return value.toLocaleDateString("pt-BR", {

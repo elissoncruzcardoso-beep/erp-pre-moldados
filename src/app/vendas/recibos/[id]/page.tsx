@@ -1,64 +1,39 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, ReceiptText } from "lucide-react";
-import { getSession } from "@/lib/auth/session";
+import { notFound } from "next/navigation";
+import { ArrowLeft, Clock3, FileClock, PackageCheck, ReceiptText, ShieldCheck, WalletCards } from "lucide-react";
+import { canViewOperationAudit, requirePageSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
+import { formatMoney, formatQuantityWithUnit } from "@/lib/formatters";
+import { parseSaleLines } from "@/lib/sales/parse-sale-lines";
+import { SaleReceiptDocument } from "../../_components/sale-receipt-document";
 import { PrintReceiptButton } from "../../../estoque/venda-direta/recibos/print-receipt-button";
 
 export const dynamic = "force-dynamic";
 
-function decimalToNumber(value: unknown) {
-  if (value && typeof value === "object" && "toString" in value) {
-    return Number(value.toString());
+function describeAuditAction(action: string) {
+  const labels: Record<string, string> = {
+    CREATE: "Criacao",
+    UPDATE: "Atualizacao",
+    CANCEL: "Cancelamento",
+    STOCK_MOVE: "Movimento de estoque",
+    STOCK_REVERSAL: "Estorno de estoque"
+  };
+
+  return labels[action] || action;
+}
+
+function compactJson(value: unknown) {
+  if (!value) return "";
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "";
   }
-
-  return Number(value ?? 0);
-}
-
-function money(value: unknown) {
-  return decimalToNumber(value).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL"
-  });
-}
-
-function quantity(value: unknown, unitCode: string) {
-  return `${decimalToNumber(value).toLocaleString("pt-BR", {
-    maximumFractionDigits: 3
-  })} ${unitCode}`;
-}
-
-function parseSaleLines(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
-  const saleItems = (value as Record<string, unknown>).saleItems;
-  if (!Array.isArray(saleItems)) return [];
-
-  return saleItems
-    .map((line) => {
-      if (!line || typeof line !== "object") return null;
-      const record = line as Record<string, unknown>;
-      return {
-        itemCode: String(record.itemCode || ""),
-        description: String(record.description || ""),
-        unitCode: String(record.unitCode || "UN"),
-        quantity: String(record.quantity || "0"),
-        unitPrice: String(record.unitPrice || "0"),
-        grossTotal: String(record.grossTotal || "0")
-      };
-    })
-    .filter((line): line is NonNullable<typeof line> => Boolean(line));
 }
 
 export default async function ReciboVendaPage({ params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
-
-  if (!session) {
-    redirect("/login?next=/vendas");
-  }
-
-  if (!session.permissions.includes("estoque.view")) {
-    redirect("/dashboard");
-  }
+  const session = await requirePageSession({ nextPath: "/vendas", permission: "estoque.view" });
 
   const { id } = await params;
   const prisma = getPrisma();
@@ -81,6 +56,48 @@ export default async function ReciboVendaPage({ params }: { params: Promise<{ id
   }
 
   const receivable = sale.accountsReceivable[0];
+  const canViewAudit = canViewOperationAudit(session);
+  const [stockMovements, directAudits] = canViewAudit
+    ? await Promise.all([
+        prisma.stockMovement.findMany({
+          where: {
+            OR: [
+              { document: sale.number },
+              { document: `${sale.number}-EST` },
+              ...(sale.stockMovementId ? [{ id: sale.stockMovementId }] : [])
+            ]
+          },
+          include: {
+            item: { include: { unit: true } },
+            originWarehouse: true,
+            targetWarehouse: true,
+            user: true
+          },
+          orderBy: { createdAt: "asc" }
+        }),
+        prisma.auditLog.findMany({
+          where: {
+            OR: [
+              { entity: "DirectSale", entityId: sale.id },
+              ...(receivable ? [{ entity: "AccountReceivable", entityId: receivable.id }] : [])
+            ]
+          },
+          include: { user: true },
+          orderBy: { createdAt: "asc" }
+        })
+      ])
+    : [[], []];
+  const movementAudits = canViewAudit && stockMovements.length > 0
+    ? await prisma.auditLog.findMany({
+        where: {
+          entity: "StockMovement",
+          entityId: { in: stockMovements.map((movement) => movement.id) }
+        },
+        include: { user: true },
+        orderBy: { createdAt: "asc" }
+      })
+    : [];
+  const auditEvents = [...directAudits, ...movementAudits].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   const saleLines = parseSaleLines(sale.consumedLots);
   const receiptItems =
     saleLines.length > 0
@@ -114,100 +131,161 @@ export default async function ReciboVendaPage({ params }: { params: Promise<{ id
       </section>
 
       <section className="sale-receipt-page">
-        <article className="sale-receipt">
-          <header className="sale-receipt-header">
+        <SaleReceiptDocument
+          receiptNumber={sale.number}
+          issuedAtLabel={sale.issuedAt.toLocaleString("pt-BR")}
+          status={sale.status}
+          customerName={sale.customerName}
+          customerDocument={sale.customerDocument}
+          sellerName={sale.createdBy.name}
+          paymentMethod={sale.paymentMethod}
+          items={receiptItems}
+          discount={sale.discount.toString()}
+          finalTotal={sale.finalTotal.toString()}
+          note={sale.note}
+          cancelReason={sale.cancelReason}
+          financialTitle={receivable ? {
+            number: receivable.number,
+            status: receivable.status,
+            receivedAmount: receivable.receivedAmount.toString()
+          } : null}
+        />
+      </section>
+
+      {canViewAudit ? (
+      <section className="operation-audit-panel no-print">
+        <div className="table-header">
+          <div>
+            <p className="eyebrow">Auditoria</p>
+            <h2>Historico da operacao</h2>
+            <small className="product-detail">Rastreabilidade da venda, financeiro, estoque e cancelamentos.</small>
+          </div>
+          <span className="badge blue">
+            <FileClock size={14} />
+            {auditEvents.length + stockMovements.length} evento(s)
+          </span>
+        </div>
+
+        <section className="audit-summary-grid">
+          <article>
+            <ReceiptText size={18} />
+            <span>Recibo</span>
+            <strong>{sale.status}</strong>
+            <small>Criado por {sale.createdBy.name} em {sale.issuedAt.toLocaleString("pt-BR")}</small>
+          </article>
+          <article>
+            <WalletCards size={18} />
+            <span>Financeiro</span>
+            <strong>{receivable?.status || "Sem titulo"}</strong>
+            <small>{receivable ? `${receivable.number} - recebido ${formatMoney(receivable.receivedAmount)}` : "Nenhum titulo vinculado"}</small>
+          </article>
+          <article>
+            <PackageCheck size={18} />
+            <span>Estoque</span>
+            <strong>{stockMovements.length} movimento(s)</strong>
+            <small>Saidas e estornos vinculados ao recibo</small>
+          </article>
+          <article>
+            <ShieldCheck size={18} />
+            <span>Responsavel</span>
+            <strong>{sale.cancelledBy?.name || sale.createdBy.name}</strong>
+            <small>{sale.cancelledAt ? `Cancelado em ${sale.cancelledAt.toLocaleString("pt-BR")}` : "Venda ativa"}</small>
+          </article>
+        </section>
+
+        <div className="operation-timeline">
+          <article className="timeline-item">
+            <div className="timeline-marker"><ReceiptText size={15} /></div>
             <div>
-              <p className="eyebrow">NORDESTE INDUSTRIA DE PREMOLDADOS LTDA</p>
-              <h2>Recibo de venda</h2>
-              {sale.status === "CANCELADA" ? <span className="badge red">Cancelado</span> : null}
-            </div>
-            <div className="sale-receipt-number">
-              <ReceiptText size={22} />
-              <strong>{sale.number}</strong>
               <span>{sale.issuedAt.toLocaleString("pt-BR")}</span>
+              <strong>Venda criada</strong>
+              <p>{sale.createdBy.name} criou o recibo {sale.number} para {sale.customerName}, total de {formatMoney(sale.finalTotal)}.</p>
             </div>
-          </header>
-
-          <section className="sale-receipt-grid">
-            <div>
-              <span>Cliente</span>
-              <strong>{sale.customerName}</strong>
-              <small>{sale.customerDocument || "Documento nao informado"}</small>
-            </div>
-            <div>
-              <span>Vendedor</span>
-              <strong>{sale.createdBy.name}</strong>
-              <small>{sale.paymentMethod || "Nao informado"}</small>
-            </div>
-          </section>
-
-          <table className="sale-receipt-table">
-            <thead>
-              <tr>
-                <th>Codigo</th>
-                <th>Produto</th>
-                <th>Quantidade</th>
-                <th>Preco unit.</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {receiptItems.map((item, index) => (
-                <tr key={`${item.itemCode}-${index}`}>
-                  <td className="mono">{item.itemCode}</td>
-                  <td>{item.description}</td>
-                  <td>{quantity(item.quantity, item.unitCode)}</td>
-                  <td>{money(item.unitPrice)}</td>
-                  <td>{money(item.grossTotal)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <section className="sale-receipt-total">
-            <div>
-              <span>Desconto</span>
-              <strong>{money(sale.discount)}</strong>
-            </div>
-            <div>
-              <span>Total final</span>
-              <strong>{money(sale.finalTotal)}</strong>
-            </div>
-          </section>
+          </article>
 
           {receivable ? (
-            <section className="sale-receipt-grid">
+            <article className="timeline-item">
+              <div className="timeline-marker"><WalletCards size={15} /></div>
               <div>
-                <span>Titulo financeiro</span>
-                <strong>{receivable.number}</strong>
-                <small>Status: {receivable.status}</small>
+                <span>{receivable.createdAt.toLocaleString("pt-BR")}</span>
+                <strong>Titulo financeiro gerado</strong>
+                <p>{receivable.number} ficou com status {receivable.status} e valor recebido de {formatMoney(receivable.receivedAmount)}.</p>
               </div>
-              <div>
-                <span>Valor recebido</span>
-                <strong>{money(receivable.receivedAmount)}</strong>
-                <small>Contas a receber</small>
-              </div>
-            </section>
+            </article>
           ) : null}
 
-          {sale.note ? <p className="sale-receipt-note">{sale.note}</p> : null}
-          {sale.cancelReason ? <p className="sale-receipt-note">Cancelamento: {sale.cancelReason}</p> : null}
+          {stockMovements.map((movement) => (
+            <article className="timeline-item" key={movement.id}>
+              <div className="timeline-marker"><PackageCheck size={15} /></div>
+              <div>
+                <span>{movement.createdAt.toLocaleString("pt-BR")}</span>
+                <strong>{movement.type === "ESTORNO" ? "Estorno de estoque" : "Movimento de estoque"}</strong>
+                <p>
+                  {movement.user.name} registrou {formatQuantityWithUnit(movement.quantity, movement.item.unit.code)} de {movement.item.code}
+                  {movement.originWarehouse ? ` saindo de ${movement.originWarehouse.code}` : ""}
+                  {movement.targetWarehouse ? ` entrando em ${movement.targetWarehouse.code}` : ""}.
+                </p>
+                {movement.justification ? <small>{movement.justification}</small> : null}
+              </div>
+            </article>
+          ))}
 
-          <footer className="sale-receipt-footer">
-            <div className="sale-signatures">
+          {sale.cancelledAt ? (
+            <article className="timeline-item danger">
+              <div className="timeline-marker"><Clock3 size={15} /></div>
               <div>
-                <span />
-                <strong>Assinatura do cliente</strong>
+                <span>{sale.cancelledAt.toLocaleString("pt-BR")}</span>
+                <strong>Cancelamento controlado</strong>
+                <p>{sale.cancelledBy?.name || "Usuario"} cancelou a venda. Motivo: {sale.cancelReason || "Nao informado"}.</p>
               </div>
-              <div>
-                <span />
-                <strong>NORDESTE INDUSTRIA DE PREMOLDADOS LTDA</strong>
-              </div>
+            </article>
+          ) : null}
+        </div>
+
+        <section className="table-shell audit-log-table">
+          <div className="table-header">
+            <div>
+              <p className="eyebrow">Logs</p>
+              <h2>Registros tecnicos</h2>
             </div>
-            <p>Recebemos o valor referente aos produtos descritos acima. Documento gerado automaticamente pelo PRECAST ERP.</p>
-          </footer>
-        </article>
+          </div>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Usuario</th>
+                  <th>Modulo</th>
+                  <th>Acao</th>
+                  <th>Entidade</th>
+                  <th>Motivo / detalhe</th>
+                </tr>
+              </thead>
+              <tbody>
+                {auditEvents.map((event) => (
+                  <tr key={event.id}>
+                    <td className="mono">{event.createdAt.toLocaleString("pt-BR")}</td>
+                    <td>{event.user?.name || "Sistema"}</td>
+                    <td>{event.module}</td>
+                    <td>{describeAuditAction(event.action)}</td>
+                    <td className="mono">{event.entity}</td>
+                    <td>
+                      <strong>{event.justification || "Sem motivo informado"}</strong>
+                      {compactJson(event.newValue) ? <small className="product-detail">{compactJson(event.newValue)}</small> : null}
+                    </td>
+                  </tr>
+                ))}
+                {auditEvents.length === 0 ? (
+                  <tr>
+                    <td colSpan={6}>Nenhum log tecnico encontrado para esta operacao.</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </section>
+      ) : null}
     </>
   );
 }

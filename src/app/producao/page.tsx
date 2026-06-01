@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
+import { decimalToNumber, formatQuantity } from "@/lib/formatters";
 import { autoReleaseCuredBatches } from "@/lib/production/auto-release-cured-batches";
 import { ProductionNoteForm } from "./production-note-form";
 import { ProductionOrderForm } from "./production-order-form";
@@ -22,20 +23,6 @@ import { ProductionOrderForm } from "./production-order-form";
 export const dynamic = "force-dynamic";
 
 const stageColumns = ["Preparacao", "Armacao", "Concretagem", "Cura/Qualidade", "Liberacao"];
-
-function decimalToNumber(value: unknown) {
-  if (value && typeof value === "object" && "toString" in value) {
-    return Number(value.toString());
-  }
-
-  return Number(value ?? 0);
-}
-
-function formatQuantity(value: unknown) {
-  return decimalToNumber(value).toLocaleString("pt-BR", {
-    maximumFractionDigits: 3
-  });
-}
 
 function formatDateTime(value: Date | null) {
   if (!value) return "-";

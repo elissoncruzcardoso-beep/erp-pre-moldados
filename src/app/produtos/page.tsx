@@ -1,7 +1,10 @@
 import { redirect } from "next/navigation";
 import { Boxes, ClipboardList, Factory, Plus, Ruler, ShieldCheck } from "lucide-react";
 import { getSession } from "@/lib/auth/session";
+import { PaginationControls } from "@/components/pagination-controls";
 import { getPrisma } from "@/lib/db/prisma";
+import { decimalToNumber, formatQuantity } from "@/lib/formatters";
+import { getPaginationMeta, parsePagination, type SearchParamsLike } from "@/lib/pagination";
 import { CompositionActions } from "./composition-actions";
 
 export const dynamic = "force-dynamic";
@@ -14,21 +17,11 @@ function decimalToString(value: unknown) {
   return String(value ?? "0");
 }
 
-function decimalToNumber(value: unknown) {
-  if (value && typeof value === "object" && "toString" in value) {
-    return Number(value.toString());
-  }
+type ProdutosPageProps = {
+  searchParams?: Promise<SearchParamsLike>;
+};
 
-  return Number(value ?? 0);
-}
-
-function formatQuantity(value: unknown) {
-  return decimalToNumber(value).toLocaleString("pt-BR", {
-    maximumFractionDigits: 3
-  });
-}
-
-export default async function ProdutosPage() {
+export default async function ProdutosPage({ searchParams }: ProdutosPageProps) {
   const session = await getSession();
 
   if (!session) {
@@ -40,13 +33,46 @@ export default async function ProdutosPage() {
   }
 
   const prisma = getPrisma();
-  const [items, compositions] = await Promise.all([
+  const params = (await searchParams) || {};
+  const piecePagination = parsePagination(params, {
+    pageParam: "pecasPage",
+    defaultPageSize: 8,
+    maxPageSize: 40
+  });
+  const compositionPagination = parsePagination(params, {
+    pageParam: "fichasPage",
+    defaultPageSize: 6,
+    maxPageSize: 30
+  });
+  const rawMaterialWhere = {
+    OR: [
+      { type: "MATERIA_PRIMA" as const },
+      { type: "INSUMO" as const }
+    ]
+  };
+
+  const [
+    totalItems,
+    precastCount,
+    rawMaterialCount,
+    activeCompositions,
+    precastItems,
+    compositions,
+    compositionsCount
+  ] = await Promise.all([
+    prisma.item.count(),
+    prisma.item.count({ where: { type: "PECA_PRE_MOLDADA" } }),
+    prisma.item.count({ where: rawMaterialWhere }),
+    prisma.composition.count({ where: { approved: true } }),
     prisma.item.findMany({
+      where: { type: "PECA_PRE_MOLDADA" },
       include: {
         unit: true,
         stockBalances: true
       },
-      orderBy: [{ type: "asc" }, { code: "asc" }]
+      orderBy: { code: "asc" },
+      skip: piecePagination.skip,
+      take: piecePagination.pageSize
     }),
     prisma.composition.findMany({
       include: {
@@ -68,14 +94,15 @@ export default async function ProdutosPage() {
         },
         orders: true
       },
-      orderBy: { code: "asc" }
-    })
+      orderBy: { code: "asc" },
+      skip: compositionPagination.skip,
+      take: compositionPagination.pageSize
+    }),
+    prisma.composition.count()
   ]);
 
-  const precastCount = items.filter((item) => item.type === "PECA_PRE_MOLDADA").length;
-  const precastItems = items.filter((item) => item.type === "PECA_PRE_MOLDADA");
-  const rawMaterialCount = items.filter((item) => item.type === "MATERIA_PRIMA" || item.type === "INSUMO").length;
-  const activeCompositions = compositions.filter((composition) => composition.approved).length;
+  const piecePaginationMeta = getPaginationMeta(precastCount, piecePagination.page, piecePagination.pageSize);
+  const compositionPaginationMeta = getPaginationMeta(compositionsCount, compositionPagination.page, compositionPagination.pageSize);
   const compositionCapacity = compositions.map((composition) => {
     const capacities = composition.items
       .map((compositionItem) => {
@@ -127,7 +154,7 @@ export default async function ProdutosPage() {
             <span className="mono">Itens cadastrados</span>
             <Boxes size={22} />
           </div>
-          <strong className="metric-value">{items.length}</strong>
+          <strong className="metric-value">{totalItems}</strong>
           <span className="metric-sub">Produtos, pecas, insumos e materias-primas.</span>
         </article>
         <article className="product-metric-card accent-orange">
@@ -164,7 +191,7 @@ export default async function ProdutosPage() {
               <h2>Pecas que vamos controlar neste momento</h2>
               <p className="metric-sub">Pecas principais para controlar producao, cura, liberacao e estoque acabado.</p>
             </div>
-            <span className="badge green">{precastItems.length} pecas</span>
+            <span className="badge green">{precastCount} pecas</span>
           </div>
           <div className="precast-product-grid">
             {precastItems.map((item) => {
@@ -195,6 +222,12 @@ export default async function ProdutosPage() {
               <p className="metric-sub">Rode o seed inicial para carregar as pecas de producao.</p>
             ) : null}
           </div>
+          <PaginationControls
+            pathname="/produtos"
+            params={params}
+            meta={piecePaginationMeta}
+            pageParam="pecasPage"
+          />
         </section>
 
         <section className="product-section-card">
@@ -204,7 +237,7 @@ export default async function ProdutosPage() {
               <h2>Fichas tecnicas de producao</h2>
             </div>
             <div className="button-row">
-              <span className="badge orange">{compositions.length} fichas</span>
+              <span className="badge orange">{compositionsCount} fichas</span>
               <a className="primary-button mini-button" href="/produtos/composicoes/nova">
                 <ClipboardList size={14} />
                 Nova composição
@@ -297,6 +330,12 @@ export default async function ProdutosPage() {
               <p className="metric-sub">Nenhuma ficha tecnica cadastrada ainda.</p>
             ) : null}
           </div>
+          <PaginationControls
+            pathname="/produtos"
+            params={params}
+            meta={compositionPaginationMeta}
+            pageParam="fichasPage"
+          />
         </section>
       </section>
     </>

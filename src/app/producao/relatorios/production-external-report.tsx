@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { Eye, FileDown, Mail, X } from "lucide-react";
 
 type ProductionReportDailyItem = {
@@ -250,7 +250,7 @@ export function ProductionExternalReport({
     };
   }, [batches, dailyLogs, filters, generatedAt, notes, orders, stockMovements, timeline]);
 
-  const totals = {
+  const totals = useMemo(() => ({
     dailyLogs: filtered.dailyLogs.length,
     producedDaily: filtered.dailyLogs.reduce((sum, log) => {
       return sum + log.items.reduce((itemSum, item) => itemSum + toNumber(item.quantity), 0);
@@ -261,7 +261,7 @@ export function ProductionExternalReport({
     notes: filtered.notes.length,
     stockEvents: filtered.stockMovements.length,
     events: filtered.timeline.length
-  };
+  }), [filtered]);
 
   function updateFilter(name: string, value: string) {
     setFilters((current) => ({ ...current, [name]: value }));
@@ -387,14 +387,11 @@ export function ProductionExternalReport({
         </div>
       ) : null}
 
-      <div className="print-only">
-        <ReportDocument code={reportCode} generatedBy={generatedBy} generatedAt={generatedAt} sections={sections} totals={totals} filtered={filtered} />
-      </div>
     </>
   );
 }
 
-function ReportDocument({
+const ReportDocument = memo(function ReportDocument({
   code,
   generatedBy,
   generatedAt,
@@ -579,9 +576,9 @@ function ReportDocument({
       </footer>
     </article>
   );
-}
+});
 
-function ReportTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
+const ReportTable = memo(function ReportTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
   return (
     <table className="report-table">
       <thead>
@@ -601,4 +598,4 @@ function ReportTable({ headers, rows }: { headers: string[]; rows: string[][] })
       </tbody>
     </table>
   );
-}
+});

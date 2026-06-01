@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { AuditAction } from "@prisma/client";
+import { z } from "zod";
 import { getPrisma } from "@/lib/db/prisma";
 import {
   buildProductionBatchCode,
@@ -8,19 +9,19 @@ import {
 } from "@/lib/bot/production-daily-parser";
 import { calculateBatchReadyAt } from "@/lib/production/auto-release-cured-batches";
 
-type TelegramUpdate = {
-  message?: {
-    chat?: {
-      id?: number | string;
-    };
-    from?: {
-      id?: number;
-      first_name?: string;
-      username?: string;
-    };
-    text?: string;
-  };
-};
+const telegramUpdateSchema = z.object({
+  message: z.object({
+    chat: z.object({
+      id: z.union([z.number(), z.string().trim().min(1).max(80)]).optional()
+    }).passthrough().optional(),
+    from: z.object({
+      id: z.number().int().positive().optional(),
+      first_name: z.string().trim().max(80).optional(),
+      username: z.string().trim().max(80).optional()
+    }).passthrough().optional(),
+    text: z.string().trim().max(4096).optional()
+  }).passthrough().optional()
+}).passthrough();
 
 async function sendTelegramMessage(chatId: string | number | undefined, text: string) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -58,9 +59,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Webhook nao autorizado." }, { status: 401 });
   }
 
-  const update = await request.json().catch(() => null) as TelegramUpdate | null;
+  const body = await request.json().catch(() => null);
+  const parsedUpdate = telegramUpdateSchema.safeParse(body);
+
+  if (!parsedUpdate.success) {
+    return NextResponse.json({ ok: false, error: "Payload do Telegram invalido." }, { status: 400 });
+  }
+
+  const update = parsedUpdate.data;
   const message = update?.message;
-  const text = message?.text?.trim();
+  const text = message?.text;
   const chatId = message?.chat?.id;
 
   if (!text) {

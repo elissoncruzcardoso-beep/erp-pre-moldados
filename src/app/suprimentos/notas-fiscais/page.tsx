@@ -1,5 +1,7 @@
 import { ReceiptText } from "lucide-react";
+import { PaginationControls } from "@/components/pagination-controls";
 import { getPrisma } from "@/lib/db/prisma";
+import { getPaginationMeta, parsePagination, type SearchParamsLike } from "@/lib/pagination";
 import { SuprimentosNav } from "../_components/suprimentos-nav";
 import { decimalToNumber, formatCurrency, receiptStatusLabels, requireSuprimentosSession } from "../_lib";
 import { PurchaseReceiptActions } from "../purchase-receipt-actions";
@@ -7,10 +9,20 @@ import { PurchaseReceiptForm } from "../purchase-receipt-form";
 
 export const dynamic = "force-dynamic";
 
-export default async function NotasFiscaisPage() {
+type NotasFiscaisPageProps = {
+  searchParams?: Promise<SearchParamsLike>;
+};
+
+export default async function NotasFiscaisPage({ searchParams }: NotasFiscaisPageProps) {
   await requireSuprimentosSession("/suprimentos/notas-fiscais");
+  const params = (await searchParams) || {};
+  const pagination = parsePagination(params, {
+    pageParam: "recebimentosPage",
+    defaultPageSize: 12,
+    maxPageSize: 60
+  });
   const prisma = getPrisma();
-  const [orders, warehouses, receipts] = await Promise.all([
+  const [orders, warehouses, receipts, receiptsCount] = await Promise.all([
     prisma.purchaseOrder.findMany({
       where: {
         status: {
@@ -52,9 +64,12 @@ export default async function NotasFiscaisPage() {
         receivedBy: true
       },
       orderBy: { createdAt: "desc" },
-      take: 40
-    })
+      skip: pagination.skip,
+      take: pagination.pageSize
+    }),
+    prisma.purchaseReceipt.count()
   ]);
+  const paginationMeta = getPaginationMeta(receiptsCount, pagination.page, pagination.pageSize);
   const orderOptions = orders
     .map((order) => {
       const orderLineTotal = order.items.reduce((sum, item) => sum + decimalToNumber(item.totalValue), 0);
@@ -101,7 +116,7 @@ export default async function NotasFiscaisPage() {
         </div>
         <span className="status-pill">
           <ReceiptText size={16} />
-          {receipts.length} recebimentos
+          {receiptsCount} recebimentos
         </span>
       </section>
 
@@ -127,7 +142,7 @@ export default async function NotasFiscaisPage() {
             <p className="eyebrow">Notas fiscais de compra</p>
             <h2>Conferencias liberadas para estoque</h2>
           </div>
-          <span className="badge blue">{receipts.length} registros</span>
+          <span className="badge blue">{receiptsCount} registros</span>
         </div>
         <div className="supply-record-stack">
           {receipts.map((receipt) => {
@@ -203,6 +218,12 @@ export default async function NotasFiscaisPage() {
             </article>
           ) : null}
         </div>
+        <PaginationControls
+          pathname="/suprimentos/notas-fiscais"
+          params={params}
+          meta={paginationMeta}
+          pageParam="recebimentosPage"
+        />
       </section>
     </>
   );

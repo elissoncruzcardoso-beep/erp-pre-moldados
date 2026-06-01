@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, ClipboardList, ShieldCheck } from "lucide-react";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
+import { decimalToNumber } from "@/lib/formatters";
 import { CompositionForm } from "../../../composition-form";
 
 export const dynamic = "force-dynamic";
@@ -9,14 +10,6 @@ export const dynamic = "force-dynamic";
 type PageProps = {
   params: Promise<{ id: string }>;
 };
-
-function decimalToNumber(value: unknown) {
-  if (value && typeof value === "object" && "toString" in value) {
-    return Number(value.toString());
-  }
-
-  return Number(value ?? 0);
-}
 
 function decimalToString(value: unknown) {
   return decimalToNumber(value).toLocaleString("en-US", {

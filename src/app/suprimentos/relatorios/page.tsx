@@ -1,5 +1,8 @@
 import { ArrowDownUp, FileBarChart, FileSearch, ReceiptText, ShoppingCart } from "lucide-react";
+import { PaginationControls } from "@/components/pagination-controls";
 import { getPrisma } from "@/lib/db/prisma";
+import { formatQuantity } from "@/lib/formatters";
+import { getPaginationMeta, parsePagination, type SearchParamsLike } from "@/lib/pagination";
 import { SuprimentosNav } from "../_components/suprimentos-nav";
 import { decimalToNumber, formatCurrency, requireSuprimentosSession } from "../_lib";
 import { SupplyExternalReport } from "./supply-external-report";
@@ -17,16 +20,36 @@ const movementLabels: Record<string, string> = {
   ESTORNO: "Estorno"
 };
 
-function formatQuantity(value: unknown) {
-  return decimalToNumber(value).toLocaleString("pt-BR", {
-    maximumFractionDigits: 3
-  });
-}
+type RelatoriosSuprimentosPageProps = {
+  searchParams?: Promise<SearchParamsLike>;
+};
 
-export default async function RelatoriosSuprimentosPage() {
+export default async function RelatoriosSuprimentosPage({ searchParams }: RelatoriosSuprimentosPageProps) {
   const session = await requireSuprimentosSession("/suprimentos/relatorios");
+  const params = (await searchParams) || {};
+  const timelinePagination = parsePagination(params, {
+    pageParam: "timelinePage",
+    defaultPageSize: 15,
+    maxPageSize: 60
+  });
+  const stockPagination = parsePagination(params, {
+    pageParam: "entradasPage",
+    defaultPageSize: 15,
+    maxPageSize: 60
+  });
   const prisma = getPrisma();
-  const [requests, quotes, orders, receipts, stockMovements] = await Promise.all([
+  const [
+    requests,
+    quotes,
+    orders,
+    receipts,
+    stockMovements,
+    requestCount,
+    receiptCount,
+    stockMovementCount,
+    approvedQuotesStats,
+    issuedOrdersStats
+  ] = await Promise.all([
     prisma.purchaseRequest.findMany({
       include: {
         requester: true,
@@ -118,14 +141,21 @@ export default async function RelatoriosSuprimentosPage() {
       },
       orderBy: { createdAt: "desc" },
       take: 80
+    }),
+    prisma.purchaseRequest.count(),
+    prisma.purchaseReceipt.count(),
+    prisma.stockMovement.count({ where: { type: "ENTRADA_COMPRA" } }),
+    prisma.purchaseQuote.aggregate({
+      where: { status: "APROVADA" },
+      _sum: { totalValue: true }
+    }),
+    prisma.purchaseOrder.aggregate({
+      where: { status: { not: "CANCELADO" } },
+      _sum: { totalValue: true }
     })
   ]);
-  const approvedQuotesValue = quotes
-    .filter((quote) => quote.status === "APROVADA")
-    .reduce((sum, quote) => sum + Number(quote.totalValue), 0);
-  const issuedOrdersValue = orders
-    .filter((order) => order.status !== "CANCELADO")
-    .reduce((sum, order) => sum + Number(order.totalValue), 0);
+  const approvedQuotesValue = decimalToNumber(approvedQuotesStats._sum.totalValue);
+  const issuedOrdersValue = decimalToNumber(issuedOrdersStats._sum.totalValue);
   const purchaseStockValue = stockMovements.reduce((sum, movement) => sum + decimalToNumber(movement.totalCost), 0);
   const timeline = [
     ...requests.map((request) => ({
@@ -179,6 +209,16 @@ export default async function RelatoriosSuprimentosPage() {
       value: formatCurrency(movement.totalCost)
     }))
   ].sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 80);
+  const timelineMeta = getPaginationMeta(timeline.length, timelinePagination.page, timelinePagination.pageSize);
+  const paginatedTimeline = timeline.slice(
+    (timelineMeta.page - 1) * timelineMeta.pageSize,
+    timelineMeta.page * timelineMeta.pageSize
+  );
+  const stockMeta = getPaginationMeta(stockMovements.length, stockPagination.page, stockPagination.pageSize);
+  const paginatedStockMovements = stockMovements.slice(
+    (stockMeta.page - 1) * stockMeta.pageSize,
+    stockMeta.page * stockMeta.pageSize
+  );
   const requestOptions = requests.map((request) => ({ id: request.id, number: request.number }));
   const supplierMap = new Map<string, string>();
   quotes.forEach((quote) => supplierMap.set(quote.supplierId, quote.supplier.name));
@@ -334,8 +374,8 @@ export default async function RelatoriosSuprimentosPage() {
       <section className="grid-12" style={{ marginBottom: 16 }}>
         <article className="metric-card accent-blue span-3">
           <div className="metric-top"><span className="mono">Solicitacoes</span><ShoppingCart size={21} /></div>
-          <strong className="metric-value">{requests.length}</strong>
-          <span className="metric-sub">Ultimos registros do modulo</span>
+          <strong className="metric-value">{requestCount}</strong>
+          <span className="metric-sub">Registros totais no modulo</span>
         </article>
         <article className="metric-card accent-orange span-3">
           <div className="metric-top"><span className="mono">Cotacoes aprovadas</span><FileSearch size={21} /></div>
@@ -349,7 +389,7 @@ export default async function RelatoriosSuprimentosPage() {
         </article>
         <article className="metric-card accent-gray span-3">
           <div className="metric-top"><span className="mono">Notas/recebimentos</span><ReceiptText size={21} /></div>
-          <strong className="metric-value">{receipts.length}</strong>
+          <strong className="metric-value">{receiptCount}</strong>
           <span className="metric-sub">Entradas conferidas</span>
         </article>
       </section>
@@ -357,7 +397,7 @@ export default async function RelatoriosSuprimentosPage() {
       <section className="grid-12" style={{ marginBottom: 16 }}>
         <article className="metric-card accent-blue span-4">
           <div className="metric-top"><span className="mono">Entradas de compra</span><ArrowDownUp size={21} /></div>
-          <strong className="metric-value">{stockMovements.length}</strong>
+          <strong className="metric-value">{stockMovementCount}</strong>
           <span className="metric-sub">Movimentacoes que alimentaram estoque</span>
         </article>
         <article className="metric-card accent-orange span-4">
@@ -388,7 +428,7 @@ export default async function RelatoriosSuprimentosPage() {
             <p className="eyebrow">Rastreabilidade</p>
             <h2>Linha do tempo das movimentacoes</h2>
           </div>
-          <span className="badge blue">{timeline.length} eventos</span>
+          <span className="badge blue">{timeline.length} eventos recentes</span>
         </div>
         <table>
           <thead>
@@ -403,7 +443,7 @@ export default async function RelatoriosSuprimentosPage() {
             </tr>
           </thead>
           <tbody>
-            {timeline.map((event) => (
+            {paginatedTimeline.map((event) => (
               <tr key={event.id}>
                 <td className="mono">{event.date.toLocaleString("pt-BR")}</td>
                 <td><span className="badge blue">{event.stage}</span></td>
@@ -414,13 +454,19 @@ export default async function RelatoriosSuprimentosPage() {
                 <td>{event.responsible}</td>
               </tr>
             ))}
-            {timeline.length === 0 ? (
+            {paginatedTimeline.length === 0 ? (
               <tr>
                 <td colSpan={7}>Nenhuma movimentacao registrada ainda.</td>
               </tr>
             ) : null}
           </tbody>
         </table>
+        <PaginationControls
+          pathname="/suprimentos/relatorios"
+          params={params}
+          meta={timelineMeta}
+          pageParam="timelinePage"
+        />
       </section>
 
       <section className="table-shell">
@@ -429,7 +475,7 @@ export default async function RelatoriosSuprimentosPage() {
             <p className="eyebrow">Materiais</p>
             <h2>Entradas no estoque por compra</h2>
           </div>
-          <span className="badge green">{stockMovements.length} entradas</span>
+          <span className="badge green">{stockMovements.length} entradas recentes</span>
         </div>
         <table>
           <thead>
@@ -446,7 +492,7 @@ export default async function RelatoriosSuprimentosPage() {
             </tr>
           </thead>
           <tbody>
-            {stockMovements.map((movement) => (
+            {paginatedStockMovements.map((movement) => (
               <tr key={movement.id}>
                 <td className="mono">{movement.createdAt.toLocaleString("pt-BR")}</td>
                 <td>{movementLabels[movement.type] || movement.type}</td>
@@ -462,13 +508,19 @@ export default async function RelatoriosSuprimentosPage() {
                 <td className="mono">{formatCurrency(movement.totalCost)}</td>
               </tr>
             ))}
-            {stockMovements.length === 0 ? (
+            {paginatedStockMovements.length === 0 ? (
               <tr>
                 <td colSpan={9}>Nenhuma entrada por compra registrada ainda.</td>
               </tr>
             ) : null}
           </tbody>
         </table>
+        <PaginationControls
+          pathname="/suprimentos/relatorios"
+          params={params}
+          meta={stockMeta}
+          pageParam="entradasPage"
+        />
       </section>
     </>
   );

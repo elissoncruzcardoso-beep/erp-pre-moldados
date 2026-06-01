@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Boxes, ClipboardList, Factory, PackageSearch, ShieldCheck } from "lucide-react";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
+import { decimalToNumber, formatQuantity } from "@/lib/formatters";
 import { ProductCreateForm } from "@/app/produtos/product-create-form";
 import { CadastrosNav } from "../_components/cadastros-nav";
 import { ProductCuringForm } from "./product-curing-form";
@@ -17,20 +18,6 @@ const typeLabels: Record<string, string> = {
   FORMA_MOLDE: "Forma/molde",
   SERVICO: "Serviço"
 };
-
-function decimalToNumber(value: unknown) {
-  if (value && typeof value === "object" && "toString" in value) {
-    return Number(value.toString());
-  }
-
-  return Number(value ?? 0);
-}
-
-function formatQuantity(value: unknown) {
-  return decimalToNumber(value).toLocaleString("pt-BR", {
-    maximumFractionDigits: 3
-  });
-}
 
 function itemUsesCuring(type: string) {
   return type === "PECA_PRE_MOLDADA" || type === "PRODUTO_ACABADO";

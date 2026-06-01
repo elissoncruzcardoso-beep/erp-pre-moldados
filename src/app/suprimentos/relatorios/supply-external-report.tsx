@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { Eye, FileDown, Mail, X } from "lucide-react";
 
 type ReportItem = {
@@ -278,7 +278,7 @@ export function SupplyExternalReport({
     };
   }, [filters, orders, quotes, receipts, requests, stockMovements, supplierOptions, timeline]);
 
-  const totals = {
+  const totals = useMemo(() => ({
     requests: filtered.requests.length,
     quoted: filtered.quotes.reduce((sum, quote) => sum + Number(quote.totalValue.replace(/[^\d,-]/g, "").replace(",", ".")), 0),
     approved: filtered.quotes.filter((quote) => quote.status === "APROVADA").length,
@@ -286,7 +286,7 @@ export function SupplyExternalReport({
     receipts: filtered.receipts.length,
     stock: filtered.stockMovements.length,
     events: filtered.timeline.length
-  };
+  }), [filtered]);
 
   function updateFilter(name: string, value: string) {
     setFilters((current) => ({ ...current, [name]: value }));
@@ -435,21 +435,11 @@ export function SupplyExternalReport({
         </div>
       ) : null}
 
-      <div className="print-only">
-        <ReportDocument
-          code={reportCode}
-          generatedBy={generatedBy}
-          generatedAt={generatedAt}
-          sections={sections}
-          totals={totals}
-          filtered={filtered}
-        />
-      </div>
     </>
   );
 }
 
-function ReportDocument({
+const ReportDocument = memo(function ReportDocument({
   code,
   generatedBy,
   generatedAt,
@@ -620,9 +610,9 @@ function ReportDocument({
       </footer>
     </article>
   );
-}
+});
 
-function ReportItemsTable({ items, showPrices = false }: { items: ReportItem[]; showPrices?: boolean }) {
+const ReportItemsTable = memo(function ReportItemsTable({ items, showPrices = false }: { items: ReportItem[]; showPrices?: boolean }) {
   return (
     <table className="report-table">
       <thead>
@@ -649,4 +639,4 @@ function ReportItemsTable({ items, showPrices = false }: { items: ReportItem[]; 
       </tbody>
     </table>
   );
-}
+});

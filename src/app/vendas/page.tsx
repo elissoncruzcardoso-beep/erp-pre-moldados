@@ -1,58 +1,19 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { ArrowRight, ClipboardCheck, PackageCheck, ReceiptText, ShoppingCart, WalletCards } from "lucide-react";
-import { getSession } from "@/lib/auth/session";
+import { requirePageSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
+import { decimalToNumber, formatMoney } from "@/lib/formatters";
+import { parseSaleLines } from "@/lib/sales/parse-sale-lines";
 import { StockSaleForm } from "../estoque/stock-sale-form";
 import { DirectSaleActions } from "../estoque/venda-direta/direct-sale-actions";
 
 export const dynamic = "force-dynamic";
 
-function decimalToNumber(value: unknown) {
-  if (value && typeof value === "object" && "toString" in value) {
-    return Number(value.toString());
-  }
-
-  return Number(value ?? 0);
-}
-
-function money(value: number) {
-  return value.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL"
-  });
-}
-
-function parseSaleLines(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
-  const saleItems = (value as Record<string, unknown>).saleItems;
-  if (!Array.isArray(saleItems)) return [];
-
-  return saleItems
-    .map((line) => {
-      if (!line || typeof line !== "object") return null;
-      const record = line as Record<string, unknown>;
-      return {
-        itemCode: String(record.itemCode || ""),
-        description: String(record.description || ""),
-        quantity: String(record.quantity || "0"),
-        unitCode: String(record.unitCode || "UN"),
-        finalTotal: String(record.finalTotal || "0")
-      };
-    })
-    .filter((line): line is NonNullable<typeof line> => Boolean(line));
-}
-
 export default async function VendasPage() {
-  const session = await getSession();
-
-  if (!session) {
-    redirect("/login?next=/vendas");
-  }
-
-  if (!session.permissions.includes("estoque.view") || !session.permissions.includes("estoque.move")) {
-    redirect("/dashboard");
-  }
+  const session = await requirePageSession({
+    nextPath: "/vendas",
+    permissions: ["estoque.view", "estoque.move"]
+  });
 
   const prisma = getPrisma();
   const [items, warehouses, balances, directSales, customers, paymentMethods] = await Promise.all([
@@ -91,6 +52,7 @@ export default async function VendasPage() {
         warehouse: true,
         createdBy: true,
         accountsReceivable: {
+          include: { receipts: true },
           orderBy: { createdAt: "desc" },
           take: 1
         }
@@ -183,7 +145,7 @@ export default async function VendasPage() {
         </article>
         <article className="metric-card accent-orange span-3">
           <div className="metric-top"><span className="mono">Vendas recentes</span><ReceiptText size={22} /></div>
-          <strong className="metric-value">{money(soldTotal)}</strong>
+          <strong className="metric-value">{formatMoney(soldTotal)}</strong>
           <span className="metric-sub">Valor dos recibos ativos listados</span>
         </article>
         <article className="metric-card accent-red span-3">
@@ -340,7 +302,7 @@ export default async function VendasPage() {
                         ? `${saleLines.reduce((total, line) => total + decimalToNumber(line.quantity), 0).toLocaleString("pt-BR", { maximumFractionDigits: 3 })} un.`
                         : `${decimalToNumber(sale.quantity).toLocaleString("pt-BR", { maximumFractionDigits: 3 })} ${sale.item.unit.code}`}
                     </td>
-                    <td className="mono">{money(decimalToNumber(sale.finalTotal))}</td>
+                    <td className="mono">{formatMoney(decimalToNumber(sale.finalTotal))}</td>
                     <td>
                       {receivable ? (
                         <span className={receivable.status === "RECEBIDO" ? "badge green" : "badge orange"}>
@@ -359,14 +321,19 @@ export default async function VendasPage() {
                       <DirectSaleActions
                         sale={{
                           id: sale.id,
+                          number: sale.number,
                           customerName: sale.customerName,
                           customerDocument: sale.customerDocument || "",
                           unitPrice: sale.unitPrice.toString(),
                           discount: sale.discount.toString(),
+                          finalTotal: sale.finalTotal.toString(),
                           paymentMethod: sale.paymentMethod || "",
                           note: sale.note || "",
                           status: sale.status,
-                          itemCount: saleLines.length || 1
+                          itemCount: saleLines.length || 1,
+                          receivableNumber: receivable?.number,
+                          receivableStatus: receivable?.status,
+                          receiptCount: receivable?.receipts.length || 0
                         }}
                       />
                     </td>

@@ -16,34 +16,15 @@ import {
   TimerReset,
   Users
 } from "lucide-react";
+import { PaginationControls } from "@/components/pagination-controls";
 import { PrototypeAction } from "@/components/prototype-action";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
+import { decimalToNumber, formatMoney, formatQuantity } from "@/lib/formatters";
+import { getPaginationMeta, parsePagination, type SearchParamsLike } from "@/lib/pagination";
 import { ProductionExternalReport } from "./production-external-report";
 
 export const dynamic = "force-dynamic";
-
-function decimalToNumber(value: unknown) {
-  if (value && typeof value === "object" && "toString" in value) {
-    return Number(value.toString());
-  }
-
-  return Number(value ?? 0);
-}
-
-function formatQuantity(value: unknown) {
-  return decimalToNumber(value).toLocaleString("pt-BR", {
-    maximumFractionDigits: 3
-  });
-}
-
-function formatCurrency(value: unknown) {
-  return decimalToNumber(value).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    maximumFractionDigits: 2
-  });
-}
 
 function statusBadge(status: string) {
   if (status === "APTA_RETIRADA" || status === "ENCERRADA") return "badge green";
@@ -79,7 +60,11 @@ const reportEnvironments = [
   }
 ];
 
-export default async function ProducaoRelatoriosPage() {
+type ProducaoRelatoriosPageProps = {
+  searchParams?: Promise<SearchParamsLike>;
+};
+
+export default async function ProducaoRelatoriosPage({ searchParams }: ProducaoRelatoriosPageProps) {
   const session = await getSession();
 
   if (!session) {
@@ -90,8 +75,19 @@ export default async function ProducaoRelatoriosPage() {
     redirect("/dashboard");
   }
 
+  const params = (await searchParams) || {};
+  const batchPagination = parsePagination(params, {
+    pageParam: "lotesPage",
+    defaultPageSize: 12,
+    maxPageSize: 60
+  });
+  const orderPagination = parsePagination(params, {
+    pageParam: "opsPage",
+    defaultPageSize: 10,
+    maxPageSize: 60
+  });
   const prisma = getPrisma();
-  const [orders, notes, dailyLogs, batches, stockMovements, products] = await Promise.all([
+  const [orders, notes, dailyLogs, batches, stockMovements, products, orderCount, batchCount] = await Promise.all([
     prisma.productionOrder.findMany({
       include: {
         product: { include: { unit: true } },
@@ -160,8 +156,20 @@ export default async function ProducaoRelatoriosPage() {
       },
       include: { unit: true },
       orderBy: [{ group: "asc" }, { code: "asc" }]
-    })
+    }),
+    prisma.productionOrder.count(),
+    prisma.productionBatch.count()
   ]);
+  const batchMeta = getPaginationMeta(batches.length, batchPagination.page, batchPagination.pageSize);
+  const paginatedBatches = batches.slice(
+    (batchMeta.page - 1) * batchMeta.pageSize,
+    batchMeta.page * batchMeta.pageSize
+  );
+  const orderMeta = getPaginationMeta(orders.length, orderPagination.page, orderPagination.pageSize);
+  const paginatedOrders = orders.slice(
+    (orderMeta.page - 1) * orderMeta.pageSize,
+    orderMeta.page * orderMeta.pageSize
+  );
 
   const activeOrders = orders.filter((order) => !["ENCERRADA", "CANCELADA"].includes(order.status)).length;
   const totalDiaryQuantity = dailyLogs.reduce((sum, log) => {
@@ -244,7 +252,7 @@ export default async function ProducaoRelatoriosPage() {
       description: `${movement.type} - ${movement.item.description}`,
       status: movement.type,
       responsible: movement.user.name,
-      value: formatCurrency(movement.totalCost)
+      value: formatMoney(movement.totalCost)
     }))
   ].sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 120);
   const statusOptions = Array.from(new Set([
@@ -329,7 +337,7 @@ export default async function ProducaoRelatoriosPage() {
         : movement.originWarehouse?.code || "",
       lot: movement.lot?.code || "",
       document: movement.document || movement.productionOrder?.number || "",
-      totalCost: formatCurrency(movement.totalCost),
+      totalCost: formatMoney(movement.totalCost),
       responsible: movement.user.name
     })),
     timeline: timeline.map((event) => ({
@@ -466,7 +474,7 @@ export default async function ProducaoRelatoriosPage() {
               <p className="eyebrow">Lotes</p>
               <h2>Cura e retirada</h2>
             </div>
-            <span className="badge blue">{batches.length} lotes</span>
+            <span className="badge blue">{batchCount} lotes</span>
           </div>
           <div className="table-scroll">
             <table className="technical-items-table">
@@ -481,7 +489,7 @@ export default async function ProducaoRelatoriosPage() {
                 </tr>
               </thead>
               <tbody>
-                {batches.map((batch) => (
+                {paginatedBatches.map((batch) => (
                   <tr key={batch.id}>
                     <td className="mono">{batch.code}</td>
                     <td className="mono">{batch.producedAt.toLocaleDateString("pt-BR")}</td>
@@ -491,12 +499,18 @@ export default async function ProducaoRelatoriosPage() {
                     <td><span className={statusBadge(batch.status)}>{batch.status.replaceAll("_", " ")}</span></td>
                   </tr>
                 ))}
-                {batches.length === 0 ? (
+                {paginatedBatches.length === 0 ? (
                   <tr><td colSpan={6}>Nenhum lote gerado ainda. Lance um Diario de Producao.</td></tr>
                 ) : null}
               </tbody>
             </table>
           </div>
+          <PaginationControls
+            pathname="/producao/relatorios"
+            params={params}
+            meta={batchMeta}
+            pageParam="lotesPage"
+          />
         </section>
 
         <aside className="product-section-card production-report-side">
@@ -568,6 +582,7 @@ export default async function ProducaoRelatoriosPage() {
               <h2>Mapa operacional</h2>
             </div>
             <TimerReset size={22} color="#1a237e" />
+            <span className="badge blue">{orderCount} OPs</span>
           </div>
           <div className="table-scroll">
             <table className="technical-items-table compact-report-table">
@@ -580,7 +595,7 @@ export default async function ProducaoRelatoriosPage() {
                 </tr>
               </thead>
               <tbody>
-                {orders.map((order) => {
+                {paginatedOrders.map((order) => {
                   const planned = decimalToNumber(order.plannedQuantity);
                   const produced = decimalToNumber(order.producedQuantity);
                   const progress = planned > 0 ? Math.min(100, Math.round((produced / planned) * 100)) : 0;
@@ -594,12 +609,18 @@ export default async function ProducaoRelatoriosPage() {
                     </tr>
                   );
                 })}
-                {orders.length === 0 ? (
+                {paginatedOrders.length === 0 ? (
                   <tr><td colSpan={4}>Nenhuma ordem de producao criada ainda.</td></tr>
                 ) : null}
               </tbody>
             </table>
           </div>
+          <PaginationControls
+            pathname="/producao/relatorios"
+            params={params}
+            meta={orderMeta}
+            pageParam="opsPage"
+          />
         </section>
       </section>
     </>

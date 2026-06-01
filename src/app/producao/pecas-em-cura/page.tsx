@@ -3,24 +3,11 @@ import { redirect } from "next/navigation";
 import { ClipboardEdit, Hourglass, PackageCheck, ShieldCheck, TimerReset } from "lucide-react";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
+import { decimalToNumber, formatQuantity } from "@/lib/formatters";
 import { autoReleaseCuredBatches } from "@/lib/production/auto-release-cured-batches";
 import { BatchReleaseForm } from "./batch-release-form";
 
 export const dynamic = "force-dynamic";
-
-function decimalToNumber(value: unknown) {
-  if (value && typeof value === "object" && "toString" in value) {
-    return Number(value.toString());
-  }
-
-  return Number(value ?? 0);
-}
-
-function formatQuantity(value: unknown) {
-  return decimalToNumber(value).toLocaleString("pt-BR", {
-    maximumFractionDigits: 3
-  });
-}
 
 const statusLabels: Record<string, string> = {
   EM_CURA: "Em cura",
@@ -37,7 +24,16 @@ function statusBadge(status: string) {
   return "badge blue";
 }
 
-export default async function PecasEmCuraPage() {
+type PageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+function firstParam(params: Record<string, string | string[] | undefined>, key: string) {
+  const value = params[key];
+  return Array.isArray(value) ? value[0] || "" : value || "";
+}
+
+export default async function PecasEmCuraPage({ searchParams }: PageProps) {
   const session = await getSession();
 
   if (!session) {
@@ -77,6 +73,14 @@ export default async function PecasEmCuraPage() {
 
   const curingBatches = batches.filter((batch) => batch.status === "EM_CURA" || batch.status === "RETIRADA_PARCIAL");
   const readyBatches = batches.filter((batch) => batch.status === "APTA_RETIRADA");
+  const params = (await searchParams) || {};
+  const statusFilter = firstParam(params, "status") || "todos";
+  const visibleBatches =
+    statusFilter === "cura"
+      ? curingBatches
+      : statusFilter === "apta"
+        ? readyBatches
+        : batches;
   const curingQuantity = curingBatches.reduce((sum, batch) => sum + decimalToNumber(batch.curingQuantity), 0);
   const readyQuantity = readyBatches.reduce((sum, batch) => sum + decimalToNumber(batch.releasedQuantity), 0);
 
@@ -92,6 +96,15 @@ export default async function PecasEmCuraPage() {
           </p>
         </div>
         <div className="button-row">
+          <Link className={statusFilter === "todos" ? "primary-button" : "secondary-button"} href="/producao/pecas-em-cura">
+            Todos
+          </Link>
+          <Link className={statusFilter === "cura" ? "primary-button" : "secondary-button"} href="/producao/pecas-em-cura?status=cura">
+            Em cura
+          </Link>
+          <Link className={statusFilter === "apta" ? "primary-button" : "secondary-button"} href="/producao/pecas-em-cura?status=apta">
+            Aptas
+          </Link>
           <span className="status-pill">
             <ShieldCheck size={16} />
             Operador: {session.name}
@@ -132,7 +145,7 @@ export default async function PecasEmCuraPage() {
             <p className="eyebrow">Lotes de producao</p>
             <h2>Controle de cura e liberacao</h2>
           </div>
-          <span className="badge blue">{batches.length} lotes</span>
+          <span className="badge blue">{visibleBatches.length} lotes</span>
         </div>
         <table>
           <thead>
@@ -149,7 +162,7 @@ export default async function PecasEmCuraPage() {
             </tr>
           </thead>
           <tbody>
-            {batches.map((batch) => {
+            {visibleBatches.map((batch) => {
               const curingQuantityValue = decimalToNumber(batch.curingQuantity);
               const canRelease = ["EM_CURA", "RETIRADA_PARCIAL"].includes(batch.status) && curingQuantityValue > 0;
 
@@ -178,7 +191,7 @@ export default async function PecasEmCuraPage() {
                 </tr>
               );
             })}
-            {batches.length === 0 ? (
+            {visibleBatches.length === 0 ? (
               <tr>
                 <td colSpan={9}>Nenhum lote gerado ainda. Salve um Diario de Producao para criar lotes em cura.</td>
               </tr>

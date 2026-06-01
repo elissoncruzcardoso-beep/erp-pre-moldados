@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
+import { decimalToNumber, formatMoney } from "@/lib/formatters";
 
 export const statusLabels: Record<string, string> = {
   ABERTA: "Aberta",
@@ -37,20 +38,9 @@ export function quoteBadgeClass(status: string) {
   return "badge blue";
 }
 
-export function decimalToNumber(value: unknown) {
-  if (value && typeof value === "object" && "toString" in value) {
-    return Number(value.toString());
-  }
+export { decimalToNumber };
 
-  return Number(value ?? 0);
-}
-
-export function formatCurrency(value: unknown) {
-  return decimalToNumber(value).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL"
-  });
-}
+export const formatCurrency = formatMoney;
 
 export async function requireSuprimentosSession(nextPath: string) {
   const session = await getSession();

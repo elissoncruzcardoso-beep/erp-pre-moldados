@@ -1,5 +1,5 @@
-import Link from "next/link";
-import { redirect } from "next/navigation";
+﻿import Link from "next/link";
+import { AccountPayableStatus, AccountReceivableStatus, Prisma, ProductionBatchStatus, StockMovementType } from "@prisma/client";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -11,39 +11,19 @@ import {
   RadioTower,
   WalletCards
 } from "lucide-react";
-import { getSession } from "@/lib/auth/session";
+import { hasPermission, requirePageSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
+import { activeAccountReceiptWhere, findRecentActiveAccountReceipts } from "@/lib/finance/queries";
+import { decimalToNumber, formatMoney, formatQuantity } from "@/lib/formatters";
 import { autoReleaseCuredBatches } from "@/lib/production/auto-release-cured-batches";
 
 export const dynamic = "force-dynamic";
 
-function decimalToNumber(value: unknown) {
-  if (value && typeof value === "object" && "toString" in value) {
-    return Number(value.toString());
-  }
-
-  return Number(value ?? 0);
-}
-
-function formatCurrency(value: unknown) {
-  return decimalToNumber(value).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    maximumFractionDigits: 2
-  });
-}
-
-function formatQuantity(value: unknown) {
-  return decimalToNumber(value).toLocaleString("pt-BR", {
-    maximumFractionDigits: 3
-  });
-}
-
 const movementLabels: Record<string, string> = {
   ENTRADA_COMPRA: "Entrada de compra",
-  SAIDA_PRODUCAO: "Saída para produção",
-  ENTRADA_PRODUCAO: "Entrada de produção",
-  TRANSFERENCIA: "Transferência",
+  SAIDA_PRODUCAO: "SaÃ­da para produÃ§Ã£o",
+  ENTRADA_PRODUCAO: "Entrada de produÃ§Ã£o",
+  TRANSFERENCIA: "TransferÃªncia",
   AJUSTE_POSITIVO: "Ajuste positivo",
   AJUSTE_NEGATIVO: "Ajuste negativo",
   RESERVA: "Reserva",
@@ -58,25 +38,71 @@ const batchStatusLabels: Record<string, string> = {
   BLOQUEADA: "Bloqueada"
 };
 
+const entryMovementTypes = new Set<StockMovementType>([
+  StockMovementType.ENTRADA_COMPRA,
+  StockMovementType.ENTRADA_PRODUCAO,
+  StockMovementType.AJUSTE_POSITIVO
+]);
+
 export default async function DashboardPage() {
-  const session = await getSession();
-
-  if (!session) {
-    redirect("/login?next=/dashboard");
-  }
-
-  if (!session.permissions.includes("dashboard.view")) {
-    redirect("/dashboard");
-  }
+  const session = await requirePageSession({ nextPath: "/dashboard", permission: "dashboard.view" });
 
   const prisma = getPrisma();
-  if (session.permissions.includes("producao.manage")) {
+  if (hasPermission(session, "producao.manage")) {
     await autoReleaseCuredBatches({ userId: session.userId });
   }
 
-  const [batches, accountReceipts, accountPayments, receivables, payables, stockMovements] =
+  const curingBatchWhere: Prisma.ProductionBatchWhereInput = {
+    status: { in: [ProductionBatchStatus.EM_CURA, ProductionBatchStatus.RETIRADA_PARCIAL] }
+  };
+  const readyBatchWhere: Prisma.ProductionBatchWhereInput = {
+    status: ProductionBatchStatus.APTA_RETIRADA
+  };
+  const openReceivablesWhere: Prisma.AccountReceivableWhereInput = {
+    status: { in: [AccountReceivableStatus.ABERTO, AccountReceivableStatus.FATURADO] }
+  };
+  const openPayablesWhere: Prisma.AccountPayableWhereInput = {
+    status: { in: [AccountPayableStatus.ABERTO, AccountPayableStatus.PROGRAMADO] }
+  };
+  const entryMovementWhere: Prisma.StockMovementWhereInput = {
+    type: {
+      in: [StockMovementType.ENTRADA_COMPRA, StockMovementType.ENTRADA_PRODUCAO, StockMovementType.AJUSTE_POSITIVO]
+    }
+  };
+  const exitMovementWhere: Prisma.StockMovementWhereInput = {
+    type: {
+      in: [StockMovementType.SAIDA_PRODUCAO, StockMovementType.AJUSTE_NEGATIVO, StockMovementType.RESERVA]
+    }
+  };
+
+  const [
+    curingBatchStats,
+    readyBatchStats,
+    recentCuringBatches,
+    recentReadyBatches,
+    accountReceipts,
+    accountPayments,
+    receivableStats,
+    payableStats,
+    receiptStats,
+    paymentStats,
+    stockMovements,
+    entryMovementCount,
+    exitMovementCount
+  ] =
     await Promise.all([
+      prisma.productionBatch.aggregate({
+        where: curingBatchWhere,
+        _count: { _all: true },
+        _sum: { curingQuantity: true }
+      }),
+      prisma.productionBatch.aggregate({
+        where: readyBatchWhere,
+        _count: { _all: true },
+        _sum: { releasedQuantity: true }
+      }),
       prisma.productionBatch.findMany({
+        where: curingBatchWhere,
         include: {
           item: {
             include: {
@@ -90,19 +116,26 @@ export default async function DashboardPage() {
           }
         },
         orderBy: [{ producedAt: "desc" }, { code: "desc" }],
-        take: 40
+        take: 8
       }),
-      prisma.accountReceipt.findMany({
+      prisma.productionBatch.findMany({
+        where: readyBatchWhere,
         include: {
-          accountReceivable: {
+          item: {
             include: {
-              customer: true
+              unit: true
+            }
+          },
+          dailyLogItem: {
+            include: {
+              dailyLog: true
             }
           }
         },
-        orderBy: { receiptDate: "desc" },
-        take: 8
+        orderBy: [{ producedAt: "desc" }, { code: "desc" }],
+        take: 12
       }),
+      findRecentActiveAccountReceipts(prisma, 8),
       prisma.accountPayment.findMany({
         include: {
           accountPayable: {
@@ -114,27 +147,20 @@ export default async function DashboardPage() {
         orderBy: { paymentDate: "desc" },
         take: 8
       }),
-      prisma.accountReceivable.findMany({
-        where: {
-          status: { in: ["ABERTO", "FATURADO"] }
-        },
-        include: {
-          customer: true,
-          receipts: true
-        },
-        orderBy: { dueDate: "asc" },
-        take: 12
+      prisma.accountReceivable.aggregate({
+        where: openReceivablesWhere,
+        _sum: { amount: true, receivedAmount: true }
       }),
-      prisma.accountPayable.findMany({
-        where: {
-          status: { in: ["ABERTO", "PROGRAMADO"] }
-        },
-        include: {
-          supplier: true,
-          payments: true
-        },
-        orderBy: { dueDate: "asc" },
-        take: 12
+      prisma.accountPayable.aggregate({
+        where: openPayablesWhere,
+        _sum: { amount: true, paidAmount: true }
+      }),
+      prisma.accountReceipt.aggregate({
+        where: activeAccountReceiptWhere(),
+        _sum: { amount: true }
+      }),
+      prisma.accountPayment.aggregate({
+        _sum: { amount: true }
       }),
       prisma.stockMovement.findMany({
         include: {
@@ -149,35 +175,33 @@ export default async function DashboardPage() {
         },
         orderBy: { createdAt: "desc" },
         take: 14
-      })
+      }),
+      prisma.stockMovement.count({ where: entryMovementWhere }),
+      prisma.stockMovement.count({ where: exitMovementWhere })
     ]);
 
-  const curingBatches = batches.filter((batch) => batch.status === "EM_CURA" || batch.status === "RETIRADA_PARCIAL");
-  const readyBatches = batches.filter((batch) => batch.status === "APTA_RETIRADA");
-  const receiptTotal = accountReceipts.reduce((sum, receipt) => sum + decimalToNumber(receipt.amount), 0);
-  const paymentTotal = accountPayments.reduce((sum, payment) => sum + decimalToNumber(payment.amount), 0);
-  const openReceivableTotal = receivables.reduce((sum, receivable) => {
-    const received = receivable.receipts.reduce((total, receipt) => total + decimalToNumber(receipt.amount), 0);
-    return sum + Math.max(decimalToNumber(receivable.amount) - received, 0);
-  }, 0);
-  const openPayableTotal = payables.reduce((sum, payable) => {
-    const paid = payable.payments.reduce((total, payment) => total + decimalToNumber(payment.amount), 0);
-    return sum + Math.max(decimalToNumber(payable.amount) - paid, 0);
-  }, 0);
-  const readyQuantity = readyBatches.reduce((sum, batch) => sum + decimalToNumber(batch.releasedQuantity), 0);
-  const curingQuantity = curingBatches.reduce((sum, batch) => sum + decimalToNumber(batch.curingQuantity), 0);
-  const entryMovements = stockMovements.filter((movement) => movement.type.includes("ENTRADA") || movement.type === "AJUSTE_POSITIVO");
-  const exitMovements = stockMovements.filter((movement) => movement.type.includes("SAIDA") || movement.type === "AJUSTE_NEGATIVO" || movement.type === "RESERVA");
+  const receiptTotal = decimalToNumber(receiptStats._sum.amount);
+  const paymentTotal = decimalToNumber(paymentStats._sum.amount);
+  const openReceivableTotal = Math.max(
+    decimalToNumber(receivableStats._sum.amount) - decimalToNumber(receivableStats._sum.receivedAmount),
+    0
+  );
+  const openPayableTotal = Math.max(
+    decimalToNumber(payableStats._sum.amount) - decimalToNumber(payableStats._sum.paidAmount),
+    0
+  );
+  const readyQuantity = decimalToNumber(readyBatchStats._sum.releasedQuantity);
+  const curingQuantity = decimalToNumber(curingBatchStats._sum.curingQuantity);
 
   return (
     <>
       <section className="page-head dashboard-hero">
         <div>
           <p className="eyebrow">Dashboard operacional</p>
-          <h1>Central de fábrica, cura e caixa</h1>
+          <h1>Central de fÃ¡brica, cura e caixa</h1>
           <p className="lead">
-            Painel em tempo real para acompanhar peças em cura, liberação para retirada,
-            recebimentos, saídas financeiras e movimentos de materiais.
+            Painel em tempo real para acompanhar peÃ§as em cura, liberaÃ§Ã£o para retirada,
+            recebimentos, saÃ­das financeiras e movimentos de materiais.
           </p>
         </div>
         <div className="button-row">
@@ -187,7 +211,7 @@ export default async function DashboardPage() {
           </span>
           <Link href="/producao" className="primary-button">
             <Factory size={17} />
-            Produção
+            ProduÃ§Ã£o
           </Link>
         </div>
       </section>
@@ -195,15 +219,17 @@ export default async function DashboardPage() {
       <section className="grid-12 dashboard-modern">
         <article className="metric-card futuristic-card accent-blue span-3">
           <div className="metric-top">
-            <span className="mono">Peças em cura</span>
+            <span className="mono">PeÃ§as em cura</span>
             <Clock3 size={22} />
           </div>
-          <strong className="metric-value">{curingBatches.length}</strong>
-          <span className="metric-sub">{formatQuantity(curingQuantity)} peças em controle de cura/qualidade</span>
+          <strong className="metric-value">{curingBatchStats._count._all}</strong>
+          <span className="metric-sub">{formatQuantity(curingQuantity)} peÃ§as em controle de cura/qualidade</span>
           <details className="dashboard-details">
-            <summary>Abrir lista</summary>
+            <summary>
+              <Link href="/producao/pecas-em-cura?status=cura">Abrir pÃ¡gina</Link>
+            </summary>
             <div className="mini-list">
-              {curingBatches.map((batch) => (
+              {recentCuringBatches.map((batch) => (
                 <Link href="/producao/pecas-em-cura" className="mini-list-row" key={batch.id}>
                   <span>
                     <strong>{batch.code}</strong>
@@ -212,22 +238,24 @@ export default async function DashboardPage() {
                   <span className="badge blue">{formatQuantity(batch.curingQuantity)} {batch.item.unit.code}</span>
                 </Link>
               ))}
-              {curingBatches.length === 0 ? <p className="metric-sub">Nenhuma peça em cura neste momento.</p> : null}
+              {recentCuringBatches.length === 0 ? <p className="metric-sub">Nenhuma peÃ§a em cura neste momento.</p> : null}
             </div>
           </details>
         </article>
 
         <article className="metric-card futuristic-card accent-blue span-3">
           <div className="metric-top">
-            <span className="mono">Aptas à retirada</span>
+            <span className="mono">Aptas Ã  retirada</span>
             <PackageCheck size={22} />
           </div>
-          <strong className="metric-value">{readyBatches.length}</strong>
-          <span className="metric-sub">{formatQuantity(readyQuantity)} peças prontas em lista</span>
+          <strong className="metric-value">{readyBatchStats._count._all}</strong>
+          <span className="metric-sub">{formatQuantity(readyQuantity)} peÃ§as prontas em lista</span>
           <details className="dashboard-details">
-            <summary>Abrir lista</summary>
+            <summary>
+              <Link href="/producao/pecas-em-cura?status=apta">Abrir pÃ¡gina</Link>
+            </summary>
             <div className="mini-list">
-              {readyBatches.map((batch) => (
+              {recentReadyBatches.map((batch) => (
                 <Link href="/producao/pecas-em-cura" className="mini-list-row" key={batch.id}>
                   <span>
                     <strong>{batch.code}</strong>
@@ -236,7 +264,7 @@ export default async function DashboardPage() {
                   <span className="badge green">{formatQuantity(batch.releasedQuantity)} {batch.item.unit.code}</span>
                 </Link>
               ))}
-              {readyBatches.length === 0 ? <p className="metric-sub">Nenhuma peça apta para retirada.</p> : null}
+              {recentReadyBatches.length === 0 ? <p className="metric-sub">Nenhuma peÃ§a apta para retirada.</p> : null}
             </div>
           </details>
         </article>
@@ -246,18 +274,18 @@ export default async function DashboardPage() {
             <span className="mono">Recebimentos</span>
             <ArrowDownLeft size={22} />
           </div>
-          <strong className="metric-value">{formatCurrency(receiptTotal)}</strong>
-          <span className="metric-sub">{formatCurrency(openReceivableTotal)} em aberto no financeiro</span>
+          <strong className="metric-value">{formatMoney(receiptTotal)}</strong>
+          <span className="metric-sub">{formatMoney(openReceivableTotal)} em aberto no financeiro</span>
           <Link href="/financeiro" className="secondary-button mini-button">Ver financeiro</Link>
         </article>
 
         <article className="metric-card futuristic-card accent-orange span-3">
           <div className="metric-top">
-            <span className="mono">Saídas financeiras</span>
+            <span className="mono">SaÃ­das financeiras</span>
             <ArrowUpRight size={22} />
           </div>
-          <strong className="metric-value">{formatCurrency(paymentTotal)}</strong>
-          <span className="metric-sub">{formatCurrency(openPayableTotal)} a pagar programado/aberto</span>
+          <strong className="metric-value">{formatMoney(paymentTotal)}</strong>
+          <span className="metric-sub">{formatMoney(openPayableTotal)} a pagar programado/aberto</span>
           <Link href="/financeiro" className="secondary-button mini-button">Ver pagamentos</Link>
         </article>
 
@@ -265,22 +293,22 @@ export default async function DashboardPage() {
           <div className="table-header">
             <div>
               <p className="eyebrow">Atividades recentes</p>
-              <h2>Peças prontas em lista</h2>
+              <h2>PeÃ§as prontas em lista</h2>
             </div>
-            <span className="badge green">{readyBatches.length} lotes</span>
+            <span className="badge green">{readyBatchStats._count._all} lotes</span>
           </div>
           <table>
             <thead>
               <tr>
                 <th>Lote</th>
-                <th>Peça</th>
+                <th>PeÃ§a</th>
                 <th>Qtd. pronta</th>
                 <th>Data</th>
                 <th>Status</th>
               </tr>
             </thead>
             <tbody>
-              {readyBatches.map((batch) => (
+              {recentReadyBatches.map((batch) => (
                 <tr key={batch.id}>
                   <td className="mono">{batch.code}</td>
                   <td>{batch.item.description}</td>
@@ -289,9 +317,9 @@ export default async function DashboardPage() {
                   <td><span className="badge green">{batchStatusLabels[batch.status] || batch.status}</span></td>
                 </tr>
               ))}
-              {readyBatches.length === 0 ? (
+              {recentReadyBatches.length === 0 ? (
                 <tr>
-                  <td colSpan={5}>Nenhuma peça pronta encontrada.</td>
+                  <td colSpan={5}>Nenhuma peÃ§a pronta encontrada.</td>
                 </tr>
               ) : null}
             </tbody>
@@ -299,11 +327,11 @@ export default async function DashboardPage() {
         </section>
 
         <article className="card dashboard-panel accent-orange span-4">
-          <p className="eyebrow">Alertas críticos</p>
-          <h2>Entradas e saídas de materiais</h2>
+          <p className="eyebrow">Alertas crÃ­ticos</p>
+          <h2>Entradas e saÃ­das de materiais</h2>
           <div className="split-list dashboard-movement-list">
             {stockMovements.slice(0, 8).map((movement) => {
-              const isEntry = entryMovements.some((entry) => entry.id === movement.id);
+              const isEntry = entryMovementTypes.has(movement.type);
               const warehouse = isEntry ? movement.targetWarehouse?.name : movement.originWarehouse?.name;
 
               return (
@@ -311,7 +339,7 @@ export default async function DashboardPage() {
                   <div>
                     <strong>{movement.item.description}</strong>
                     <div className="metric-sub">
-                      {movementLabels[movement.type] || movement.type} • {warehouse || "Sem depósito"}
+                      {movementLabels[movement.type] || movement.type} â€¢ {warehouse || "Sem depÃ³sito"}
                     </div>
                   </div>
                   <span className={isEntry ? "badge green" : "badge orange"}>
@@ -320,11 +348,11 @@ export default async function DashboardPage() {
                 </div>
               );
             })}
-            {stockMovements.length === 0 ? <p className="metric-sub">Nenhuma movimentação de material registrada.</p> : null}
+            {stockMovements.length === 0 ? <p className="metric-sub">Nenhuma movimentaÃ§Ã£o de material registrada.</p> : null}
           </div>
           <div className="dashboard-balance-line">
-            <span><Boxes size={16} /> Entradas: {entryMovements.length}</span>
-            <span>Saídas: {exitMovements.length}</span>
+            <span><Boxes size={16} /> Entradas: {entryMovementCount}</span>
+            <span>SaÃ­das: {exitMovementCount}</span>
           </div>
         </article>
 
@@ -332,7 +360,7 @@ export default async function DashboardPage() {
           <div className="table-header">
             <div>
               <p className="eyebrow">Recebimentos financeiros</p>
-              <h2>Últimas entradas</h2>
+              <h2>Ãšltimas entradas</h2>
             </div>
             <WalletCards size={22} color="#1b6b45" />
           </div>
@@ -351,7 +379,7 @@ export default async function DashboardPage() {
                   <td className="mono">{receipt.receiptDate.toLocaleDateString("pt-BR")}</td>
                   <td>{receipt.accountReceivable.customer.name}</td>
                   <td className="mono">{receipt.accountReceivable.documentNumber || receipt.accountReceivable.number}</td>
-                  <td className="mono">{formatCurrency(receipt.amount)}</td>
+                  <td className="mono">{formatMoney(receipt.amount)}</td>
                 </tr>
               ))}
               {accountReceipts.length === 0 ? (
@@ -366,8 +394,8 @@ export default async function DashboardPage() {
         <section className="table-shell dashboard-panel span-6">
           <div className="table-header">
             <div>
-              <p className="eyebrow">Saídas financeiras</p>
-              <h2>Últimos pagamentos</h2>
+              <p className="eyebrow">SaÃ­das financeiras</p>
+              <h2>Ãšltimos pagamentos</h2>
             </div>
             <CheckCircle2 size={22} color="#ff6f00" />
           </div>
@@ -386,12 +414,12 @@ export default async function DashboardPage() {
                   <td className="mono">{payment.paymentDate.toLocaleDateString("pt-BR")}</td>
                   <td>{payment.accountPayable.supplier.name}</td>
                   <td className="mono">{payment.accountPayable.documentNumber || payment.accountPayable.number}</td>
-                  <td className="mono">{formatCurrency(payment.amount)}</td>
+                  <td className="mono">{formatMoney(payment.amount)}</td>
                 </tr>
               ))}
               {accountPayments.length === 0 ? (
                 <tr>
-                  <td colSpan={4}>Nenhuma saída financeira registrada.</td>
+                  <td colSpan={4}>Nenhuma saÃ­da financeira registrada.</td>
                 </tr>
               ) : null}
             </tbody>
@@ -401,3 +429,4 @@ export default async function DashboardPage() {
     </>
   );
 }
+

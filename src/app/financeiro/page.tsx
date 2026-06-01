@@ -1,26 +1,14 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AccountPayableStatus, AccountReceivableStatus, Prisma } from "@prisma/client";
 import { ArrowDownCircle, ArrowUpCircle, Banknote, CircleDollarSign, Landmark, ShieldCheck } from "lucide-react";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
+import { activeAccountReceiptWhere, findRecentActiveAccountReceipts } from "@/lib/finance/queries";
+import { decimalToNumber, formatMoney } from "@/lib/formatters";
 import { FinanceModuleTabs } from "./_components/finance-module-tabs";
 
 export const dynamic = "force-dynamic";
-
-function decimalToNumber(value: unknown) {
-  if (value && typeof value === "object" && "toString" in value) {
-    return Number(value.toString());
-  }
-
-  return Number(value ?? 0);
-}
-
-function formatCurrency(value: unknown) {
-  return decimalToNumber(value).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL"
-  });
-}
 
 export default async function FinanceiroPage() {
   const session = await getSession();
@@ -34,19 +22,46 @@ export default async function FinanceiroPage() {
   }
 
   const prisma = getPrisma();
-  const [payables, receivables, payments, accountReceipts, pendingReceipts] = await Promise.all([
-    prisma.accountPayable.findMany({ include: { payments: true }, orderBy: { dueDate: "asc" }, take: 30 }),
-    prisma.accountReceivable.findMany({ include: { receipts: true }, orderBy: { dueDate: "asc" }, take: 30 }),
+  const openPayablesWhere: Prisma.AccountPayableWhereInput = {
+    status: { in: [AccountPayableStatus.ABERTO, AccountPayableStatus.PROGRAMADO] }
+  };
+  const openReceivablesWhere: Prisma.AccountReceivableWhereInput = {
+    status: { in: [AccountReceivableStatus.ABERTO, AccountReceivableStatus.FATURADO] }
+  };
+  const [
+    payableStats,
+    receivableStats,
+    paymentStats,
+    receiptStats,
+    payments,
+    accountReceipts,
+    pendingReceipts
+  ] = await Promise.all([
+    prisma.accountPayable.aggregate({
+      where: openPayablesWhere,
+      _count: { _all: true },
+      _sum: { amount: true }
+    }),
+    prisma.accountReceivable.aggregate({
+      where: openReceivablesWhere,
+      _count: { _all: true },
+      _sum: { amount: true }
+    }),
+    prisma.accountPayment.aggregate({
+      _count: { _all: true },
+      _sum: { amount: true }
+    }),
+    prisma.accountReceipt.aggregate({
+      where: activeAccountReceiptWhere(),
+      _count: { _all: true },
+      _sum: { amount: true }
+    }),
     prisma.accountPayment.findMany({
       include: { accountPayable: { include: { supplier: true } }, paidBy: true },
       orderBy: { paymentDate: "desc" },
       take: 8
     }),
-    prisma.accountReceipt.findMany({
-      include: { accountReceivable: { include: { customer: true } }, receivedBy: true },
-      orderBy: { receiptDate: "desc" },
-      take: 8
-    }),
+    findRecentActiveAccountReceipts(prisma, 8),
     prisma.purchaseReceipt.count({
       where: {
         accountPayable: null,
@@ -55,12 +70,10 @@ export default async function FinanceiroPage() {
     })
   ]);
 
-  const openPayables = payables.filter((payable) => payable.status === "ABERTO" || payable.status === "PROGRAMADO");
-  const openReceivables = receivables.filter((receivable) => receivable.status === "ABERTO" || receivable.status === "FATURADO");
-  const payableTotal = openPayables.reduce((sum, payable) => sum + decimalToNumber(payable.amount), 0);
-  const receivableTotal = openReceivables.reduce((sum, receivable) => sum + decimalToNumber(receivable.amount), 0);
-  const paidTotal = payments.reduce((sum, payment) => sum + decimalToNumber(payment.amount), 0);
-  const receivedTotal = accountReceipts.reduce((sum, receipt) => sum + decimalToNumber(receipt.amount), 0);
+  const payableTotal = decimalToNumber(payableStats._sum.amount);
+  const receivableTotal = decimalToNumber(receivableStats._sum.amount);
+  const paidTotal = decimalToNumber(paymentStats._sum.amount);
+  const receivedTotal = decimalToNumber(receiptStats._sum.amount);
 
   return (
     <>
@@ -93,23 +106,23 @@ export default async function FinanceiroPage() {
       <section className="product-metric-grid finance-metric-grid">
         <article className="product-metric-card accent-blue">
           <div className="metric-top"><span className="mono">A receber aberto</span><CircleDollarSign size={22} /></div>
-          <strong className="metric-value">{formatCurrency(receivableTotal)}</strong>
-          <span className="metric-sub">{openReceivables.length} titulo(s) pendente(s)</span>
+          <strong className="metric-value">{formatMoney(receivableTotal)}</strong>
+          <span className="metric-sub">{receivableStats._count._all} titulo(s) pendente(s)</span>
         </article>
         <article className="product-metric-card accent-orange">
           <div className="metric-top"><span className="mono">A pagar aberto</span><Banknote size={22} /></div>
-          <strong className="metric-value">{formatCurrency(payableTotal)}</strong>
-          <span className="metric-sub">{openPayables.length} titulo(s) pendente(s)</span>
+          <strong className="metric-value">{formatMoney(payableTotal)}</strong>
+          <span className="metric-sub">{payableStats._count._all} titulo(s) pendente(s)</span>
         </article>
         <article className="product-metric-card accent-blue">
           <div className="metric-top"><span className="mono">Entradas baixadas</span><ArrowUpCircle size={22} /></div>
-          <strong className="metric-value">{formatCurrency(receivedTotal)}</strong>
-          <span className="metric-sub">{accountReceipts.length} recebimento(s) recentes</span>
+          <strong className="metric-value">{formatMoney(receivedTotal)}</strong>
+          <span className="metric-sub">{receiptStats._count._all} recebimento(s) validos</span>
         </article>
         <article className="product-metric-card accent-gray">
-          <div className="metric-top"><span className="mono">Saldo baixado</span><Landmark size={22} /></div>
-          <strong className="metric-value">{formatCurrency(receivedTotal - paidTotal)}</strong>
-          <span className="metric-sub">{pendingReceipts} NF(s) aguardando titulo</span>
+          <div className="metric-top"><span className="mono">Caixa realizado</span><Landmark size={22} /></div>
+          <strong className="metric-value">{formatMoney(receivedTotal - paidTotal)}</strong>
+          <span className="metric-sub">Entradas recebidas - {paymentStats._count._all} saida(s) paga(s). {pendingReceipts} NF(s) aguardando titulo</span>
         </article>
       </section>
 
@@ -129,7 +142,7 @@ export default async function FinanceiroPage() {
                   <strong>{receipt.accountReceivable.customer.name}</strong>
                   <span className="product-detail mono">{receipt.accountReceivable.number} - {receipt.receiptDate.toLocaleDateString("pt-BR")}</span>
                 </div>
-                <strong className="mono">{formatCurrency(receipt.amount)}</strong>
+                <strong className="mono">{formatMoney(receipt.amount)}</strong>
               </article>
             ))}
             {accountReceipts.length === 0 ? <p className="metric-sub">Nenhum recebimento registrado ainda.</p> : null}
@@ -151,7 +164,7 @@ export default async function FinanceiroPage() {
                   <strong>{payment.accountPayable.supplier.name}</strong>
                   <span className="product-detail mono">{payment.accountPayable.number} - {payment.paymentDate.toLocaleDateString("pt-BR")}</span>
                 </div>
-                <strong className="mono">{formatCurrency(payment.amount)}</strong>
+                <strong className="mono">{formatMoney(payment.amount)}</strong>
               </article>
             ))}
             {payments.length === 0 ? <p className="metric-sub">Nenhum pagamento registrado ainda.</p> : null}
