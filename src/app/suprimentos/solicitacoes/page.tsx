@@ -101,7 +101,8 @@ export default async function SolicitacoesPage() {
         </div>
         <div className="supply-record-stack">
           {requests.map((request) => {
-            const locked = request.status !== "ABERTA" || request._count.quotes > 0 || request._count.orders > 0;
+            const lockedStatus = request.status === "EM_COTACAO" || request.status === "CONVERTIDA_PEDIDO" || request.status === "CANCELADA";
+            const locked = lockedStatus || request._count.quotes > 0 || request._count.orders > 0;
 
             return (
               <article className="supply-record-card" key={request.id}>

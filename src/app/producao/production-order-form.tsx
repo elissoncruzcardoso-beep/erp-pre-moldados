@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { Plus } from "lucide-react";
+import { useApiForm } from "@/lib/hooks/use-api-form";
+import { productionOrderSchema } from "@/lib/validations/production";
 
 type Option = {
   id: string;
@@ -16,44 +17,22 @@ type ProductionOrderFormProps = {
 };
 
 export function ProductionOrderForm({ products, molds, compositions }: ProductionOrderFormProps) {
-  const router = useRouter();
   const [selectedProductId, setSelectedProductId] = useState(products[0]?.id || "");
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(false);
   const availableCompositions = compositions.filter((composition) => composition.productId === selectedProductId);
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    setMessage("");
-    setLoading(true);
-
-    const formData = new FormData(event.currentTarget);
-    const response = await fetch("/api/producao/ordens", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        number: formData.get("number"),
-        productId: selectedProductId,
-        compositionId: formData.get("compositionId") || undefined,
-        moldId: formData.get("moldId") || undefined,
-        plannedQuantity: formData.get("plannedQuantity"),
-        expectedDate: formData.get("expectedDate") || undefined
-      })
-    });
-    const data = await response.json().catch(() => ({}));
-    setLoading(false);
-
-    if (!response.ok) {
-      setError(data.error || "Nao foi possivel criar a ordem de producao.");
-      return;
-    }
-
-    event.currentTarget.reset();
-    setMessage("Ordem de producao criada com sucesso.");
-    router.refresh();
-  }
+  const { error, success, loading, handleSubmit } = useApiForm({
+    endpoint: "/api/producao/ordens",
+    schema: productionOrderSchema,
+    fallbackError: "Nao foi possivel criar a ordem de producao.",
+    successMessage: "Ordem de producao criada com sucesso.",
+    buildPayload: (formData) => ({
+      number: formData.get("number"),
+      productId: selectedProductId,
+      compositionId: formData.get("compositionId") || undefined,
+      moldId: formData.get("moldId") || undefined,
+      plannedQuantity: formData.get("plannedQuantity"),
+      expectedDate: formData.get("expectedDate") || undefined
+    })
+  });
 
   return (
     <form className="product-form" onSubmit={handleSubmit}>
@@ -114,7 +93,7 @@ export function ProductionOrderForm({ products, molds, compositions }: Productio
       </label>
 
       {error ? <p className="auth-error">{error}</p> : null}
-      {message ? <p className="auth-success">{message}</p> : null}
+      {success ? <p className="auth-success">{success}</p> : null}
 
       <button className="primary-button" type="submit" disabled={loading || products.length === 0}>
         <Plus size={17} />

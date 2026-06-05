@@ -1688,6 +1688,72 @@ select.form-input {
   margin-top: 10px;
 }
 
+.role-create-card {
+  margin: 14px 0;
+}
+
+.permission-checklist {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.permission-group {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.permission-group legend {
+  padding: 0 6px;
+  color: var(--primary);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.permission-check {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 9px;
+  align-items: flex-start;
+  padding: 9px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.permission-check input {
+  margin-top: 3px;
+}
+
+.permission-check strong,
+.permission-check small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.permission-check strong {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.permission-check small {
+  margin-top: 3px;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.role-edit-modal {
+  width: min(920px, 100%);
+}
+
 .product-hero-panel {
   display: flex;
   justify-content: space-between;
@@ -1763,6 +1829,134 @@ select.form-input {
 
 .product-section-card {
   padding: 20px;
+}
+
+.production-capacity-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.capacity-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.capacity-summary-grid article {
+  min-height: 132px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+}
+
+.capacity-summary-grid strong {
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 26px;
+  line-height: 1;
+}
+
+.capacity-summary-grid small {
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.capacity-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.capacity-card {
+  display: grid;
+  gap: 14px;
+  min-height: 218px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(17, 24, 39, 0.05);
+}
+
+.capacity-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.capacity-card-head h3 {
+  margin-top: 5px;
+  font-size: 15px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.capacity-card > h3 {
+  font-size: 16px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.capacity-card-head small {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-muted);
+}
+
+.capacity-card-result {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid #dbeafe;
+  border-radius: 14px;
+  background: #eff6ff;
+}
+
+.capacity-card-result span,
+.capacity-detail-grid span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.capacity-card-result strong {
+  color: var(--primary);
+  font-family: var(--mono);
+  font-size: 28px;
+  line-height: 1;
+}
+
+.capacity-detail-grid {
+  display: grid;
+  grid-template-columns: .6fr minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.capacity-detail-grid div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.capacity-detail-grid strong,
+.capacity-detail-grid small {
+  overflow-wrap: anywhere;
+}
+
+.capacity-detail-grid small {
+  color: var(--text-muted);
+  line-height: 1.35;
 }
 
 .product-side-panel {
@@ -3742,6 +3936,58 @@ select.form-input {
   gap: 10px;
 }
 
+.stock-filter-panel {
+  margin: 0 16px 16px;
+  padding: 14px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+}
+
+.stock-filter-fields {
+  display: grid;
+  grid-template-columns: minmax(145px, 0.9fr) minmax(145px, 1fr) minmax(145px, 0.9fr) minmax(190px, 1.35fr);
+  gap: 10px;
+  align-items: end;
+}
+
+.stock-filter-panel .field {
+  gap: 5px;
+}
+
+.stock-filter-panel .field span {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.stock-filter-panel .form-input {
+  min-height: 38px;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.stock-filter-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  padding-top: 2px;
+}
+
+.stock-filter-actions .primary-button,
+.stock-filter-actions .secondary-button {
+  min-height: 38px;
+  padding-inline: 16px;
+  white-space: nowrap;
+  border-radius: 8px;
+}
+
 .report-section-picker {
   display: flex;
   flex-wrap: wrap;
@@ -4427,6 +4673,10 @@ select.form-input {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .capacity-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .product-workspace-grid {
     grid-template-columns: 1fr;
   }
@@ -4526,6 +4776,8 @@ select.form-input {
   .technical-table-toolbar,
   .finance-grid,
   .filter-bar,
+  .stock-filter-panel,
+  .stock-filter-fields,
   .batch-release-form,
   .daily-line,
   .purchase-line,
@@ -4552,9 +4804,28 @@ select.form-input {
   .form-three,
   .supply-feature-grid,
   .precast-product-grid,
+  .capacity-summary-grid,
+  .capacity-card-grid,
+  .capacity-detail-grid,
+  .permission-checklist,
   .report-environment-grid,
   .director-module-grid {
     grid-template-columns: 1fr;
+  }
+
+  .stock-filter-panel {
+    margin-inline: 12px;
+  }
+
+  .stock-filter-actions,
+  .stock-filter-actions .primary-button,
+  .stock-filter-actions .secondary-button {
+    width: 100%;
+  }
+
+  .stock-filter-actions .primary-button,
+  .stock-filter-actions .secondary-button {
+    justify-content: center;
   }
 
   .sale-total-preview {

@@ -1,8 +1,10 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ClipboardList, Plus, Trash2 } from "lucide-react";
+import { useApiForm } from "@/lib/hooks/use-api-form";
+import { compositionSchema } from "@/lib/validations/product";
 
 export type CompositionProductOption = {
   id: string;
@@ -66,9 +68,6 @@ export function CompositionForm({ products, materials, mode = "create", composit
     initialData?.items?.length ? initialData.items : [emptyLine(materials)]
   );
   const [approved, setApproved] = useState(initialData?.approved || false);
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(false);
 
   const productsById = useMemo(() => {
     return new Map(products.map((product) => [product.id, product]));
@@ -105,54 +104,42 @@ export function CompositionForm({ products, materials, mode = "create", composit
     setLines((current) => current.filter((_, lineIndex) => lineIndex !== index));
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-    setError("");
-    setMessage("");
-    setLoading(true);
+  const { error, success, loading, handleSubmit } = useApiForm({
+    endpoint: isEdit ? `/api/produtos/composicoes/${compositionId}` : "/api/produtos/composicoes",
+    method: isEdit ? "PATCH" : "POST",
+    schema: compositionSchema,
+    fallbackError: isEdit ? "Nao foi possivel editar a ficha tecnica." : "Nao foi possivel criar a ficha tecnica.",
+    successMessage: isEdit ? "Ficha tecnica atualizada com sucesso." : "Ficha tecnica criada com sucesso.",
+    resetOnSuccess: !isEdit,
+    refreshOnSuccess: false,
+    buildPayload: (formData) => ({
+      code: formData.get("code"),
+      productId,
+      version: formData.get("version") || "1",
+      revision: formData.get("revision") || "A",
+      baseQuantity: formData.get("baseQuantity") || 1,
+      expectedLoss: formData.get("expectedLoss") || 0,
+      curingHours: formData.get("curingHours") || selectedProduct?.curingHours || 24,
+      approved,
+      items: lines
+        .filter((line) => line.itemId && Number(line.quantity) > 0)
+        .map((line) => ({
+          itemId: line.itemId,
+          quantity: line.quantity,
+          lossPercent: line.lossPercent || 0,
+          stage: line.stage || undefined
+        }))
+    }),
+    onSuccess: () => {
+      if (!isEdit) {
+        setApproved(false);
+        setLines([emptyLine(materials)]);
+      }
 
-    const response = await fetch(isEdit ? `/api/produtos/composicoes/${compositionId}` : "/api/produtos/composicoes", {
-      method: isEdit ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        code: formData.get("code"),
-        productId,
-        version: formData.get("version") || "1",
-        revision: formData.get("revision") || "A",
-        baseQuantity: formData.get("baseQuantity") || 1,
-        expectedLoss: formData.get("expectedLoss") || 0,
-        curingHours: formData.get("curingHours") || selectedProduct?.curingHours || 24,
-        approved,
-        items: lines
-          .filter((line) => line.itemId && Number(line.quantity) > 0)
-          .map((line) => ({
-            itemId: line.itemId,
-            quantity: line.quantity,
-            lossPercent: line.lossPercent || 0,
-            stage: line.stage || undefined
-          }))
-      })
-    });
-    const data = await response.json().catch(() => null);
-    setLoading(false);
-
-    if (!response.ok) {
-      setError(data?.error || (isEdit ? "Nao foi possivel editar a ficha tecnica." : "Nao foi possivel criar a ficha tecnica."));
-      return;
+      router.push("/produtos");
+      router.refresh();
     }
-
-    if (!isEdit) {
-      form.reset();
-      setApproved(false);
-      setLines([emptyLine(materials)]);
-    }
-
-    setMessage(isEdit ? "Ficha tecnica atualizada com sucesso." : "Ficha tecnica criada com sucesso.");
-    router.push("/produtos");
-    router.refresh();
-  }
+  });
 
   return (
     <form className="composition-builder-form" onSubmit={handleSubmit}>
@@ -310,7 +297,7 @@ export function CompositionForm({ products, materials, mode = "create", composit
       </section>
 
       {error ? <p className="auth-error">{error}</p> : null}
-      {message ? <p className="auth-success">{message}</p> : null}
+      {success ? <p className="auth-success">{success}</p> : null}
     </form>
   );
 }

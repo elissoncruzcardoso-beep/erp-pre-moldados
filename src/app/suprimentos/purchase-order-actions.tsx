@@ -3,6 +3,9 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, Save, Trash2, X } from "lucide-react";
+import { fetchJson, isApiRequestError } from "@/lib/api-client";
+import { formatValidationError } from "@/lib/validations/client";
+import { purchaseOrderUpdateSchema } from "@/lib/validations/purchase";
 
 type OrderItemEdit = {
   id: string;
@@ -41,31 +44,40 @@ export function PurchaseOrderActions({ orderId, locked, editData }: Props) {
     setError("");
     setLoading("editar");
 
-    const response = await fetch(`/api/suprimentos/pedidos/${orderId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        status: formData.get("status"),
-        expectedDeliveryAt: formData.get("expectedDeliveryAt") || undefined,
-        paymentTerms: formData.get("paymentTerms") || undefined,
-        freightCost: formData.get("freightCost") || 0,
-        note: formData.get("note") || undefined,
-        items: editData.items.map((item) => ({
-          id: item.id,
-          quantity: formData.get(`quantity-${item.id}`),
-          unitPrice: formData.get(`unitPrice-${item.id}`),
-          note: formData.get(`note-${item.id}`) || undefined
-        }))
-      })
-    });
-    const data = await response.json().catch(() => null);
-    setLoading("");
+    const payload = {
+      status: formData.get("status"),
+      expectedDeliveryAt: formData.get("expectedDeliveryAt") || undefined,
+      paymentTerms: formData.get("paymentTerms") || undefined,
+      freightCost: formData.get("freightCost") || 0,
+      note: formData.get("note") || undefined,
+      items: editData.items.map((item) => ({
+        id: item.id,
+        quantity: formData.get(`quantity-${item.id}`),
+        unitPrice: formData.get(`unitPrice-${item.id}`),
+        note: formData.get(`note-${item.id}`) || undefined
+      }))
+    };
+    const parsed = purchaseOrderUpdateSchema.safeParse(payload);
 
-    if (!response.ok) {
-      setError(data?.error || "Nao foi possivel editar o pedido.");
+    if (!parsed.success) {
+      setError(formatValidationError(parsed.error));
+      setLoading("");
       return;
     }
 
+    try {
+      await fetchJson(`/api/suprimentos/pedidos/${orderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed.data)
+      }, "Nao foi possivel editar o pedido.");
+    } catch (requestError) {
+      setError(isApiRequestError(requestError) ? requestError.message : "Nao foi possivel editar o pedido.");
+      setLoading("");
+      return;
+    }
+
+    setLoading("");
     setEditing(false);
     router.refresh();
   }
@@ -77,15 +89,16 @@ export function PurchaseOrderActions({ orderId, locked, editData }: Props) {
 
     setError("");
     setLoading("excluir");
-    const response = await fetch(`/api/suprimentos/pedidos/${orderId}`, { method: "DELETE" });
-    const data = await response.json().catch(() => null);
-    setLoading("");
 
-    if (!response.ok) {
-      setError(data?.error || "Nao foi possivel excluir o pedido.");
+    try {
+      await fetchJson(`/api/suprimentos/pedidos/${orderId}`, { method: "DELETE" }, "Nao foi possivel excluir o pedido.");
+    } catch (requestError) {
+      setError(isApiRequestError(requestError) ? requestError.message : "Nao foi possivel excluir o pedido.");
+      setLoading("");
       return;
     }
 
+    setLoading("");
     router.refresh();
   }
 

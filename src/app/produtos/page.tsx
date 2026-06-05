@@ -34,11 +34,6 @@ export default async function ProdutosPage({ searchParams }: ProdutosPageProps) 
 
   const prisma = getPrisma();
   const params = (await searchParams) || {};
-  const piecePagination = parsePagination(params, {
-    pageParam: "pecasPage",
-    defaultPageSize: 8,
-    maxPageSize: 40
-  });
   const compositionPagination = parsePagination(params, {
     pageParam: "fichasPage",
     defaultPageSize: 6,
@@ -56,24 +51,22 @@ export default async function ProdutosPage({ searchParams }: ProdutosPageProps) 
     precastCount,
     rawMaterialCount,
     activeCompositions,
-    precastItems,
-    compositions,
     compositionsCount
   ] = await Promise.all([
     prisma.item.count(),
     prisma.item.count({ where: { type: "PECA_PRE_MOLDADA" } }),
     prisma.item.count({ where: rawMaterialWhere }),
     prisma.composition.count({ where: { approved: true } }),
-    prisma.item.findMany({
-      where: { type: "PECA_PRE_MOLDADA" },
-      include: {
-        unit: true,
-        stockBalances: true
-      },
-      orderBy: { code: "asc" },
-      skip: piecePagination.skip,
-      take: piecePagination.pageSize
-    }),
+    prisma.composition.count()
+  ]);
+
+  const compositionPaginationMeta = getPaginationMeta(compositionsCount, compositionPagination.page, compositionPagination.pageSize);
+  const compositionSkip = (compositionPaginationMeta.page - 1) * compositionPagination.pageSize;
+
+  const [
+    compositions,
+    approvedCapacityCompositions
+  ] = await Promise.all([
     prisma.composition.findMany({
       include: {
         product: {
@@ -95,41 +88,128 @@ export default async function ProdutosPage({ searchParams }: ProdutosPageProps) 
         orders: true
       },
       orderBy: { code: "asc" },
-      skip: compositionPagination.skip,
+      skip: compositionSkip,
       take: compositionPagination.pageSize
     }),
-    prisma.composition.count()
+    prisma.composition.findMany({
+      where: {
+        approved: true,
+        product: {
+          active: true
+        }
+      },
+      include: {
+        product: {
+          include: {
+            unit: true
+          }
+        },
+        items: {
+          include: {
+            item: {
+              include: {
+                unit: true,
+                stockBalances: true
+              }
+            }
+          },
+          orderBy: { stage: "asc" }
+        },
+        orders: true
+      },
+      orderBy: { code: "asc" }
+    })
   ]);
 
-  const piecePaginationMeta = getPaginationMeta(precastCount, piecePagination.page, piecePagination.pageSize);
-  const compositionPaginationMeta = getPaginationMeta(compositionsCount, compositionPagination.page, compositionPagination.pageSize);
-  const compositionCapacity = compositions.map((composition) => {
-    const capacities = composition.items
-      .map((compositionItem) => {
-        const required = decimalToNumber(compositionItem.quantity);
-        const available = compositionItem.item.stockBalances.reduce((sum, balance) => sum + decimalToNumber(balance.quantity), 0);
+  const calculateCompositionCapacity = (
+    composition: (typeof compositions)[number] | (typeof approvedCapacityCompositions)[number]
+  ) => {
+    const baseQuantity = decimalToNumber(composition.baseQuantity) || 1;
+    const items = composition.items.map((compositionItem) => {
+      const quantity = decimalToNumber(compositionItem.quantity);
+      const lossPercent = decimalToNumber(compositionItem.lossPercent);
+      const required = quantity * (1 + lossPercent / 100);
+      const available = compositionItem.item.stockBalances.reduce((sum, balance) => {
+        const availableBalance = decimalToNumber(balance.quantity) - decimalToNumber(balance.reserved);
 
-        return required > 0 ? Math.floor(available / required) : null;
-      })
-      .filter((capacity): capacity is number => capacity !== null);
+        return sum + Math.max(availableBalance, 0);
+      }, 0);
+      const capacity = required > 0 ? Math.floor(available / required) : 0;
+
+      return {
+        code: compositionItem.item.code,
+        description: compositionItem.item.description,
+        unit: compositionItem.item.unit.code,
+        available,
+        capacity
+      };
+    });
+    const limitingItem = items.reduce<(typeof items)[number] | null>((lowest, item) => {
+      if (!lowest) {
+        return item;
+      }
+
+      return item.capacity < lowest.capacity ? item : lowest;
+    }, null);
 
     return {
       id: composition.id,
       code: composition.code,
+      productCode: composition.product.code,
       product: composition.product.description,
+      unit: composition.product.unit.code,
       approved: composition.approved,
-      capacity: capacities.length > 0 ? Math.min(...capacities) : null
+      itemsCount: items.length,
+      limitingItem,
+      capacity: limitingItem ? Math.floor(limitingItem.capacity * baseQuantity) : null
     };
-  });
+  };
+
+  const compositionCapacity = compositions.map(calculateCompositionCapacity);
+  const productionCapacity = approvedCapacityCompositions.map(calculateCompositionCapacity);
+  const bestProductionCapacity = productionCapacity.reduce<(typeof productionCapacity)[number] | null>((best, item) => {
+    if (!best) {
+      return item;
+    }
+
+    return (item.capacity ?? 0) > (best.capacity ?? 0) ? item : best;
+  }, null);
+  const productiveCapacityCount = productionCapacity.filter((item) => (item.capacity ?? 0) > 0).length;
+  const blockedCapacityCount = productionCapacity.filter((item) => (item.capacity ?? 0) <= 0).length;
+  const compositionCapacityById = new Map(compositionCapacity.map((item) => [item.id, item]));
+
+  const formatCapacity = (capacity: number | null) => {
+    if (capacity === null) {
+      return "-";
+    }
+
+    return `${formatQuantity(capacity)} un`;
+  };
+
+  const getCapacityBadgeClass = (capacity: number | null) => {
+    if (capacity === null) {
+      return "badge";
+    }
+
+    return capacity > 0 ? "badge green" : "badge red";
+  };
+
+  const getCapacityBadgeLabel = (capacity: number | null) => {
+    if (capacity === null) {
+      return "Sem insumos";
+    }
+
+    return capacity > 0 ? "Pode produzir" : "Sem saldo";
+  };
 
   return (
     <>
       <section className="product-hero-panel">
         <div>
-          <p className="eyebrow">Produtos e ficha tecnica</p>
-          <h1>Produtos e ficha tecnica</h1>
+          <p className="eyebrow">Produtos e ficha técnica</p>
+          <h1>Produtos e ficha técnica</h1>
           <p className="lead">
-            Cadastro tecnico de pecas, insumos e composicoes para estimar producao, controlar estoque e orientar a fabrica.
+            Cadastro técnico de peças, insumos e composições para estimar produção, controlar estoque e orientar a fábrica.
           </p>
         </div>
         <div className="button-row">
@@ -155,15 +235,15 @@ export default async function ProdutosPage({ searchParams }: ProdutosPageProps) 
             <Boxes size={22} />
           </div>
           <strong className="metric-value">{totalItems}</strong>
-          <span className="metric-sub">Produtos, pecas, insumos e materias-primas.</span>
+          <span className="metric-sub">Produtos, peças, insumos e matérias-primas.</span>
         </article>
         <article className="product-metric-card accent-orange">
           <div className="metric-top">
-            <span className="mono">Pecas pre-moldadas</span>
+            <span className="mono">Peças pré-moldadas</span>
             <Factory size={22} />
           </div>
           <strong className="metric-value">{precastCount}</strong>
-          <span className="metric-sub">Lista real das pecas fabricadas pela equipe.</span>
+          <span className="metric-sub">Lista real das peças fabricadas pela equipe.</span>
         </article>
         <article className="product-metric-card accent-gray">
           <div className="metric-top">
@@ -171,7 +251,7 @@ export default async function ProdutosPage({ searchParams }: ProdutosPageProps) 
             <ClipboardList size={22} />
           </div>
           <strong className="metric-value">{rawMaterialCount}</strong>
-          <span className="metric-sub">Materiais usados nas composicoes.</span>
+          <span className="metric-sub">Materiais usados nas composições.</span>
         </article>
         <article className="product-metric-card accent-blue">
           <div className="metric-top">
@@ -179,55 +259,70 @@ export default async function ProdutosPage({ searchParams }: ProdutosPageProps) 
             <Ruler size={22} />
           </div>
           <strong className="metric-value">{activeCompositions}</strong>
-          <span className="metric-sub">Composicoes liberadas para uso.</span>
+          <span className="metric-sub">Composições liberadas para uso.</span>
         </article>
       </section>
 
       <section className="product-page-stack">
-        <section className="product-section-card">
+        <section className="product-section-card production-capacity-panel">
           <div className="table-header product-card-header">
             <div>
-              <p className="eyebrow">Foco da fabrica</p>
-              <h2>Pecas que vamos controlar neste momento</h2>
-              <p className="metric-sub">Pecas principais para controlar producao, cura, liberacao e estoque acabado.</p>
+              <p className="eyebrow">Capacidade produtiva</p>
+              <h2>Quanto conseguimos produzir com o estoque atual</h2>
+              <p className="metric-sub">
+                Estimativa calculada pelas fichas técnicas aprovadas e pelo saldo disponível dos insumos.
+              </p>
             </div>
-            <span className="badge green">{precastCount} pecas</span>
+            <span className="badge blue">Capacidade por ficha</span>
           </div>
-          <div className="precast-product-grid">
-            {precastItems.map((item) => {
-              const stockQuantity = item.stockBalances.reduce((total, balance) => total + decimalToNumber(balance.quantity), 0);
+          <div className="capacity-summary-grid">
+            <article>
+              <span className="mono">Maior capacidade individual</span>
+              <strong>{formatCapacity(bestProductionCapacity?.capacity ?? null)}</strong>
+              <small>{bestProductionCapacity?.product ?? "Nenhuma ficha aprovada."}</small>
+            </article>
+            <article>
+              <span className="mono">Fichas analisadas</span>
+              <strong>{productionCapacity.length}</strong>
+              <small>Somente fichas aprovadas de produtos ativos.</small>
+            </article>
+            <article>
+              <span className="mono">Com saldo para produzir</span>
+              <strong>{productiveCapacityCount}</strong>
+              <small>Fichas com capacidade individual maior que zero.</small>
+            </article>
+            <article>
+              <span className="mono">Sem saldo suficiente</span>
+              <strong>{blockedCapacityCount}</strong>
+              <small>Peças bloqueadas pelo menor estoque de insumo.</small>
+            </article>
+          </div>
 
-              return (
-              <article className="precast-product-card" key={item.id}>
-                <div className="precast-product-top">
+          <div className="capacity-card-grid">
+            {productionCapacity.map((item) => (
+              <article className="capacity-card" key={item.id}>
+                <div className="capacity-card-head">
                   <span className="mono">{item.code}</span>
-                  <span className={item.active ? "badge green" : "badge red"}>
-                    {item.active ? "Ativa" : "Inativa"}
+                  <span className={getCapacityBadgeClass(item.capacity)}>
+                    {getCapacityBadgeLabel(item.capacity)}
                   </span>
                 </div>
-                <h3>{item.description}</h3>
+                <h3>{item.product}</h3>
                 <div className="product-card-meta">
-                  <span>Grupo: {item.group || "Sem grupo"}</span>
-                  <span>Unidade: {item.unit.code}</span>
-                  <span>Cura: {item.curingHours}h</span>
+                  <span>Produto: {item.productCode}</span>
+                  <span>Insumos: {item.itemsCount}</span>
+                  <span>Limitante: {item.limitingItem?.code ?? "-"}</span>
                 </div>
                 <div className="lot-tags">
-                  <span className="badge blue">Estoque: {formatQuantity(stockQuantity)} {item.unit.code}</span>
-                  <a className="secondary-button mini-button" href="/produtos/composicoes/nova">Ficha técnica</a>
+                  <span className="badge blue">Produção possível: {formatCapacity(item.capacity)}</span>
+                  <span className="badge">Saldo limitante: {item.limitingItem ? `${formatQuantity(item.limitingItem.available)} ${item.limitingItem.unit}` : "-"}</span>
                 </div>
               </article>
-              );
-            })}
-            {precastItems.length === 0 ? (
-              <p className="metric-sub">Rode o seed inicial para carregar as pecas de producao.</p>
+            ))}
+            {productionCapacity.length === 0 ? (
+              <p className="metric-sub">Nenhuma ficha técnica aprovada para calcular capacidade produtiva.</p>
             ) : null}
           </div>
-          <PaginationControls
-            pathname="/produtos"
-            params={params}
-            meta={piecePaginationMeta}
-            pageParam="pecasPage"
-          />
         </section>
 
         <section className="product-section-card">
@@ -309,11 +404,7 @@ export default async function ProdutosPage({ searchParams }: ProdutosPageProps) 
                 <aside className="supply-record-actions">
                   <div className="quote-total-box">
                     <span>Capacidade estimada</span>
-                    <strong>
-                      {compositionCapacity.find((item) => item.id === composition.id)?.capacity === null
-                        ? "-"
-                        : `${compositionCapacity.find((item) => item.id === composition.id)?.capacity ?? 0} un`}
-                    </strong>
+                    <strong>{formatCapacity(compositionCapacityById.get(composition.id)?.capacity ?? null)}</strong>
                     <small>Limitada pelo menor saldo de insumo</small>
                   </div>
                   <CompositionActions

@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, FilePlus2, Pencil, Trash2, X } from "lucide-react";
+import { fetchJson, isApiRequestError } from "@/lib/api-client";
+import { formatValidationError } from "@/lib/validations/client";
+import { purchaseQuoteSchema } from "@/lib/validations/purchase";
 
 type SupplierOption = {
   id: string;
@@ -53,17 +56,17 @@ export function PurchaseQuoteActions({ quoteId, status, hasOrder, suppliers = []
     setError("");
     setLoadingAction(action);
 
-    const response = await fetch(`/api/suprimentos/cotacoes/${quoteId}/${action}`, {
-      method: action === "converter-pedido" ? "POST" : "PATCH"
-    });
-    const data = await response.json().catch(() => null);
-    setLoadingAction("");
-
-    if (!response.ok) {
-      setError(data?.error || "Nao foi possivel concluir a acao.");
+    try {
+      await fetchJson(`/api/suprimentos/cotacoes/${quoteId}/${action}`, {
+        method: action === "converter-pedido" ? "POST" : "PATCH"
+      }, "Nao foi possivel concluir a acao.");
+    } catch (requestError) {
+      setError(isApiRequestError(requestError) ? requestError.message : "Nao foi possivel concluir a acao.");
+      setLoadingAction("");
       return;
     }
 
+    setLoadingAction("");
     router.refresh();
   }
 
@@ -97,19 +100,27 @@ export function PurchaseQuoteActions({ quoteId, status, hasOrder, suppliers = []
       }))
     };
 
-    const response = await fetch(`/api/suprimentos/cotacoes/${quoteId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    const data = await response.json().catch(() => null);
-    setLoadingAction("");
+    const parsed = purchaseQuoteSchema.safeParse(payload);
 
-    if (!response.ok) {
-      setError(data?.error || "Nao foi possivel editar a cotacao.");
+    if (!parsed.success) {
+      setError(formatValidationError(parsed.error));
+      setLoadingAction("");
       return;
     }
 
+    try {
+      await fetchJson(`/api/suprimentos/cotacoes/${quoteId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed.data)
+      }, "Nao foi possivel editar a cotacao.");
+    } catch (requestError) {
+      setError(isApiRequestError(requestError) ? requestError.message : "Nao foi possivel editar a cotacao.");
+      setLoadingAction("");
+      return;
+    }
+
+    setLoadingAction("");
     setEditing(false);
     router.refresh();
   }
@@ -122,17 +133,15 @@ export function PurchaseQuoteActions({ quoteId, status, hasOrder, suppliers = []
     setError("");
     setLoadingAction("excluir");
 
-    const response = await fetch(`/api/suprimentos/cotacoes/${quoteId}`, {
-      method: "DELETE"
-    });
-    const data = await response.json().catch(() => null);
-    setLoadingAction("");
-
-    if (!response.ok) {
-      setError(data?.error || "Nao foi possivel excluir a cotacao.");
+    try {
+      await fetchJson(`/api/suprimentos/cotacoes/${quoteId}`, { method: "DELETE" }, "Nao foi possivel excluir a cotacao.");
+    } catch (requestError) {
+      setError(isApiRequestError(requestError) ? requestError.message : "Nao foi possivel excluir a cotacao.");
+      setLoadingAction("");
       return;
     }
 
+    setLoadingAction("");
     router.refresh();
   }
 

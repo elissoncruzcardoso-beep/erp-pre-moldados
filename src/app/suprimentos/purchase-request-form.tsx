@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { ClipboardList, Plus, Trash2 } from "lucide-react";
+import { useApiForm } from "@/lib/hooks/use-api-form";
+import { purchaseRequestSchema } from "@/lib/validations/purchase";
 
 type ItemOption = {
   id: string;
@@ -22,13 +23,30 @@ type RequestLine = {
 };
 
 export function PurchaseRequestForm({ items }: PurchaseRequestFormProps) {
-  const router = useRouter();
   const [lines, setLines] = useState<RequestLine[]>([
     { itemId: items[0]?.id || "", quantity: "", note: "" }
   ]);
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(false);
+  const { error, success, loading, handleSubmit } = useApiForm({
+    endpoint: "/api/suprimentos/solicitacoes",
+    schema: purchaseRequestSchema,
+    fallbackError: "Nao foi possivel criar a solicitacao.",
+    successMessage: "Solicitacao criada com sucesso.",
+    buildPayload: (formData) => ({
+      department: formData.get("department") || undefined,
+      costCenter: formData.get("costCenter") || undefined,
+      priority: formData.get("priority"),
+      neededAt: formData.get("neededAt") || undefined,
+      justification: formData.get("justification") || undefined,
+      items: lines
+        .filter((line) => line.itemId && Number(line.quantity) > 0)
+        .map((line) => ({
+          itemId: line.itemId,
+          quantity: line.quantity,
+          note: line.note || undefined
+        }))
+    }),
+    onSuccess: () => setLines([{ itemId: items[0]?.id || "", quantity: "", note: "" }])
+  });
 
   function updateLine(index: number, field: keyof RequestLine, value: string) {
     setLines((current) =>
@@ -42,46 +60,6 @@ export function PurchaseRequestForm({ items }: PurchaseRequestFormProps) {
 
   function removeLine(index: number) {
     setLines((current) => current.filter((_, lineIndex) => lineIndex !== index));
-  }
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    setError("");
-    setMessage("");
-    setLoading(true);
-
-    const formData = new FormData(form);
-    const response = await fetch("/api/suprimentos/solicitacoes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        department: formData.get("department") || undefined,
-        costCenter: formData.get("costCenter") || undefined,
-        priority: formData.get("priority"),
-        neededAt: formData.get("neededAt") || undefined,
-        justification: formData.get("justification") || undefined,
-        items: lines
-          .filter((line) => line.itemId && Number(line.quantity) > 0)
-          .map((line) => ({
-            itemId: line.itemId,
-            quantity: line.quantity,
-            note: line.note || undefined
-          }))
-      })
-    });
-    const data = await response.json().catch(() => ({}));
-    setLoading(false);
-
-    if (!response.ok) {
-      setError(data.error || "Nao foi possivel criar a solicitacao.");
-      return;
-    }
-
-    form.reset();
-    setLines([{ itemId: items[0]?.id || "", quantity: "", note: "" }]);
-    setMessage("Solicitacao criada com sucesso.");
-    router.refresh();
   }
 
   return (
@@ -188,7 +166,7 @@ export function PurchaseRequestForm({ items }: PurchaseRequestFormProps) {
       </div>
 
       {error ? <p className="auth-error">{error}</p> : null}
-      {message ? <p className="auth-success">{message}</p> : null}
+      {success ? <p className="auth-success">{success}</p> : null}
 
       <button className="primary-button" type="submit" disabled={loading || items.length === 0}>
         <ClipboardList size={17} />

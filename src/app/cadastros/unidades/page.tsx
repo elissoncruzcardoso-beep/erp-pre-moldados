@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
 import { BaseRegisterForm } from "../_components/base-register-form";
 import { CadastrosNav } from "../_components/cadastros-nav";
+import { UnitActions } from "./unit-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -79,6 +80,7 @@ export default async function UnidadesPage() {
                 <th>Nome</th>
                 <th>Decimais</th>
                 <th>Itens usando</th>
+                <th>Acoes</th>
               </tr>
             </thead>
             <tbody>
@@ -88,6 +90,17 @@ export default async function UnidadesPage() {
                   <td>{unit.name}</td>
                   <td className="mono">{unit.decimals}</td>
                   <td><span className="badge blue">{unit._count.items} itens</span></td>
+                  <td>
+                    <UnitActions
+                      unit={{
+                        id: unit.id,
+                        code: unit.code,
+                        name: unit.name,
+                        decimals: unit.decimals,
+                        itemsCount: unit._count.items
+                      }}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>

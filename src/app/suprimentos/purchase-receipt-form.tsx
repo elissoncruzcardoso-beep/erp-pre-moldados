@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { PackageCheck } from "lucide-react";
-import { fetchJson, isApiRequestError } from "@/lib/api-client";
 import { formatMoney } from "@/lib/formatters";
+import { useApiForm } from "@/lib/hooks/use-api-form";
+import { purchaseReceiptBatchSchema } from "@/lib/validations/purchase";
 
 type OrderItemOption = {
   id: string;
@@ -44,10 +44,6 @@ type LineValues = Record<string, {
 const formatCurrency = formatMoney;
 
 export function PurchaseReceiptForm({ orders, warehouses }: Props) {
-  const router = useRouter();
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [loading, setLoading] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState(orders[0]?.id || "");
   const [lineValues, setLineValues] = useState<LineValues>({});
 
@@ -98,59 +94,32 @@ export function PurchaseReceiptForm({ orders, warehouses }: Props) {
     }));
   }
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    setSuccess("");
-
-    if (!selectedOrder) {
-      setError("Selecione um pedido com itens pendentes.");
-      return;
-    }
-
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-    const items = selectedOrder.items.map((item) => ({
-      purchaseOrderItemId: item.id,
-      receivedQuantity: Number(formData.get(`receivedQuantity-${item.id}`) || 0),
-      acceptedQuantity: Number(formData.get(`acceptedQuantity-${item.id}`) || 0),
-      unitCost: Number(formData.get(`unitCost-${item.id}`) || item.approvedUnitCost),
-      lotCode: String(formData.get(`lotCode-${item.id}`) || "").trim() || undefined,
-      note: String(formData.get(`itemNote-${item.id}`) || "").trim() || undefined
-    })).filter((item) => item.receivedQuantity > 0 || item.acceptedQuantity > 0);
-
-    const payload = {
-      purchaseOrderId: selectedOrder.id,
+  const { error, success, loading, handleSubmit } = useApiForm({
+    endpoint: "/api/suprimentos/recebimentos",
+    schema: purchaseReceiptBatchSchema,
+    fallbackError: "Nao foi possivel registrar a nota fiscal.",
+    successMessage: "Nota fiscal conferida, estoque atualizado e titulo de contas a pagar gerado.",
+    buildPayload: (formData) => ({
+      purchaseOrderId: selectedOrder?.id || "",
       receiptPrefix,
       warehouseId: String(formData.get("warehouseId") || ""),
       invoiceNumber: String(formData.get("invoiceNumber") || "").trim(),
       supplierLot: String(formData.get("supplierLot") || "").trim() || undefined,
       receivedAt: String(formData.get("receivedAt") || "") || undefined,
       note: String(formData.get("note") || "").trim() || undefined,
-      items
-    };
-
-    setLoading(true);
-
-    try {
-      await fetchJson("/api/suprimentos/recebimentos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      }, "Nao foi possivel registrar a nota fiscal.");
-    } catch (requestError) {
-      setError(isApiRequestError(requestError) ? requestError.message : "Nao foi possivel registrar a nota fiscal.");
-      setLoading(false);
-      return;
-    } finally {
-      setLoading(false);
-    }
-
-    setSuccess("Nota fiscal conferida, estoque atualizado e titulo de contas a pagar gerado.");
-    form.reset();
-    setSelectedOrderId(orders[0]?.id || "");
-    router.refresh();
-  }
+      items: (selectedOrder?.items || [])
+        .map((item) => ({
+          purchaseOrderItemId: item.id,
+          receivedQuantity: Number(formData.get(`receivedQuantity-${item.id}`) || 0),
+          acceptedQuantity: Number(formData.get(`acceptedQuantity-${item.id}`) || 0),
+          unitCost: Number(formData.get(`unitCost-${item.id}`) || item.approvedUnitCost),
+          lotCode: String(formData.get(`lotCode-${item.id}`) || "").trim() || undefined,
+          note: String(formData.get(`itemNote-${item.id}`) || "").trim() || undefined
+        }))
+        .filter((item) => item.receivedQuantity > 0 || item.acceptedQuantity > 0)
+    }),
+    onSuccess: () => setSelectedOrderId(orders[0]?.id || "")
+  });
 
   return (
     <form className="product-form" onSubmit={handleSubmit}>

@@ -3,6 +3,9 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, Save, Trash2, X } from "lucide-react";
+import { fetchJson, isApiRequestError } from "@/lib/api-client";
+import { formatValidationError } from "@/lib/validations/client";
+import { purchaseReceiptUpdateSchema } from "@/lib/validations/purchase";
 
 type EditData = {
   number: string;
@@ -30,25 +33,34 @@ export function PurchaseReceiptActions({ receiptId, locked, editData }: Props) {
     setError("");
     setLoading("editar");
 
-    const response = await fetch(`/api/suprimentos/recebimentos/${receiptId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        number: formData.get("number"),
-        invoiceNumber: formData.get("invoiceNumber") || undefined,
-        supplierLot: formData.get("supplierLot") || undefined,
-        receivedAt: formData.get("receivedAt") || undefined,
-        note: formData.get("note") || undefined
-      })
-    });
-    const data = await response.json().catch(() => null);
-    setLoading("");
+    const payload = {
+      number: formData.get("number"),
+      invoiceNumber: formData.get("invoiceNumber") || undefined,
+      supplierLot: formData.get("supplierLot") || undefined,
+      receivedAt: formData.get("receivedAt") || undefined,
+      note: formData.get("note") || undefined
+    };
+    const parsed = purchaseReceiptUpdateSchema.safeParse(payload);
 
-    if (!response.ok) {
-      setError(data?.error || "Nao foi possivel editar a nota fiscal.");
+    if (!parsed.success) {
+      setError(formatValidationError(parsed.error));
+      setLoading("");
       return;
     }
 
+    try {
+      await fetchJson(`/api/suprimentos/recebimentos/${receiptId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed.data)
+      }, "Nao foi possivel editar a nota fiscal.");
+    } catch (requestError) {
+      setError(isApiRequestError(requestError) ? requestError.message : "Nao foi possivel editar a nota fiscal.");
+      setLoading("");
+      return;
+    }
+
+    setLoading("");
     setEditing(false);
     router.refresh();
   }
@@ -60,15 +72,16 @@ export function PurchaseReceiptActions({ receiptId, locked, editData }: Props) {
 
     setError("");
     setLoading("excluir");
-    const response = await fetch(`/api/suprimentos/recebimentos/${receiptId}`, { method: "DELETE" });
-    const data = await response.json().catch(() => null);
-    setLoading("");
 
-    if (!response.ok) {
-      setError(data?.error || "Nao foi possivel excluir a nota fiscal.");
+    try {
+      await fetchJson(`/api/suprimentos/recebimentos/${receiptId}`, { method: "DELETE" }, "Nao foi possivel excluir a nota fiscal.");
+    } catch (requestError) {
+      setError(isApiRequestError(requestError) ? requestError.message : "Nao foi possivel excluir a nota fiscal.");
+      setLoading("");
       return;
     }
 
+    setLoading("");
     router.refresh();
   }
 

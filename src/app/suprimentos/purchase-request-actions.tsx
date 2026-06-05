@@ -3,6 +3,9 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, Plus, Save, Trash2, X } from "lucide-react";
+import { fetchJson, isApiRequestError } from "@/lib/api-client";
+import { formatValidationError } from "@/lib/validations/client";
+import { purchaseRequestSchema } from "@/lib/validations/purchase";
 
 type ItemOption = {
   id: string;
@@ -68,32 +71,41 @@ export function PurchaseRequestActions({ requestId, locked, items, editData }: P
     setError("");
     setLoading("editar");
 
-    const response = await fetch(`/api/suprimentos/solicitacoes/${requestId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        department: formData.get("department") || undefined,
-        costCenter: formData.get("costCenter") || undefined,
-        priority: formData.get("priority"),
-        neededAt: formData.get("neededAt") || undefined,
-        justification: formData.get("justification") || undefined,
-        items: lines
-          .filter((line) => line.itemId && Number(line.quantity) > 0)
-          .map((line) => ({
-            itemId: line.itemId,
-            quantity: line.quantity,
-            note: line.note || undefined
-          }))
-      })
-    });
-    const data = await response.json().catch(() => null);
-    setLoading("");
+    const payload = {
+      department: formData.get("department") || undefined,
+      costCenter: formData.get("costCenter") || undefined,
+      priority: formData.get("priority"),
+      neededAt: formData.get("neededAt") || undefined,
+      justification: formData.get("justification") || undefined,
+      items: lines
+        .filter((line) => line.itemId && Number(line.quantity) > 0)
+        .map((line) => ({
+          itemId: line.itemId,
+          quantity: line.quantity,
+          note: line.note || undefined
+        }))
+    };
+    const parsed = purchaseRequestSchema.safeParse(payload);
 
-    if (!response.ok) {
-      setError(data?.error || "Nao foi possivel editar a solicitacao.");
+    if (!parsed.success) {
+      setError(formatValidationError(parsed.error));
+      setLoading("");
       return;
     }
 
+    try {
+      await fetchJson(`/api/suprimentos/solicitacoes/${requestId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed.data)
+      }, "Nao foi possivel editar a solicitacao.");
+    } catch (requestError) {
+      setError(isApiRequestError(requestError) ? requestError.message : "Nao foi possivel editar a solicitacao.");
+      setLoading("");
+      return;
+    }
+
+    setLoading("");
     setEditing(false);
     router.refresh();
   }
@@ -106,17 +118,15 @@ export function PurchaseRequestActions({ requestId, locked, items, editData }: P
     setError("");
     setLoading("excluir");
 
-    const response = await fetch(`/api/suprimentos/solicitacoes/${requestId}`, {
-      method: "DELETE"
-    });
-    const data = await response.json().catch(() => null);
-    setLoading("");
-
-    if (!response.ok) {
-      setError(data?.error || "Nao foi possivel excluir a solicitacao.");
+    try {
+      await fetchJson(`/api/suprimentos/solicitacoes/${requestId}`, { method: "DELETE" }, "Nao foi possivel excluir a solicitacao.");
+    } catch (requestError) {
+      setError(isApiRequestError(requestError) ? requestError.message : "Nao foi possivel excluir a solicitacao.");
+      setLoading("");
       return;
     }
 
+    setLoading("");
     router.refresh();
   }
 

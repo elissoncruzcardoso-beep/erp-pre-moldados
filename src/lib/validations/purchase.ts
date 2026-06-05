@@ -163,6 +163,14 @@ export const accountPayableSchema = z.object({
 
 export type AccountPayableInput = z.infer<typeof accountPayableSchema>;
 
+export const accountPayableUpdateSchema = z.object({
+  dueDate: z.coerce.date(),
+  costCenter: z.string().max(80).optional(),
+  note: z.string().max(500).optional()
+});
+
+export type AccountPayableUpdateInput = z.infer<typeof accountPayableUpdateSchema>;
+
 export const accountPaymentSchema = z.object({
   accountPayableId: z.string().min(1),
   paymentDate: z.coerce.date(),
@@ -187,6 +195,18 @@ export const accountReceivableSchema = z.object({
 
 export type AccountReceivableInput = z.infer<typeof accountReceivableSchema>;
 
+export const accountReceivableUpdateSchema = z.object({
+  customerId: z.string().min(1),
+  description: z.string().min(3).max(160),
+  documentNumber: z.string().max(80).optional(),
+  costCenter: z.string().max(80).optional(),
+  dueDate: z.coerce.date(),
+  amount: z.coerce.number().positive(),
+  note: z.string().max(500).optional()
+});
+
+export type AccountReceivableUpdateInput = z.infer<typeof accountReceivableUpdateSchema>;
+
 export const accountReceiptSchema = z.object({
   accountReceivableId: z.string().min(1),
   receiptDate: z.coerce.date(),
@@ -197,3 +217,9 @@ export const accountReceiptSchema = z.object({
 });
 
 export type AccountReceiptInput = z.infer<typeof accountReceiptSchema>;
+
+export const accountReceiptReversalSchema = z.object({
+  reason: z.string().min(5).max(500)
+});
+
+export type AccountReceiptReversalInput = z.infer<typeof accountReceiptReversalSchema>;

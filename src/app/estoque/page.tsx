@@ -21,6 +21,11 @@ const movementLabels: Record<string, string> = {
   ESTORNO: "Estorno"
 };
 
+function firstParam(params: SearchParamsLike, key: string) {
+  const value = params[key];
+  return Array.isArray(value) ? value[0] : value;
+}
+
 type EstoquePageProps = {
   searchParams?: Promise<SearchParamsLike>;
 };
@@ -48,6 +53,10 @@ export default async function EstoquePage({ searchParams }: EstoquePageProps) {
     defaultPageSize: 12,
     maxPageSize: 60
   });
+  const balanceStatus = firstParam(params, "saldoStatus") || "COM_SALDO";
+  const balanceWarehouseId = firstParam(params, "depositoId") || "";
+  const balanceType = firstParam(params, "tipoItem") || "";
+  const balanceSearch = (firstParam(params, "qSaldo") || "").trim().toLowerCase();
 
   const [items, warehouses, balances, movements, movementsCount, lotsCount] = await Promise.all([
     prisma.item.findMany({
@@ -133,16 +142,36 @@ export default async function EstoquePage({ searchParams }: EstoquePageProps) {
     const warehouseCompare = a.warehouse.code.localeCompare(b.warehouse.code);
     return warehouseCompare || a.item.code.localeCompare(b.item.code);
   });
+  const filteredBalances = consolidatedBalances.filter((balance) => {
+    const available = balance.quantity - balance.reserved;
+    const minimumStock = decimalToNumber(balance.item.minimumStock);
+    const statusMatches =
+      balanceStatus === "TODOS" ||
+      (balanceStatus === "COM_SALDO" && available > 0) ||
+      (balanceStatus === "SEM_SALDO" && available <= 0) ||
+      (balanceStatus === "CRITICO" && minimumStock > 0 && available > 0 && available <= minimumStock) ||
+      (balanceStatus === "RESERVADO" && balance.reserved > 0);
+    const warehouseMatches = !balanceWarehouseId || balance.warehouseId === balanceWarehouseId;
+    const typeMatches = !balanceType || balance.item.type === balanceType;
+    const searchMatches =
+      !balanceSearch ||
+      balance.item.code.toLowerCase().includes(balanceSearch) ||
+      balance.item.description.toLowerCase().includes(balanceSearch) ||
+      balance.warehouse.name.toLowerCase().includes(balanceSearch);
+
+    return statusMatches && warehouseMatches && typeMatches && searchMatches;
+  });
   const criticalBalances = consolidatedBalances.filter((balance) => {
     const minimumStock = decimalToNumber(balance.item.minimumStock);
-    return minimumStock > 0 && balance.quantity <= minimumStock;
+    const available = balance.quantity - balance.reserved;
+    return minimumStock > 0 && available <= minimumStock;
   }).length;
   const reservedTotal = consolidatedBalances.reduce((total, balance) => total + balance.reserved, 0);
   const stockTotal = consolidatedBalances.reduce((total, balance) => total + balance.quantity, 0);
   const reservedPercent = stockTotal > 0 ? Math.round((reservedTotal / stockTotal) * 100) : 0;
-  const balancePaginationMeta = getPaginationMeta(consolidatedBalances.length, balancePagination.page, balancePagination.pageSize);
+  const balancePaginationMeta = getPaginationMeta(filteredBalances.length, balancePagination.page, balancePagination.pageSize);
   const movementPaginationMeta = getPaginationMeta(movementsCount, movementPagination.page, movementPagination.pageSize);
-  const paginatedBalances = consolidatedBalances.slice(
+  const paginatedBalances = filteredBalances.slice(
     (balancePaginationMeta.page - 1) * balancePaginationMeta.pageSize,
     balancePaginationMeta.page * balancePaginationMeta.pageSize
   );
@@ -200,8 +229,59 @@ export default async function EstoquePage({ searchParams }: EstoquePageProps) {
               <p className="eyebrow">Saldo de estoque</p>
               <h2>Materiais e produtos por deposito</h2>
             </div>
-            <span className="badge blue">{warehouses.length} depositos</span>
+            <span className="badge blue">{filteredBalances.length} saldo(s)</span>
           </div>
+          <form className="stock-filter-panel" method="get">
+            <input type="hidden" name="movimentosPage" value={String(movementPagination.page)} />
+            <input type="hidden" name="pageSize" value={String(balancePagination.pageSize)} />
+            <div className="stock-filter-fields">
+              <label className="field">
+                <span>Status</span>
+                <select className="form-input" name="saldoStatus" defaultValue={balanceStatus}>
+                  <option value="COM_SALDO">Somente com saldo disponivel</option>
+                  <option value="SEM_SALDO">Sem saldo disponivel</option>
+                  <option value="CRITICO">Criticos</option>
+                  <option value="RESERVADO">Com reserva</option>
+                  <option value="TODOS">Todos</option>
+                </select>
+              </label>
+              <label className="field">
+                <span>Deposito</span>
+                <select className="form-input" name="depositoId" defaultValue={balanceWarehouseId}>
+                  <option value="">Todos</option>
+                  {warehouses.map((warehouse) => (
+                    <option value={warehouse.id} key={warehouse.id}>
+                      {warehouse.code} - {warehouse.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Tipo</span>
+                <select className="form-input" name="tipoItem" defaultValue={balanceType}>
+                  <option value="">Todos</option>
+                  <option value="MATERIA_PRIMA">Materia-prima</option>
+                  <option value="INSUMO">Insumo</option>
+                  <option value="PRODUTO_ACABADO">Produto acabado</option>
+                  <option value="PECA_PRE_MOLDADA">Peca pre-moldada</option>
+                  <option value="FORMA_MOLDE">Forma/molde</option>
+                  <option value="SERVICO">Servico</option>
+                </select>
+              </label>
+              <label className="field stock-filter-search">
+                <span>Buscar</span>
+                <input className="form-input" name="qSaldo" defaultValue={firstParam(params, "qSaldo") || ""} placeholder="Codigo, item ou deposito" />
+              </label>
+            </div>
+            <div className="stock-filter-actions">
+              <Link className="secondary-button" href="/estoque">
+                Limpar
+              </Link>
+              <button className="primary-button" type="submit">
+                Filtrar
+              </button>
+            </div>
+          </form>
           <table>
             <thead>
               <tr>
@@ -216,7 +296,10 @@ export default async function EstoquePage({ searchParams }: EstoquePageProps) {
             <tbody>
               {paginatedBalances.map((balance) => {
                 const minimumStock = decimalToNumber(balance.item.minimumStock);
-                const isCritical = minimumStock > 0 && balance.quantity <= minimumStock;
+                const available = balance.quantity - balance.reserved;
+                const isCritical = minimumStock > 0 && available > 0 && available <= minimumStock;
+                const isOutOfStock = available <= 0;
+                const isFullyReserved = balance.quantity > 0 && available <= 0 && balance.reserved > 0;
 
                 return (
                   <tr key={balance.id}>
@@ -226,11 +309,11 @@ export default async function EstoquePage({ searchParams }: EstoquePageProps) {
                       <strong>{balance.item.description}</strong>
                       {balance.lotCount > 0 ? <small className="product-detail">{balance.lotCount} lote(s) consolidados</small> : null}
                     </td>
-                    <td className="mono">{formatQuantity(balance.quantity)} {balance.item.unit.code}</td>
+                    <td className="mono">{formatQuantity(available)} {balance.item.unit.code}</td>
                     <td className="mono">{formatQuantity(balance.reserved)} {balance.item.unit.code}</td>
                     <td>
-                      <span className={isCritical ? "badge red" : "badge green"}>
-                        {isCritical ? "Critico" : "Ok"}
+                      <span className={isOutOfStock ? "badge orange" : isCritical ? "badge red" : "badge green"}>
+                        {isFullyReserved ? "Reservado" : isOutOfStock ? "Sem saldo" : isCritical ? "Critico" : "Ok"}
                       </span>
                     </td>
                   </tr>

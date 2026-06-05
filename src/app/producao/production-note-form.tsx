@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
 import { ClipboardCheck } from "lucide-react";
+import { useApiForm } from "@/lib/hooks/use-api-form";
+import { productionNoteSchema } from "@/lib/validations/production";
 
 type OrderOption = {
   id: string;
@@ -16,49 +17,27 @@ type ProductionNoteFormProps = {
 };
 
 export function ProductionNoteForm({ orders }: ProductionNoteFormProps) {
-  const router = useRouter();
   const [selectedOrderId, setSelectedOrderId] = useState(orders[0]?.id || "");
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(false);
   const selectedOrder = useMemo(
     () => orders.find((order) => order.id === selectedOrderId),
     [orders, selectedOrderId]
   );
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    setMessage("");
-    setLoading(true);
-
-    const formData = new FormData(event.currentTarget);
-    const response = await fetch("/api/producao/apontamentos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        productionOrderId: selectedOrderId,
-        stage: formData.get("stage"),
-        producedQuantity: formData.get("producedQuantity") || 0,
-        lossQuantity: formData.get("lossQuantity") || 0,
-        scrapQuantity: formData.get("scrapQuantity") || 0,
-        downtimeMinutes: formData.get("downtimeMinutes") || 0,
-        note: formData.get("note") || undefined,
-        finishStage: formData.get("finishStage") === "on"
-      })
-    });
-    const data = await response.json().catch(() => ({}));
-    setLoading(false);
-
-    if (!response.ok) {
-      setError(data.error || "Nao foi possivel registrar o apontamento.");
-      return;
-    }
-
-    event.currentTarget.reset();
-    setMessage("Apontamento registrado com sucesso.");
-    router.refresh();
-  }
+  const { error, success, loading, handleSubmit } = useApiForm({
+    endpoint: "/api/producao/apontamentos",
+    schema: productionNoteSchema,
+    fallbackError: "Nao foi possivel registrar o apontamento.",
+    successMessage: "Apontamento registrado com sucesso.",
+    buildPayload: (formData) => ({
+      productionOrderId: selectedOrderId,
+      stage: formData.get("stage"),
+      producedQuantity: formData.get("producedQuantity") || 0,
+      lossQuantity: formData.get("lossQuantity") || 0,
+      scrapQuantity: formData.get("scrapQuantity") || 0,
+      downtimeMinutes: formData.get("downtimeMinutes") || 0,
+      note: formData.get("note") || undefined,
+      finishStage: formData.get("finishStage") === "on"
+    })
+  });
 
   return (
     <form className="product-form" onSubmit={handleSubmit}>
@@ -124,7 +103,7 @@ export function ProductionNoteForm({ orders }: ProductionNoteFormProps) {
       </div>
 
       {error ? <p className="auth-error">{error}</p> : null}
-      {message ? <p className="auth-success">{message}</p> : null}
+      {success ? <p className="auth-success">{success}</p> : null}
 
       <button className="primary-button" type="submit" disabled={loading || orders.length === 0}>
         <ClipboardCheck size={17} />

@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { Plus } from "lucide-react";
+import { useApiForm } from "@/lib/hooks/use-api-form";
+import { productSchema } from "@/lib/validations/product";
 
 type UnitOption = {
   id: string;
@@ -10,32 +11,38 @@ type UnitOption = {
   name: string;
 };
 
-type ProductCreateFormProps = {
-  units: UnitOption[];
+type InputGroupOption = {
+  id: string;
+  code: string;
+  name: string;
+  type: string;
 };
 
-export function ProductCreateForm({ units }: ProductCreateFormProps) {
-  const router = useRouter();
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(false);
+type ProductCreateFormProps = {
+  units: UnitOption[];
+  inputGroups?: InputGroupOption[];
+};
+
+export function ProductCreateForm({ units, inputGroups = [] }: ProductCreateFormProps) {
   const [type, setType] = useState("PECA_PRE_MOLDADA");
   const usesCuring = type === "PECA_PRE_MOLDADA" || type === "PRODUTO_ACABADO";
+  const groupOptions = inputGroups.filter((group) => {
+    if (type === "MATERIA_PRIMA" || type === "INSUMO" || type === "FORMA_MOLDE" || type === "SERVICO") {
+      return group.type === type;
+    }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    setError("");
-    setMessage("");
-    setLoading(true);
+    return true;
+  });
+  const { error, success, loading, handleSubmit } = useApiForm({
+    endpoint: "/api/produtos",
+    schema: productSchema,
+    fallbackError: "Nao foi possivel cadastrar o produto.",
+    successMessage: "Produto cadastrado com sucesso.",
+    buildPayload: (formData) => {
+      const selectedType = String(formData.get("type") || "");
+      const selectedTypeUsesCuring = selectedType === "PECA_PRE_MOLDADA" || selectedType === "PRODUTO_ACABADO";
 
-    const formData = new FormData(form);
-    const selectedType = String(formData.get("type") || "");
-    const selectedTypeUsesCuring = selectedType === "PECA_PRE_MOLDADA" || selectedType === "PRODUTO_ACABADO";
-    const response = await fetch("/api/produtos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+      return {
         code: formData.get("code"),
         description: formData.get("description"),
         type: formData.get("type"),
@@ -47,20 +54,9 @@ export function ProductCreateForm({ units }: ProductCreateFormProps) {
         standardCost: formData.get("standardCost") || 0,
         curingHours: selectedTypeUsesCuring ? formData.get("curingHours") || 24 : 0,
         active: true
-      })
-    });
-    const data = await response.json().catch(() => ({}));
-    setLoading(false);
-
-    if (!response.ok) {
-      setError(data.error || "Nao foi possivel cadastrar o produto.");
-      return;
+      };
     }
-
-    form.reset();
-    setMessage("Produto cadastrado com sucesso.");
-    router.refresh();
-  }
+  });
 
   return (
     <form className="product-form" onSubmit={handleSubmit}>
@@ -107,7 +103,17 @@ export function ProductCreateForm({ units }: ProductCreateFormProps) {
 
         <label className="field">
           <span>Grupo</span>
-          <input className="form-input" name="group" placeholder="Estrutural, concreto, armadura..." maxLength={80} />
+          <select className="form-input" name="group" defaultValue="">
+            <option value="">Sem grupo</option>
+            {groupOptions.map((group) => (
+              <option value={group.name} key={group.id}>
+                {group.code} - {group.name}
+              </option>
+            ))}
+          </select>
+          {groupOptions.length === 0 ? (
+            <small className="field-hint">Cadastre grupos em Cadastros &gt; Grupos de insumos.</small>
+          ) : null}
         </label>
       </div>
 
@@ -153,7 +159,7 @@ export function ProductCreateForm({ units }: ProductCreateFormProps) {
       </div>
 
       {error ? <p className="auth-error">{error}</p> : null}
-      {message ? <p className="auth-success">{message}</p> : null}
+      {success ? <p className="auth-success">{success}</p> : null}
 
       <button className="primary-button" type="submit" disabled={loading || units.length === 0}>
         <Plus size={17} />

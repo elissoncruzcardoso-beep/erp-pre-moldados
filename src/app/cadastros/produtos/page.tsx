@@ -6,6 +6,7 @@ import { getPrisma } from "@/lib/db/prisma";
 import { decimalToNumber, formatQuantity } from "@/lib/formatters";
 import { ProductCreateForm } from "@/app/produtos/product-create-form";
 import { CadastrosNav } from "../_components/cadastros-nav";
+import { ProductCatalogActions } from "./product-catalog-actions";
 import { ProductCuringForm } from "./product-curing-form";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +36,7 @@ export default async function CadastroProdutosPage() {
   }
 
   const prisma = getPrisma();
-  const [items, units] = await Promise.all([
+  const [items, units, inputGroups] = await Promise.all([
     prisma.item.findMany({
       include: {
         unit: true,
@@ -44,7 +45,11 @@ export default async function CadastroProdutosPage() {
       orderBy: [{ type: "asc" }, { code: "asc" }],
       take: 60
     }),
-    prisma.unitOfMeasure.findMany({ orderBy: { code: "asc" } })
+    prisma.unitOfMeasure.findMany({ orderBy: { code: "asc" } }),
+    prisma.inputGroup.findMany({
+      where: { active: true },
+      orderBy: [{ type: "asc" }, { code: "asc" }]
+    })
   ]);
   const precastCount = items.filter((item) => item.type === "PECA_PRE_MOLDADA").length;
   const inputCount = items.filter((item) => item.type === "MATERIA_PRIMA" || item.type === "INSUMO").length;
@@ -103,7 +108,10 @@ export default async function CadastroProdutosPage() {
           <p className="metric-sub">
             Use esta tela para cadastrar peça, insumo, matéria-prima, forma/molde ou serviço.
           </p>
-          <ProductCreateForm units={units.map((unit) => ({ id: unit.id, code: unit.code, name: unit.name }))} />
+          <ProductCreateForm
+            units={units.map((unit) => ({ id: unit.id, code: unit.code, name: unit.name }))}
+            inputGroups={inputGroups.map((group) => ({ id: group.id, code: group.code, name: group.name, type: group.type }))}
+          />
         </section>
 
         <section className="table-shell product-table-shell span-8">
@@ -126,6 +134,7 @@ export default async function CadastroProdutosPage() {
                   <th>Cura</th>
                   <th className="number-cell">Estoque</th>
                   <th>Status</th>
+                  <th>Acoes</th>
                 </tr>
               </thead>
               <tbody>
@@ -148,6 +157,26 @@ export default async function CadastroProdutosPage() {
                       </td>
                       <td className="mono number-cell">{formatQuantity(stockQuantity)}</td>
                       <td><span className={item.active ? "badge green" : "badge red"}>{item.active ? "Ativo" : "Inativo"}</span></td>
+                      <td>
+                        <ProductCatalogActions
+                          item={{
+                            id: item.id,
+                            code: item.code,
+                            description: item.description,
+                            type: item.type,
+                            group: item.group || "",
+                            unitId: item.unitId,
+                            controlsStock: item.controlsStock,
+                            controlsLot: item.controlsLot,
+                            minimumStock: decimalToNumber(item.minimumStock),
+                            standardCost: decimalToNumber(item.standardCost),
+                            curingHours: item.curingHours,
+                            active: item.active
+                          }}
+                          units={units.map((unit) => ({ id: unit.id, code: unit.code, name: unit.name }))}
+                          inputGroups={inputGroups.map((group) => ({ id: group.id, code: group.code, name: group.name, type: group.type }))}
+                        />
+                      </td>
                     </tr>
                   );
                 })}

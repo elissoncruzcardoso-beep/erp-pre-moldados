@@ -165,8 +165,14 @@ export async function DELETE(_request: Request, context: RouteContext) {
         throw new Error("COMPOSITION_NOT_FOUND");
       }
 
-      if (current.orders.length > 0) {
+      const isTestComposition = current.code.startsWith("TEST-COMP-");
+
+      if (current.orders.length > 0 && !isTestComposition) {
         throw new Error("COMPOSITION_IN_USE");
+      }
+
+      if (isTestComposition && current.orders.length > 0) {
+        await tx.productionOrder.deleteMany({ where: { compositionId: id } });
       }
 
       await tx.composition.delete({ where: { id } });
@@ -179,7 +185,8 @@ export async function DELETE(_request: Request, context: RouteContext) {
           entity: "Composition",
           entityId: id,
           previousValue: {
-            code: current.code
+            code: current.code,
+            removedLinkedOrders: isTestComposition ? current.orders.length : 0
           }
         }
       });

@@ -8,6 +8,10 @@ type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
+function isRequestStatusLocked(status: string) {
+  return status === "EM_COTACAO" || status === "CONVERTIDA_PEDIDO" || status === "CANCELADA";
+}
+
 export async function PATCH(request: Request, context: RouteContext) {
   const session = await getSession();
 
@@ -45,7 +49,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         throw new Error("REQUEST_NOT_FOUND");
       }
 
-      if (current.quotes.length > 0 || current.orders.length > 0 || current.status !== "ABERTA") {
+      if (current.quotes.length > 0 || current.orders.length > 0 || isRequestStatusLocked(current.status)) {
         throw new Error("REQUEST_LOCKED");
       }
 
@@ -145,7 +149,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
         throw new Error("REQUEST_NOT_FOUND");
       }
 
-      if (current.quotes.length > 0 || current.orders.length > 0 || current.status !== "ABERTA") {
+      if (current.quotes.length > 0 || current.orders.length > 0 || isRequestStatusLocked(current.status)) {
         throw new Error("REQUEST_LOCKED");
       }
 

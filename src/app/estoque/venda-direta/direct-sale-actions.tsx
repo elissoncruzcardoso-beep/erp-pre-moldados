@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { CheckCircle2, Edit3, Printer, RotateCcw, X, XCircle } from "lucide-react";
+import { fetchJson, isApiRequestError } from "@/lib/api-client";
 
 type DirectSaleActionsProps = {
   sale: {
@@ -30,6 +31,7 @@ export function DirectSaleActions({ sale }: DirectSaleActionsProps) {
   const editDisabled = disabled || Number(sale.itemCount || 1) > 1;
   const [showCancelPanel, setShowCancelPanel] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [cancelError, setCancelError] = useState("");
   const [canceling, setCanceling] = useState(false);
 
   async function editSale() {
@@ -77,27 +79,31 @@ export function DirectSaleActions({ sale }: DirectSaleActionsProps) {
     }
 
     const reason = cancelReason.trim();
+    setCancelError("");
+
     if (reason.length < 3) {
-      window.alert("Informe o motivo do cancelamento.");
+      setCancelError("Informe o motivo do cancelamento com pelo menos 3 caracteres.");
       return;
     }
 
     setCanceling(true);
-    const response = await fetch(`/api/estoque/vendas/${sale.id}`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reason })
-    });
-    const data = await response.json().catch(() => ({}));
-    setCanceling(false);
 
-    if (!response.ok) {
-      window.alert(data.error || "Nao foi possivel cancelar o recibo.");
+    try {
+      await fetchJson(`/api/estoque/vendas/${sale.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason })
+      }, "Nao foi possivel cancelar o recibo.");
+    } catch (requestError) {
+      setCancelError(isApiRequestError(requestError) ? requestError.message : "Nao foi possivel cancelar o recibo.");
+      setCanceling(false);
       return;
     }
 
+    setCanceling(false);
     setShowCancelPanel(false);
     setCancelReason("");
+    setCancelError("");
     router.refresh();
   }
 
@@ -130,7 +136,7 @@ export function DirectSaleActions({ sale }: DirectSaleActionsProps) {
                 <h2>{sale.number || "Recibo de venda"}</h2>
                 <span>{sale.customerName}</span>
               </div>
-              <button className="icon-button" type="button" onClick={() => setShowCancelPanel(false)} disabled={canceling}>
+          <button className="icon-button" type="button" onClick={() => setShowCancelPanel(false)} disabled={canceling}>
                 <X size={17} />
               </button>
             </header>
@@ -182,18 +188,22 @@ export function DirectSaleActions({ sale }: DirectSaleActionsProps) {
               <textarea
                 className="form-input"
                 value={cancelReason}
-                onChange={(event) => setCancelReason(event.target.value)}
+                onChange={(event) => {
+                  setCancelReason(event.target.value);
+                  setCancelError("");
+                }}
                 rows={3}
                 maxLength={240}
                 placeholder="Ex.: venda lancada incorretamente, cliente desistiu, produto errado..."
               />
             </label>
+            {cancelError ? <p className="auth-error">{cancelError}</p> : null}
 
             <footer>
               <button className="secondary-button" type="button" onClick={() => setShowCancelPanel(false)} disabled={canceling}>
                 Manter venda
               </button>
-              <button className="primary-button danger-action" type="button" onClick={cancelSale} disabled={canceling || cancelReason.trim().length < 3}>
+              <button className="primary-button danger-action" type="button" onClick={cancelSale} disabled={canceling}>
                 <RotateCcw size={16} />
                 {canceling ? "Cancelando..." : "Cancelar e estornar"}
               </button>

@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
 import { BaseRegisterForm } from "../_components/base-register-form";
 import { CadastrosNav } from "../_components/cadastros-nav";
+import { InputGroupActions } from "./input-group-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,7 @@ export default async function GruposInsumosPage() {
   }
 
   const prisma = getPrisma();
-  const [groups, financialGroups] = await Promise.all([
+  const [groups, financialGroups, groupedItems] = await Promise.all([
     prisma.inputGroup.findMany({
       include: { defaultFinancialGroup: true },
       orderBy: [{ type: "asc" }, { code: "asc" }]
@@ -34,8 +35,16 @@ export default async function GruposInsumosPage() {
     prisma.financialGroup.findMany({
       where: { active: true },
       orderBy: [{ type: "asc" }, { code: "asc" }]
+    }),
+    prisma.item.groupBy({
+      by: ["group"],
+      where: {
+        group: { not: null }
+      },
+      _count: { _all: true }
     })
   ]);
+  const itemCountByGroupName = new Map(groupedItems.map((itemGroup) => [itemGroup.group || "", itemGroup._count._all]));
 
   return (
     <>
@@ -120,8 +129,10 @@ export default async function GruposInsumosPage() {
                 <th>Nome</th>
                 <th>Tipo</th>
                 <th>Financeiro</th>
+                <th>Produtos</th>
                 <th>Estoque</th>
                 <th>Status</th>
+                <th>Acoes</th>
               </tr>
             </thead>
             <tbody>
@@ -131,11 +142,31 @@ export default async function GruposInsumosPage() {
                   <td>{group.name}</td>
                   <td><span className="badge blue">{typeLabels[group.type]}</span></td>
                   <td>{group.defaultFinancialGroup?.name || "-"}</td>
+                  <td><span className="badge blue">{itemCountByGroupName.get(group.name) || 0} por nome</span></td>
                   <td><span className={group.controlsStock ? "badge green" : "badge orange"}>{group.controlsStock ? "Controla" : "Não controla"}</span></td>
                   <td><span className={group.active ? "badge green" : "badge red"}>{group.active ? "Ativo" : "Inativo"}</span></td>
+                  <td>
+                    <InputGroupActions
+                      group={{
+                        id: group.id,
+                        code: group.code,
+                        name: group.name,
+                        type: group.type,
+                        defaultFinancialGroupId: group.defaultFinancialGroupId || "",
+                        controlsStock: group.controlsStock,
+                        active: group.active,
+                        note: group.note || ""
+                      }}
+                      financialGroups={financialGroups.map((financialGroup) => ({
+                        id: financialGroup.id,
+                        code: financialGroup.code,
+                        name: financialGroup.name
+                      }))}
+                    />
+                  </td>
                 </tr>
               ))}
-              {groups.length === 0 ? <tr><td colSpan={6}>Nenhum grupo de insumos criado ainda.</td></tr> : null}
+              {groups.length === 0 ? <tr><td colSpan={8}>Nenhum grupo de insumos criado ainda.</td></tr> : null}
             </tbody>
           </table>
         </section>

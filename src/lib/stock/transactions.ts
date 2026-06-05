@@ -255,6 +255,11 @@ export async function applyStockMovementBalance(
       throw new Error("Informe o deposito de origem.");
     }
 
+    if (!lotId) {
+      await consumeStockFromWarehouse(tx, { itemId, warehouse: originWarehouse, quantity });
+      return;
+    }
+
     await decreaseStockBalance(tx, itemId, originWarehouse, quantity, lotId);
   }
 }

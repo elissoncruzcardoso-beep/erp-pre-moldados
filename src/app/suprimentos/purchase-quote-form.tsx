@@ -3,6 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { FileSearch, Plus, Trash2 } from "lucide-react";
+import { fetchJson, isApiRequestError } from "@/lib/api-client";
+import { formatValidationError } from "@/lib/validations/client";
+import { purchaseQuoteSchema } from "@/lib/validations/purchase";
 
 type RequestOption = {
   id: string;
@@ -110,17 +113,27 @@ export function PurchaseQuoteForm({ requests, suppliers }: Props) {
         }))
       };
 
-      const response = await fetch("/api/suprimentos/cotacoes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
+      const parsed = purchaseQuoteSchema.safeParse(payload);
 
-      const data = await response.json().catch(() => null);
-
-      if (!response.ok) {
+      if (!parsed.success) {
         setLoading(false);
-        setError(data?.error || `Nao foi possivel registrar a cotacao do fornecedor ${index + 1}.`);
+        setError(formatValidationError(parsed.error));
+        return;
+      }
+
+      try {
+        await fetchJson("/api/suprimentos/cotacoes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(parsed.data)
+        }, `Nao foi possivel registrar a cotacao do fornecedor ${index + 1}.`);
+      } catch (requestError) {
+        setLoading(false);
+        setError(
+          isApiRequestError(requestError)
+            ? requestError.message
+            : `Nao foi possivel registrar a cotacao do fornecedor ${index + 1}.`
+        );
         return;
       }
     }

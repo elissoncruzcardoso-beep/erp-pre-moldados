@@ -30,6 +30,9 @@ O projeto nasceu como um prototipo visual para apresentar a diretoria e foi apro
 - O usuario esta priorizando evolucao incremental: preservar o que funciona, corrigir layout com cuidado e manter a logica atual quando a tarefa for visual.
 - O ZIP do Google Stitch foi extraido apenas como referencia local em `stitch-reference/`, que esta no `.gitignore`.
 - Usar apenas as partes boas do Stitch: design system industrial, cards, tabelas, badges, formularios e responsividade. Nao copiar HTML inteiro nem substituir regras do ERP.
+- Integracao fiscal com Focus NFe sera tratada como nova etapa do ERP, comecando por NF-e de venda direta em homologacao antes de CT-e/MDF-e.
+- A Focus usa API REST HTTPS e fluxo com referencia unica `ref`; no ERP, essa referencia deve vir da venda/recibo, por exemplo `VENDA-REC-...`.
+- Tokens da Focus devem ficar somente no `.env`/Vercel Environment Variables e nunca no frontend.
 
 ## Estado funcional atual
 ### Login e usuarios
@@ -95,6 +98,31 @@ O projeto nasceu como um prototipo visual para apresentar a diretoria e foi apro
 - Existe baixa/pagamento de contas a pagar, registrando data, valor pago e historico financeiro.
 - Contas a receber reais foram iniciadas para completar o fluxo de caixa.
 
+### Fiscal / Focus NFe
+- Integracao fiscal planejada com Focus NFe.
+- Primeiro escopo: emitir NF-e a partir de venda direta.
+- Documentacao base verificada:
+  - Introducao: `https://doc.focusnfe.com.br/reference/introducao`
+  - Emitir NF-e: `https://doc.focusnfe.com.br/reference/emitir_nfe`
+  - Consultar NF-e: `https://doc.focusnfe.com.br/reference/consultar_nfe`
+  - Cancelar NF-e: `https://doc.focusnfe.com.br/reference/cancelar_nfe`
+  - Webhooks: `https://doc.focusnfe.com.br/reference/criar_webhook`
+  - Emitir CT-e: `https://doc.focusnfe.com.br/reference/emitir_cte`
+  - Emitir MDF-e: `https://doc.focusnfe.com.br/reference/emitir_mdfe`
+- Endpoints principais observados na documentacao:
+  - `POST https://api.focusnfe.com.br/v2/nfe`
+  - `GET https://api.focusnfe.com.br/v2/nfe/{referencia}`
+  - `DELETE https://api.focusnfe.com.br/v2/nfe/{referencia}`
+  - `POST https://api.focusnfe.com.br/v2/hooks`
+  - `POST https://api.focusnfe.com.br/v2/cte`
+  - `POST https://api.focusnfe.com.br/v2/mdfe`
+- Criar futuro modulo/tela `Fiscal > NF-e`, com vendas pendentes, emissao, consulta de status, download XML/PDF/DANFE, cancelamento e historico fiscal.
+- Criar futura tabela de documento fiscal vinculada a venda/recibo, com status como `PENDENTE`, `ENVIADA`, `PROCESSANDO`, `AUTORIZADA`, `REJEITADA`, `CANCELADA`.
+- Criar futuro backend `FocusNfeClient` para montar JSON e comunicar com a Focus; o frontend nunca deve chamar a Focus diretamente.
+- Criar futuro webhook interno `/api/fiscal/focus/webhook` para receber alteracoes de status.
+- Antes de emitir em producao, cadastrar/validar dados fiscais da empresa, cliente e produto: CNPJ/CPF, IE/indicador IE, endereco completo, NCM, CFOP, unidade tributavel, origem, CST/CSOSN e impostos.
+- CT-e e MDF-e ficam para fase posterior, depois de NF-e de venda direta estar validada em homologacao.
+
 ### Producao
 - Rotas principais:
   - `/producao`
@@ -124,6 +152,24 @@ O projeto nasceu como um prototipo visual para apresentar a diretoria e foi apro
 - O token do bot foi informado pelo usuario em conversa anterior; nao repetir token em respostas e nao commitar tokens.
 - O bot ainda precisa ser validado ponta a ponta quando webhook estiver configurado corretamente.
 
+### Padronizacao de APIs e erros
+- APIs reais foram padronizadas para responder com formato consistente usando `src/lib/api/responses.ts`.
+- Respostas de sucesso usam `apiSuccess`, e erros usam `apiError`, `apiValidationError`, `apiUnauthorized`, `apiForbidden` ou `apiConflict`.
+- Frontend passou a usar `src/lib/api-client.ts` em formularios criticos para exibir erro amigavel ao usuario.
+- Formularios client-side com submit para API devem preferir o hook `src/lib/hooks/use-api-form.ts`, evitando repetir `loading/error/success`, parse de `FormData`, validacao Zod, `fetchJson` e `router.refresh`.
+- Primeira aplicacao do hook foi nos formularios financeiros de contas a pagar, contas a receber, recebimentos e pagamentos.
+- A padronizacao foi estendida para Suprimentos: criacao de solicitacao, registro de cotacao/comparativo e conferencia de nota fiscal/recebimento.
+- Acoes de Suprimentos tambem foram padronizadas com `fetchJson` e validacao Zod quando aplicavel: editar/excluir solicitacoes, aprovar/reprovar/converter/editar/excluir cotacoes, editar/excluir pedidos e editar/excluir notas fiscais/recebimentos.
+- A padronizacao tambem foi iniciada em Produtos e Producao: cadastro de produto, ordem de producao, apontamento e diario de producao usam schemas Zod do backend antes de chamar a API.
+- Composicoes/fichas tecnicas tambem passaram a usar `useApiForm`, incluindo criacao e edicao com `POST`/`PATCH`; exclusao usa `fetchJson` para erro padronizado.
+- Liberação de lotes em cura usa `useApiForm` e `productionBatchReleaseSchema`; a varredura principal de `fetch(` em Financeiro, Suprimentos, Produtos, Producao e Vendas nao encontrou chamadas manuais restantes.
+- Financeiro tem CRUD nas telas de contas a receber e contas a pagar. Exclusao e bloqueada quando a conta a receber veio de venda direta ou possui baixa. Em contas a pagar, Administrador e Diretoria podem excluir titulos mesmo quando vieram de recebimento/NF ou baixa; a exclusao fica registrada em auditoria como acao forcada por perfil.
+- Contas a receber possui estorno de baixa financeira: o usuario seleciona a baixa, informa motivo obrigatorio, o sistema remove a baixa, recalcula `receivedAmount`, reabre o status do titulo e registra auditoria do estorno.
+- Existe error boundary global em `src/app/error.tsx`.
+- `requireApiSession` em `src/lib/auth/guards.ts` tambem usa respostas padronizadas.
+- Commit enviado ao GitHub: `70fecb8 Padroniza respostas das APIs e tratamento de erros`.
+- Ultimo teste funcional navegou por dashboard, financeiro, contas a receber, contas a pagar, vendas, estoque, suprimentos, producao/diario, produtos, cadastros e usuarios sem runtime error.
+
 ## Problemas resolvidos
 - `localhost recusou conexao`: servidor local estava desligado; usar `npm.cmd run dev`.
 - `spawn EPERM`: Next dev precisou rodar fora do sandbox.
@@ -149,12 +195,16 @@ O projeto nasceu como um prototipo visual para apresentar a diretoria e foi apro
 - Manter visual corporativo/industrial: fundo claro, cards brancos, bordas suaves, badges, acoes compactas e boa leitura.
 
 ## Proximas entregas sugeridas
-1. Amarrar melhor Produto + Composicao + Producao.
-2. Validar consumo automatico de insumos pela ficha tecnica no Diario/Ordem de Producao.
-3. Melhorar relatorios de Producao com PDF.
-4. Validar fluxo ponta a ponta Suprimentos -> NF -> Estoque -> Contas a pagar.
-5. Testar e estabilizar bot Telegram com parser local.
-6. Continuar padronizacao UI/UX nas telas restantes.
+1. Criar plano tecnico da integracao Focus NFe em homologacao.
+2. Criar estrutura fiscal de empresa, clientes e produtos antes da emissao.
+3. Criar modulo `Fiscal > NF-e` e tabela de documentos fiscais.
+4. Amarrar emissao de NF-e ao fluxo de Venda Direta.
+5. Amarrar melhor Produto + Composicao + Producao.
+6. Validar consumo automatico de insumos pela ficha tecnica no Diario/Ordem de Producao.
+7. Melhorar relatorios de Producao com PDF.
+8. Validar fluxo ponta a ponta Suprimentos -> NF -> Estoque -> Contas a pagar.
+9. Testar e estabilizar bot Telegram com parser local.
+10. Continuar padronizacao UI/UX nas telas restantes.
 
 ## Prompt recomendado para nova sessao
 Use este texto ao abrir uma nova sessao nesta pasta:

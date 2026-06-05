@@ -1,10 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { CircleDollarSign } from "lucide-react";
-import { fetchJson, isApiRequestError } from "@/lib/api-client";
-import { formatValidationError } from "@/lib/validations/client";
+import { useApiForm } from "@/lib/hooks/use-api-form";
 import { accountReceiptSchema } from "@/lib/validations/purchase";
 
 type ReceivableOption = {
@@ -19,45 +16,12 @@ type Props = {
 };
 
 export function AccountReceiptForm({ receivables }: Props) {
-  const router = useRouter();
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    setSuccess("");
-
-    const formData = new FormData(event.currentTarget);
-    const payload = Object.fromEntries(formData.entries());
-    const parsed = accountReceiptSchema.safeParse(payload);
-
-    if (!parsed.success) {
-      setError(formatValidationError(parsed.error));
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      await fetchJson("/api/financeiro/recebimentos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(parsed.data)
-      }, "Nao foi possivel registrar o recebimento.");
-    } catch (requestError) {
-      setError(isApiRequestError(requestError) ? requestError.message : "Nao foi possivel registrar o recebimento.");
-      setLoading(false);
-      return;
-    } finally {
-      setLoading(false);
-    }
-
-    setSuccess("Recebimento registrado e titulo atualizado.");
-    event.currentTarget.reset();
-    router.refresh();
-  }
+  const { error, success, loading, handleSubmit } = useApiForm({
+    endpoint: "/api/financeiro/recebimentos",
+    schema: accountReceiptSchema,
+    fallbackError: "Nao foi possivel registrar o recebimento.",
+    successMessage: "Recebimento registrado e titulo atualizado."
+  });
 
   return (
     <form className="product-form" onSubmit={handleSubmit}>
@@ -103,7 +67,7 @@ export function AccountReceiptForm({ receivables }: Props) {
 
       <label className="field">
         <span>Observacao</span>
-        <textarea className="form-input" name="note" rows={3} placeholder="Observacao do recebimento, cobrança ou comprovante..." />
+        <textarea className="form-input" name="note" rows={3} placeholder="Observacao do recebimento, cobranca ou comprovante..." />
       </label>
 
       {error ? <p className="auth-error">{error}</p> : null}

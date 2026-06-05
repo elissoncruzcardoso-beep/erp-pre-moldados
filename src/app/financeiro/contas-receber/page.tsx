@@ -10,6 +10,7 @@ import { decimalToNumber, formatMoney } from "@/lib/formatters";
 import { getPaginationMeta, parsePagination, type SearchParamsLike } from "@/lib/pagination";
 import { AccountReceiptForm } from "../account-receipt-form";
 import { AccountReceivableForm } from "../account-receivable-form";
+import { AccountReceivableActions } from "../account-receivable-actions";
 import { FinanceModuleTabs } from "../_components/finance-module-tabs";
 
 export const dynamic = "force-dynamic";
@@ -297,6 +298,7 @@ export default async function ContasReceberPage({ searchParams }: PageProps) {
                   <th>Vencimento</th>
                   <th>Origem</th>
                   <th>Status</th>
+                  <th>Acoes</th>
                 </tr>
               </thead>
               <tbody>
@@ -324,9 +326,34 @@ export default async function ContasReceberPage({ searchParams }: PageProps) {
                       )}
                     </td>
                     <td><span className={badgeForStatus(receivable.status)}>{receivableStatusLabels[receivable.status] || receivable.status}</span></td>
+                    <td>
+                      <AccountReceivableActions
+                        receivableId={receivable.id}
+                        number={receivable.number}
+                        customers={customers.map((customer) => ({ id: customer.id, code: customer.code, name: customer.name }))}
+                        linkedToSale={Boolean(receivable.directSaleId)}
+                        hasReceipts={receivable.receipts.length > 0 || decimalToNumber(receivable.receivedAmount) > 0}
+                        receipts={receivable.receipts.map((receipt) => ({
+                          id: receipt.id,
+                          receiptDate: receipt.receiptDate.toLocaleDateString("pt-BR"),
+                          amount: decimalToNumber(receipt.amount),
+                          method: receipt.method,
+                          reference: receipt.reference || ""
+                        }))}
+                        editData={{
+                          customerId: receivable.customerId,
+                          description: receivable.description,
+                          documentNumber: receivable.documentNumber || "",
+                          costCenter: receivable.costCenter || "",
+                          dueDate: receivable.dueDate.toISOString().slice(0, 10),
+                          amount: decimalToNumber(receivable.amount).toString(),
+                          note: receivable.note || ""
+                        }}
+                      />
+                    </td>
                   </tr>
                 ))}
-                {receivables.length === 0 ? <tr><td colSpan={7}>Nenhuma conta a receber criada ainda.</td></tr> : null}
+                {receivables.length === 0 ? <tr><td colSpan={8}>Nenhuma conta a receber criada ainda.</td></tr> : null}
               </tbody>
             </table>
           </div>

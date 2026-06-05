@@ -1,10 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo } from "react";
 import { CircleDollarSign } from "lucide-react";
-import { fetchJson, isApiRequestError } from "@/lib/api-client";
-import { formatValidationError } from "@/lib/validations/client";
+import { useApiForm } from "@/lib/hooks/use-api-form";
 import { accountReceivableSchema } from "@/lib/validations/purchase";
 
 type CustomerOption = {
@@ -18,51 +16,18 @@ type Props = {
 };
 
 export function AccountReceivableForm({ customers }: Props) {
-  const router = useRouter();
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [loading, setLoading] = useState(false);
+  const { error, success, loading, handleSubmit } = useApiForm({
+    endpoint: "/api/financeiro/contas-receber",
+    schema: accountReceivableSchema,
+    fallbackError: "Nao foi possivel gerar a conta a receber.",
+    successMessage: "Conta a receber criada."
+  });
 
   const nextNumber = useMemo(() => {
     const date = new Date();
     const stamp = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
     return `CR-${stamp}-${String(Math.floor(Math.random() * 900) + 100)}`;
   }, []);
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    setSuccess("");
-
-    const formData = new FormData(event.currentTarget);
-    const payload = Object.fromEntries(formData.entries());
-    const parsed = accountReceivableSchema.safeParse(payload);
-
-    if (!parsed.success) {
-      setError(formatValidationError(parsed.error));
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      await fetchJson("/api/financeiro/contas-receber", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(parsed.data)
-      }, "Nao foi possivel gerar a conta a receber.");
-    } catch (requestError) {
-      setError(isApiRequestError(requestError) ? requestError.message : "Nao foi possivel gerar a conta a receber.");
-      setLoading(false);
-      return;
-    } finally {
-      setLoading(false);
-    }
-
-    setSuccess("Conta a receber criada.");
-    event.currentTarget.reset();
-    router.refresh();
-  }
 
   return (
     <form className="product-form" onSubmit={handleSubmit}>
@@ -112,7 +77,7 @@ export function AccountReceivableForm({ customers }: Props) {
 
       <label className="field">
         <span>Observacao</span>
-        <textarea className="form-input" name="note" rows={3} placeholder="Condição, contrato, medição ou observação..." />
+        <textarea className="form-input" name="note" rows={3} placeholder="Condicao, contrato, medicao ou observacao..." />
       </label>
 
       {error ? <p className="auth-error">{error}</p> : null}

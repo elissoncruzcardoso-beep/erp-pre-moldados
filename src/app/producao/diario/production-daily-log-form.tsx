@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { Plus, Save, Trash2 } from "lucide-react";
+import { useApiForm } from "@/lib/hooks/use-api-form";
+import { productionDailyLogSchema } from "@/lib/validations/production";
 
 type ProductOption = {
   id: string;
@@ -26,13 +27,30 @@ function today() {
 }
 
 export function ProductionDailyLogForm({ products }: ProductionDailyLogFormProps) {
-  const router = useRouter();
   const [lines, setLines] = useState<ProductionLine[]>([
     { itemId: products[0]?.id || "", quantity: "", note: "" }
   ]);
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(false);
+  const { error, success, loading, handleSubmit } = useApiForm({
+    endpoint: "/api/producao/diario",
+    schema: productionDailyLogSchema,
+    fallbackError: "Nao foi possivel registrar o diario.",
+    successMessage: "Diario de producao registrado com sucesso.",
+    buildPayload: (formData) => ({
+      logDate: formData.get("logDate"),
+      teamPresent: formData.get("teamPresent"),
+      weatherMorning: formData.get("weatherMorning"),
+      weatherAfternoon: formData.get("weatherAfternoon"),
+      observation: formData.get("observation") || undefined,
+      items: lines
+        .filter((line) => line.itemId && Number(line.quantity) > 0)
+        .map((line) => ({
+          itemId: line.itemId,
+          quantity: line.quantity,
+          note: line.note || undefined
+        }))
+    }),
+    onSuccess: () => setLines([{ itemId: products[0]?.id || "", quantity: "", note: "" }])
+  });
 
   function updateLine(index: number, field: keyof ProductionLine, value: string) {
     setLines((current) =>
@@ -46,48 +64,6 @@ export function ProductionDailyLogForm({ products }: ProductionDailyLogFormProps
 
   function removeLine(index: number) {
     setLines((current) => current.filter((_, lineIndex) => lineIndex !== index));
-  }
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    setError("");
-    setMessage("");
-    setLoading(true);
-
-    const formData = new FormData(form);
-    const payload = {
-      logDate: formData.get("logDate"),
-      teamPresent: formData.get("teamPresent"),
-      weatherMorning: formData.get("weatherMorning"),
-      weatherAfternoon: formData.get("weatherAfternoon"),
-      observation: formData.get("observation") || undefined,
-      items: lines
-        .filter((line) => line.itemId && Number(line.quantity) > 0)
-        .map((line) => ({
-          itemId: line.itemId,
-          quantity: line.quantity,
-          note: line.note || undefined
-        }))
-    };
-
-    const response = await fetch("/api/producao/diario", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    const data = await response.json().catch(() => ({}));
-    setLoading(false);
-
-    if (!response.ok) {
-      setError(data.error || "Nao foi possivel registrar o diario.");
-      return;
-    }
-
-    form.reset();
-    setLines([{ itemId: products[0]?.id || "", quantity: "", note: "" }]);
-    setMessage("Diario de producao registrado com sucesso.");
-    router.refresh();
   }
 
   return (
@@ -218,7 +194,7 @@ export function ProductionDailyLogForm({ products }: ProductionDailyLogFormProps
       </label>
 
       {error ? <p className="auth-error">{error}</p> : null}
-      {message ? <p className="auth-success">{message}</p> : null}
+      {success ? <p className="auth-success">{success}</p> : null}
 
       <button className="primary-button" type="submit" disabled={loading || products.length === 0}>
         <Save size={17} />

@@ -2,10 +2,21 @@ import { redirect } from "next/navigation";
 import { ShieldCheck, UserCog, Users } from "lucide-react";
 import { getSession } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
+import { RoleManagement } from "./role-management";
 import { UserActions } from "./user-actions";
 import { UserForm } from "./user-form";
 
 export const dynamic = "force-dynamic";
+
+function formatAuditDate(date: Date) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}
 
 export default async function UsuariosPage() {
   const session = await getSession();
@@ -19,26 +30,67 @@ export default async function UsuariosPage() {
   }
 
   const prisma = getPrisma();
-  const [users, roles] = await Promise.all([
+  const [users, roles, permissions, auditLogs] = await Promise.all([
     prisma.user.findMany({
       include: { role: true },
       orderBy: [{ status: "asc" }, { name: "asc" }]
     }),
     prisma.role.findMany({
-      include: { permissions: { include: { permission: true } } },
+      include: {
+        _count: { select: { users: true } },
+        permissions: { include: { permission: true } }
+      },
       orderBy: { name: "asc" }
+    }),
+    prisma.permission.findMany({
+      orderBy: [{ module: "asc" }, { key: "asc" }]
+    }),
+    prisma.auditLog.findMany({
+      where: {
+        OR: [
+          { module: "Usuarios" },
+          { entity: "User" },
+          { action: "LOGIN" }
+        ]
+      },
+      include: { user: true },
+      orderBy: { createdAt: "desc" },
+      take: 8
     })
   ]);
+  const activeUsers = users.filter((user) => user.status === "ACTIVE").length;
+  const inactiveUsers = users.length - activeUsers;
+  const roleOptions = roles.map((role) => ({ id: role.id, name: role.name }));
+  const roleRecords = roles.map((role) => ({
+    id: role.id,
+    name: role.name,
+    description: role.description || "",
+    userCount: role._count.users,
+    permissions: role.permissions
+      .map(({ permission }) => ({
+        id: permission.id,
+        key: permission.key,
+        module: permission.module,
+        description: permission.description
+      }))
+      .sort((left, right) => left.module.localeCompare(right.module) || left.key.localeCompare(right.key))
+  }));
+  const permissionOptions = permissions.map((permission) => ({
+    id: permission.id,
+    key: permission.key,
+    module: permission.module,
+    description: permission.description
+  }));
 
   return (
     <>
       <section className="page-head">
         <div>
-          <p className="eyebrow">Seguranca e acessos</p>
-          <h1>Usuarios e perfis do ERP</h1>
+          <p className="eyebrow">Segurança e acessos</p>
+          <h1>Usuários e perfis do ERP</h1>
           <p className="lead">
-            Cadastre usuarios internos, defina perfis de acesso, acompanhe status e mantenha a
-            gestao de permissoes dentro do ERP.
+            Cadastre usuários internos, defina perfis de acesso, acompanhe status e mantenha a
+            gestão de permissões dentro do ERP.
           </p>
         </div>
         <div className="button-row">
@@ -52,11 +104,11 @@ export default async function UsuariosPage() {
       <section className="grid-12" style={{ marginBottom: 16 }}>
         <article className="metric-card accent-blue span-4">
           <div className="metric-top">
-            <span className="mono">Usuarios cadastrados</span>
+            <span className="mono">Usuários cadastrados</span>
             <Users size={22} />
           </div>
           <strong className="metric-value">{users.length}</strong>
-          <span className="metric-sub">Inclui o administrador inicial criado pelo seed.</span>
+          <span className="metric-sub">{activeUsers} ativo(s) e {inactiveUsers} inativo(s).</span>
         </article>
         <article className="metric-card accent-orange span-4">
           <div className="metric-top">
@@ -64,35 +116,36 @@ export default async function UsuariosPage() {
             <UserCog size={22} />
           </div>
           <strong className="metric-value">{roles.length}</strong>
-          <span className="metric-sub">Administrador, diretoria e areas operacionais.</span>
+          <span className="metric-sub">Administrador, diretoria e áreas operacionais.</span>
         </article>
         <article className="metric-card accent-gray span-4">
           <div className="metric-top">
-            <span className="mono">Permissoes</span>
+            <span className="mono">Permissões</span>
             <ShieldCheck size={22} />
           </div>
           <strong className="metric-value">
             {roles.reduce((total, role) => total + role.permissions.length, 0)}
           </strong>
-          <span className="metric-sub">Distribuidas entre os perfis do MVP.</span>
+          <span className="metric-sub">Distribuídas entre os perfis do MVP.</span>
         </article>
       </section>
 
       <section className="grid-12" style={{ marginBottom: 16 }}>
         <section className="card accent-blue span-4">
-          <p className="eyebrow">Novo usuario</p>
+          <p className="eyebrow">Novo usuário</p>
           <h2>Adicionar acesso interno</h2>
           <p className="section-note">
-            O login nao possui cadastro publico. Novos acessos sao criados aqui por administrador.
+            O login não possui cadastro público. Novos acessos são criados aqui por administrador.
           </p>
-          <UserForm roles={roles.map((role) => ({ id: role.id, name: role.name }))} />
+          <UserForm roles={roleOptions} />
         </section>
 
         <section className="table-shell span-8">
           <div className="table-header">
             <div>
-              <p className="eyebrow">Usuarios</p>
+              <p className="eyebrow">Usuários</p>
               <h2>Contas cadastradas</h2>
+              <p className="metric-sub">Edite dados, perfil, status ou redefina senha pelos botões de ação.</p>
             </div>
           </div>
           <table>
@@ -103,7 +156,7 @@ export default async function UsuariosPage() {
                 <th>Departamento</th>
                 <th>Perfil</th>
                 <th>Status</th>
-                <th>Acoes</th>
+                <th>Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -111,7 +164,7 @@ export default async function UsuariosPage() {
                 <tr key={user.id}>
                   <td>
                     <strong>{user.name}</strong>
-                    {user.id === session.userId ? <small className="product-detail">Usuario atual</small> : null}
+                    {user.id === session.userId ? <small className="product-detail">Usuário atual</small> : null}
                   </td>
                   <td className="mono">{user.email}</td>
                   <td>{user.department || "-"}</td>
@@ -123,7 +176,7 @@ export default async function UsuariosPage() {
                   </td>
                   <td>
                     <UserActions
-                      roles={roles.map((role) => ({ id: role.id, name: role.name }))}
+                      roles={roleOptions}
                       user={{
                         id: user.id,
                         name: user.name,
@@ -139,7 +192,7 @@ export default async function UsuariosPage() {
               ))}
               {users.length === 0 ? (
                 <tr>
-                  <td colSpan={6}>Nenhum usuario cadastrado.</td>
+                  <td colSpan={6}>Nenhum usuário cadastrado.</td>
                 </tr>
               ) : null}
             </tbody>
@@ -150,24 +203,51 @@ export default async function UsuariosPage() {
       <section className="grid-12">
         <section className="card accent-blue span-12 users-role-panel">
           <p className="eyebrow">Perfis</p>
-          <h2>Matriz de permissao</h2>
-          <div className="role-list">
-            {roles.map((role) => (
-              <article className="role-item" key={role.id}>
-                <div className="split-row">
-                  <strong>{role.name}</strong>
-                  <span className="badge blue">{role.permissions.length} permissoes</span>
-                </div>
-                <div className="permission-tags">
-                  {role.permissions.map(({ permission }) => (
-                    <span className="report-chip" key={permission.id}>
-                      {permission.key}
-                    </span>
-                  ))}
-                </div>
-              </article>
-            ))}
+          <h2>Matriz de permissão</h2>
+          <p className="section-note">
+            Crie perfis por função e marque as permissões que cada equipe pode usar no ERP.
+          </p>
+          <RoleManagement roles={roleRecords} permissions={permissionOptions} />
+        </section>
+      </section>
+
+      <section className="grid-12" style={{ marginTop: 16 }}>
+        <section className="table-shell span-12">
+          <div className="table-header">
+            <div>
+              <p className="eyebrow">Auditoria</p>
+              <h2>Histórico recente de acessos</h2>
+              <p className="metric-sub">Eventos de login, criação, edição e inativação de usuários.</p>
+            </div>
+            <span className="badge blue">{auditLogs.length} eventos</span>
           </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Ação</th>
+                <th>Usuário operador</th>
+                <th>Entidade</th>
+                <th>Motivo / detalhe</th>
+              </tr>
+            </thead>
+            <tbody>
+              {auditLogs.map((log) => (
+                <tr key={log.id}>
+                  <td className="mono">{formatAuditDate(log.createdAt)}</td>
+                  <td><span className="badge blue">{log.action}</span></td>
+                  <td>{log.user?.name || "Sistema"}</td>
+                  <td className="mono">{log.entity}{log.entityId ? ` / ${log.entityId.slice(0, 8)}` : ""}</td>
+                  <td>{log.justification || log.module}</td>
+                </tr>
+              ))}
+              {auditLogs.length === 0 ? (
+                <tr>
+                  <td colSpan={5}>Nenhum evento de usuário registrado ainda.</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
         </section>
       </section>
     </>

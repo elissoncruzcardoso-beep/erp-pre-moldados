@@ -9,6 +9,7 @@ import { decimalToNumber, formatMoney } from "@/lib/formatters";
 import { getPaginationMeta, parsePagination, type SearchParamsLike } from "@/lib/pagination";
 import { AccountPayableForm } from "../account-payable-form";
 import { AccountPaymentForm } from "../account-payment-form";
+import { AccountPayableActions } from "../account-payable-actions";
 import { FinanceModuleTabs } from "../_components/finance-module-tabs";
 
 export const dynamic = "force-dynamic";
@@ -63,6 +64,7 @@ export default async function ContasPagarPage({ searchParams }: PageProps) {
 
   if (!session) redirect("/login?next=/financeiro/contas-pagar");
   if (!session.permissions.includes("financeiro.view")) redirect("/dashboard");
+  const canForceDeletePayables = ["Administrador", "Diretoria"].includes(session.role);
 
   const params = (await searchParams) || {};
   const statusFilter = firstParam(params, "status") || "ABERTOS";
@@ -336,6 +338,7 @@ export default async function ContasPagarPage({ searchParams }: PageProps) {
                   <th className="number-cell">Pago</th>
                   <th>Vencimento</th>
                   <th>Status</th>
+                  <th>Acoes</th>
                 </tr>
               </thead>
               <tbody>
@@ -348,9 +351,23 @@ export default async function ContasPagarPage({ searchParams }: PageProps) {
                     <td className="mono number-cell">{formatMoney(payable.paidAmount)}</td>
                     <td>{payable.dueDate.toLocaleDateString("pt-BR")}</td>
                     <td><span className={badgeForStatus(payable.status)}>{payableStatusLabels[payable.status] || payable.status}</span></td>
+                    <td>
+                      <AccountPayableActions
+                        payableId={payable.id}
+                        number={payable.number}
+                        linkedToReceipt={Boolean(payable.purchaseReceiptId)}
+                        hasPayments={payable.payments.length > 0 || decimalToNumber(payable.paidAmount) > 0}
+                        canForceDelete={canForceDeletePayables}
+                        editData={{
+                          dueDate: payable.dueDate.toISOString().slice(0, 10),
+                          costCenter: payable.costCenter || "",
+                          note: payable.note || ""
+                        }}
+                      />
+                    </td>
                   </tr>
                 ))}
-                {payables.length === 0 ? <tr><td colSpan={7}>Nenhuma conta a pagar gerada ainda.</td></tr> : null}
+                {payables.length === 0 ? <tr><td colSpan={8}>Nenhuma conta a pagar gerada ainda.</td></tr> : null}
               </tbody>
             </table>
           </div>
