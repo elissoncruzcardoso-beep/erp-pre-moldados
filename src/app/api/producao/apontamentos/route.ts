@@ -5,6 +5,11 @@ import { getPrisma } from "@/lib/db/prisma";
 import { consumeApprovedCompositionForProduction } from "@/lib/production/consume-composition";
 import { productionNoteSchema } from "@/lib/validations/production";
 
+const PRODUCTION_NOTE_TRANSACTION_OPTIONS = {
+  maxWait: 10000,
+  timeout: 30000
+};
+
 export async function POST(request: Request) {
   const auth = await requireApiSession({
     permission: "producao.manage",
@@ -127,11 +132,14 @@ export async function POST(request: Request) {
       });
 
       return note;
-    });
+    }, PRODUCTION_NOTE_TRANSACTION_OPTIONS);
 
     return apiSuccess({ note: result }, { status: 201 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Nao foi possivel registrar o apontamento.";
+    const rawMessage = error instanceof Error ? error.message : "Nao foi possivel registrar o apontamento.";
+    const message = rawMessage.includes("Transaction not found") || rawMessage.includes("Transaction API error")
+      ? "Nao foi possivel concluir o apontamento porque a operacao demorou mais que o esperado. Tente novamente; se repetir, revise a ficha tecnica ou a conexao com o banco."
+      : rawMessage;
 
     return apiError(message, { status: 400 });
   }

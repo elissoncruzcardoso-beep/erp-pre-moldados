@@ -15,6 +15,11 @@ function buildBatchCode(logDate: Date, sequence: number) {
   return `LOTE-${stamp}-${String(sequence).padStart(3, "0")}`;
 }
 
+const DAILY_LOG_TRANSACTION_OPTIONS = {
+  maxWait: 10000,
+  timeout: 30000
+};
+
 export async function POST(request: Request) {
   const auth = await requireApiSession({
     permission: "producao.manage",
@@ -163,7 +168,7 @@ export async function POST(request: Request) {
       });
 
       return log;
-    });
+    }, DAILY_LOG_TRANSACTION_OPTIONS);
 
     return apiSuccess({ dailyLog: result }, { status: 201 });
   } catch (error) {
@@ -171,7 +176,10 @@ export async function POST(request: Request) {
       return apiConflict("Ja existe um diario de producao seu para esta data.");
     }
 
-    const message = error instanceof Error ? error.message : "Nao foi possivel registrar o diario de producao.";
+    const rawMessage = error instanceof Error ? error.message : "Nao foi possivel registrar o diario de producao.";
+    const message = rawMessage.includes("Transaction not found") || rawMessage.includes("Transaction API error")
+      ? "Nao foi possivel concluir o diario porque a operacao demorou mais que o esperado. Tente salvar novamente; se repetir, revise se a ficha tecnica possui muitos insumos ou se o banco esta lento."
+      : rawMessage;
     return apiError(message, { status: 400 });
   }
 }
