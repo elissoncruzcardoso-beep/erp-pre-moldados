@@ -7,6 +7,7 @@ import { getPrisma } from "@/lib/db/prisma";
 import { decimalToNumber, formatQuantity } from "@/lib/formatters";
 import { getPaginationMeta, parsePagination, type SearchParamsLike } from "@/lib/pagination";
 import { StockMovementForm } from "./stock-movement-form";
+import { StockMovementActions } from "./stock-movement-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -94,7 +95,9 @@ export default async function EstoquePage({ searchParams }: EstoquePageProps) {
         },
         originWarehouse: true,
         targetWarehouse: true,
-        user: true
+        user: true,
+        directSale: true,
+        purchaseReceipt: true
       },
       orderBy: { createdAt: "desc" },
       skip: movementPagination.skip,
@@ -175,6 +178,20 @@ export default async function EstoquePage({ searchParams }: EstoquePageProps) {
     (balancePaginationMeta.page - 1) * balancePaginationMeta.pageSize,
     balancePaginationMeta.page * balancePaginationMeta.pageSize
   );
+  const itemOptions = items.map((item) => ({
+    id: item.id,
+    code: item.code,
+    description: item.description,
+    unitCode: item.unit.code
+  }));
+  const warehouseOptions = warehouses.map((warehouse) => ({
+    id: warehouse.id,
+    code: warehouse.code,
+    name: warehouse.name
+  }));
+  const canManageStockMovements =
+    session.permissions.includes("estoque.movements.manage") ||
+    ["Administrador", "Diretoria"].includes(session.role);
 
   return (
     <>
@@ -339,17 +356,8 @@ export default async function EstoquePage({ searchParams }: EstoquePageProps) {
             <p className="eyebrow">Novo movimento</p>
             <h2>Registrar estoque</h2>
             <StockMovementForm
-              items={items.map((item) => ({
-                id: item.id,
-                code: item.code,
-                description: item.description,
-                unitCode: item.unit.code
-              }))}
-              warehouses={warehouses.map((warehouse) => ({
-                id: warehouse.id,
-                code: warehouse.code,
-                name: warehouse.name
-              }))}
+              items={itemOptions}
+              warehouses={warehouseOptions}
             />
           </section>
         </aside>
@@ -371,6 +379,7 @@ export default async function EstoquePage({ searchParams }: EstoquePageProps) {
                 <th>Origem</th>
                 <th>Destino</th>
                 <th>Usuario</th>
+                <th>Acoes</th>
               </tr>
             </thead>
             <tbody>
@@ -383,11 +392,30 @@ export default async function EstoquePage({ searchParams }: EstoquePageProps) {
                   <td>{movement.originWarehouse?.code || "-"}</td>
                   <td>{movement.targetWarehouse?.code || "-"}</td>
                   <td>{movement.user.name}</td>
+                  <td>
+                    <StockMovementActions
+                      movement={{
+                        id: movement.id,
+                        type: movement.type,
+                        itemId: movement.itemId,
+                        quantity: movement.quantity.toString(),
+                        unitCost: movement.unitCost.toString(),
+                        originWarehouseId: movement.originWarehouseId || "",
+                        targetWarehouseId: movement.targetWarehouseId || "",
+                        document: movement.document || "",
+                        justification: movement.justification || "",
+                        locked: Boolean(movement.directSale || movement.purchaseReceipt || movement.productionOrderId)
+                      }}
+                      items={itemOptions}
+                      warehouses={warehouseOptions}
+                      canManageMovements={canManageStockMovements}
+                    />
+                  </td>
                 </tr>
               ))}
               {movements.length === 0 ? (
                 <tr>
-                  <td colSpan={7}>Nenhuma movimentacao registrada ainda.</td>
+                  <td colSpan={8}>Nenhuma movimentacao registrada ainda.</td>
                 </tr>
               ) : null}
             </tbody>

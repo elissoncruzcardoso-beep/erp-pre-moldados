@@ -7,6 +7,7 @@ export const permissions = [
   { key: "estoque.view", module: "Estoque", description: "Consultar saldos e lotes" },
   { key: "estoque.move", module: "Estoque", description: "Registrar movimentos de estoque" },
   { key: "estoque.adjust", module: "Estoque", description: "Registrar ajustes manuais de estoque" },
+  { key: "estoque.movements.manage", module: "Estoque", description: "Editar e excluir movimentações de estoque" },
   { key: "producao.view", module: "Produção", description: "Visualizar ordens e apontamentos" },
   { key: "producao.manage", module: "Produção", description: "Criar e alterar ordens de produção" },
   { key: "producao.close", module: "Produção", description: "Encerrar ordens de produção" },
@@ -21,7 +22,7 @@ export const rolePermissionMap = {
   Administrador: permissions.map((permission) => permission.key),
   Diretoria: ["dashboard.view", "diretoria.view", "producao.view", "estoque.view", "suprimentos.view", "financeiro.view", "auditoria.view"],
   Produção: ["dashboard.view", "producao.view", "producao.manage", "producao.close", "estoque.view"],
-  Almoxarifado: ["dashboard.view", "estoque.view", "estoque.move", "estoque.adjust", "producao.view", "cadastros.manage"],
+  Almoxarifado: ["dashboard.view", "estoque.view", "estoque.move", "estoque.adjust", "estoque.movements.manage", "producao.view", "cadastros.manage"],
   Suprimentos: ["dashboard.view", "suprimentos.view", "suprimentos.manage", "estoque.view", "cadastros.manage"],
   Financeiro: ["dashboard.view", "financeiro.view", "financeiro.manage", "suprimentos.view", "cadastros.manage"],
   Qualidade: ["dashboard.view", "producao.view", "estoque.view"]

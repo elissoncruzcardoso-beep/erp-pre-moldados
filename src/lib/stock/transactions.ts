@@ -124,6 +124,29 @@ export async function reserveStockBalance(
   });
 }
 
+export async function releaseReservedStockBalance(
+  tx: StockTx,
+  itemId: string,
+  warehouseId: string,
+  quantity: Prisma.Decimal,
+  lotId: string | null = null
+) {
+  const currentBalance = await findStockBalance(tx, itemId, warehouseId, lotId);
+
+  if (!currentBalance) {
+    return null;
+  }
+
+  const nextReserved = currentBalance.reserved.minus(quantity);
+
+  return tx.stockBalance.update({
+    where: { id: currentBalance.id },
+    data: {
+      reserved: nextReserved.lessThan(0) ? new Prisma.Decimal(0) : nextReserved
+    }
+  });
+}
+
 type ApplyStockMovementBalanceInput = {
   type: StockMovementType;
   itemId: string;
@@ -261,5 +284,53 @@ export async function applyStockMovementBalance(
     }
 
     await decreaseStockBalance(tx, itemId, originWarehouse, quantity, lotId);
+  }
+}
+
+export async function reverseStockMovementBalance(
+  tx: StockTx,
+  {
+    type,
+    itemId,
+    quantity,
+    originWarehouse,
+    targetWarehouse,
+    lotId = null
+  }: ApplyStockMovementBalanceInput
+) {
+  if (type === "TRANSFERENCIA") {
+    if (!originWarehouse || !targetWarehouse) {
+      throw new Error("Movimentacao de transferencia sem deposito completo.");
+    }
+
+    await decreaseStockBalance(tx, itemId, targetWarehouse, quantity, lotId);
+    await increaseStockBalance(tx, itemId, originWarehouse.id, quantity, lotId);
+    return;
+  }
+
+  if (type === "RESERVA") {
+    if (!originWarehouse) {
+      throw new Error("Reserva sem deposito de origem.");
+    }
+
+    await releaseReservedStockBalance(tx, itemId, originWarehouse.id, quantity, lotId);
+    return;
+  }
+
+  if (positiveStockMovementTypes.has(type)) {
+    if (!targetWarehouse) {
+      throw new Error("Movimentacao de entrada sem deposito de destino.");
+    }
+
+    await decreaseStockBalance(tx, itemId, targetWarehouse, quantity, lotId);
+    return;
+  }
+
+  if (negativeStockMovementTypes.has(type)) {
+    if (!originWarehouse) {
+      throw new Error("Movimentacao de saida sem deposito de origem.");
+    }
+
+    await increaseStockBalance(tx, itemId, originWarehouse.id, quantity, lotId);
   }
 }

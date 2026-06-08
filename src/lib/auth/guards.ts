@@ -9,6 +9,7 @@ type PageSessionOptions = {
   permission?: PermissionKey;
   permissions?: PermissionKey[];
   anyPermission?: PermissionKey[];
+  anyRole?: string[];
   forbiddenPath?: string;
 };
 
@@ -16,6 +17,7 @@ type ApiSessionOptions = {
   permission?: PermissionKey;
   permissions?: PermissionKey[];
   anyPermission?: PermissionKey[];
+  anyRole?: string[];
   forbiddenMessage?: string;
 };
 
@@ -47,8 +49,9 @@ export function canViewOperationAudit(session: SessionUser) {
 
 function canAccess(
   session: SessionUser,
-  options: Pick<PageSessionOptions, "permission" | "permissions" | "anyPermission">
+  options: Pick<PageSessionOptions, "permission" | "permissions" | "anyPermission" | "anyRole">
 ) {
+  if (options.anyRole && hasRole(session, options.anyRole)) return true;
   if (options.permission && !hasPermission(session, options.permission)) return false;
   if (options.permissions && !hasAllPermissions(session, options.permissions)) return false;
   if (options.anyPermission && !hasAnyPermission(session, options.anyPermission)) return false;
