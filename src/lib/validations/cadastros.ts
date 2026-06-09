@@ -45,6 +45,15 @@ export const customerSchema = z.object({
   active: z.coerce.boolean().default(true)
 });
 
+export const supplierSchema = z.object({
+  code: codeSchema,
+  name: z.string().trim().min(2).max(120),
+  document: z.string().trim().max(40).optional(),
+  email: z.string().trim().email().max(120).optional().or(z.literal("")),
+  phone: z.string().trim().max(40).optional(),
+  active: z.coerce.boolean().default(true)
+});
+
 export const paymentMethodSchema = z.object({
   code: codeSchema,
   name: z.string().trim().min(2).max(90),
@@ -65,5 +74,6 @@ export type UnitOfMeasureInput = z.infer<typeof unitOfMeasureSchema>;
 export type InputGroupInput = z.infer<typeof inputGroupSchema>;
 export type FinancialGroupInput = z.infer<typeof financialGroupSchema>;
 export type CustomerInput = z.infer<typeof customerSchema>;
+export type SupplierInput = z.infer<typeof supplierSchema>;
 export type PaymentMethodInput = z.infer<typeof paymentMethodSchema>;
 export type FinancialSettlementTypeInput = z.infer<typeof financialSettlementTypeSchema>;

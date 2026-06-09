@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { Boxes, Calculator, ClipboardList, CreditCard, HandCoins, Ruler, Users } from "lucide-react";
+import { Boxes, Calculator, ClipboardList, CreditCard, HandCoins, Ruler, Truck, Users } from "lucide-react";
 
 const items = [
   { href: "/cadastros/produtos", label: "Produtos", icon: ClipboardList },
   { href: "/cadastros/clientes", label: "Clientes", icon: Users },
+  { href: "/cadastros/fornecedores", label: "Fornecedores", icon: Truck },
   { href: "/cadastros/unidades", label: "Unidades", icon: Ruler },
   { href: "/cadastros/grupos-insumos", label: "Grupos de insumos", icon: Boxes },
   { href: "/cadastros/grupos-financeiros", label: "Grupos financeiros", icon: Calculator },

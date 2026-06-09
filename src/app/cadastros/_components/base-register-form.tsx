@@ -9,7 +9,7 @@ type BaseRegisterFormProps = {
   children: ReactNode;
   submitLabel: string;
   successMessage: string;
-  formType: "unit" | "inputGroup" | "financialGroup" | "customer" | "paymentMethod" | "settlementType";
+  formType: "unit" | "inputGroup" | "financialGroup" | "customer" | "supplier" | "paymentMethod" | "settlementType";
 };
 
 export function BaseRegisterForm({
@@ -105,6 +105,17 @@ function buildPayload(formType: BaseRegisterFormProps["formType"], formData: For
       address: formData.get("address") || undefined,
       city: formData.get("city") || undefined,
       state: formData.get("state") || undefined,
+      active: true
+    };
+  }
+
+  if (formType === "supplier") {
+    return {
+      code: formData.get("code"),
+      name: formData.get("name"),
+      document: formData.get("document") || undefined,
+      email: formData.get("email") || undefined,
+      phone: formData.get("phone") || undefined,
       active: true
     };
   }

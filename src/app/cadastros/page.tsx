@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Boxes, Calculator, ClipboardList, CreditCard, HandCoins, Ruler, Settings2, ShieldCheck, Users } from "lucide-react";
+import { Boxes, Calculator, ClipboardList, CreditCard, HandCoins, Ruler, Settings2, ShieldCheck, Truck, Users } from "lucide-react";
 import { getSession } from "@/lib/auth/session";
 import { CadastrosNav } from "./_components/cadastros-nav";
 
@@ -24,6 +24,12 @@ const modules = [
     title: "Clientes",
     description: "Cadastre clientes avulsos e recorrentes para vendas, contas a receber e recibos.",
     icon: Users
+  },
+  {
+    href: "/cadastros/fornecedores",
+    title: "Fornecedores",
+    description: "Cadastre fornecedores para cotações, pedidos, recebimentos, notas fiscais e contas a pagar.",
+    icon: Truck
   },
   {
     href: "/cadastros/grupos-insumos",
