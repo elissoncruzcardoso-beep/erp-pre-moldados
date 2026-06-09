@@ -1,30 +1,9 @@
 import { AuditAction, Prisma } from "@prisma/client";
 import { apiConflict, apiError, apiForbidden, apiSuccess, apiUnauthorized, apiValidationError } from "@/lib/api/responses";
 import { getSession } from "@/lib/auth/session";
+import { makeSupplySequentialCode } from "@/lib/codes/supply-sequence";
 import { getPrisma } from "@/lib/db/prisma";
 import { purchaseRequestSchema } from "@/lib/validations/purchase";
-
-async function makePurchaseRequestNumber(tx: Prisma.TransactionClient) {
-  const requests = await tx.purchaseRequest.findMany({
-    where: {
-      number: {
-        startsWith: "SC-"
-      }
-    },
-    select: {
-      number: true
-    }
-  });
-  const lastSequentialNumber = requests.reduce((last, request) => {
-    const match = request.number.match(/^SC-(\d+)$/);
-    const sequence = match ? Number(match[1]) : 0;
-
-    return Number.isFinite(sequence) && sequence > last ? sequence : last;
-  }, 0);
-  const nextSequence = lastSequentialNumber + 1;
-
-  return `SC-${String(nextSequence).padStart(2, "0")}`;
-}
 
 export async function POST(request: Request) {
   const session = await getSession();
@@ -51,7 +30,7 @@ export async function POST(request: Request) {
     const requestRecord = await prisma.$transaction(async (tx) => {
       const created = await tx.purchaseRequest.create({
         data: {
-          number: await makePurchaseRequestNumber(tx),
+          number: await makeSupplySequentialCode(tx, "SC"),
           requesterId: session.userId,
           department: input.department?.trim() || null,
           costCenter: input.costCenter?.trim() || null,

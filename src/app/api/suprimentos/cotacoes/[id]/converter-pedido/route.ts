@@ -1,19 +1,12 @@
 import { AuditAction, Prisma } from "@prisma/client";
 import { apiConflict, apiError, apiForbidden, apiSuccess, apiUnauthorized, handleApiError } from "@/lib/api/responses";
 import { getSession } from "@/lib/auth/session";
+import { makeSupplySequentialCode } from "@/lib/codes/supply-sequence";
 import { getPrisma } from "@/lib/db/prisma";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
-
-function makeOrderNumber() {
-  const date = new Date();
-  const stamp = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
-  const suffix = String(Math.floor(Math.random() * 9000) + 1000);
-
-  return `PC-${stamp}-${suffix}`;
-}
 
 function addDays(date: Date, days: number) {
   const next = new Date(date);
@@ -98,7 +91,7 @@ export async function POST(_request: Request, context: RouteContext) {
 
       const created = await tx.purchaseOrder.create({
         data: {
-          number: makeOrderNumber(),
+          number: await makeSupplySequentialCode(tx, "PC"),
           purchaseQuoteId: quote.id,
           purchaseRequestId: quote.purchaseRequestId,
           supplierId: quote.supplierId,

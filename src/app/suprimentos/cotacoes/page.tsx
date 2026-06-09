@@ -1,5 +1,6 @@
 import { FileSearch, Trophy } from "lucide-react";
 import { PaginationControls } from "@/components/pagination-controls";
+import { makeComparisonMapNumber } from "@/lib/codes/supply-sequence";
 import { getPrisma } from "@/lib/db/prisma";
 import { getPaginationMeta, parsePagination, type SearchParamsLike } from "@/lib/pagination";
 import { SuprimentosNav } from "../_components/suprimentos-nav";
@@ -191,6 +192,7 @@ export default async function CotacoesPage({ searchParams }: CotacoesPageProps) 
       return {
         purchaseRequestId,
         requestNumber: groupQuotes[0].purchaseRequest.number,
+        mapNumber: makeComparisonMapNumber(groupQuotes[0].purchaseRequest.number),
         quotes: groupQuotes,
         winner,
         priceRangeByRequestItem: groupQuotes.reduce((map, quote) => {
@@ -262,9 +264,9 @@ export default async function CotacoesPage({ searchParams }: CotacoesPageProps) 
                 <div className="comparison-map-head">
                   <div>
                     <p className="eyebrow">Solicitacao</p>
-                    <h3>{group.requestNumber}</h3>
+                    <h3>{group.mapNumber}</h3>
                     <span className="metric-sub">
-                      {group.quotes.length} fornecedor(es) no comparativo
+                      Solicitacao {group.requestNumber} | {group.quotes.length} fornecedor(es) no comparativo
                     </span>
                   </div>
                   <span className="badge green">

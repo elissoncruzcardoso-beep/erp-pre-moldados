@@ -9,7 +9,7 @@ import {
   handleApiError
 } from "@/lib/api/responses";
 import { getSession } from "@/lib/auth/session";
-import { makeAutomaticCode } from "@/lib/codes/auto-code";
+import { makeSupplySequentialCode } from "@/lib/codes/supply-sequence";
 import { getPrisma } from "@/lib/db/prisma";
 import { purchaseQuoteSchema } from "@/lib/validations/purchase";
 
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
 
       const created = await tx.purchaseQuote.create({
         data: {
-          number: makeAutomaticCode("COT"),
+          number: await makeSupplySequentialCode(tx, "COT"),
           purchaseRequestId: input.purchaseRequestId,
           supplierId: input.supplierId,
           createdById: session.userId,
