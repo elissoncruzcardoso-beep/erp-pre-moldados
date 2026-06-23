@@ -45,18 +45,33 @@ export async function increaseStockBalance(
   if (currentBalance) {
     return tx.stockBalance.update({
       where: { id: currentBalance.id },
-      data: { quantity: currentBalance.quantity.plus(quantity) }
+      data: { quantity: { increment: quantity } }
     });
   }
 
-  return tx.stockBalance.create({
-    data: {
-      itemId,
-      warehouseId,
-      lotId,
-      quantity
+  try {
+    return await tx.stockBalance.create({
+      data: {
+        itemId,
+        warehouseId,
+        lotId,
+        quantity
+      }
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const updated = await tx.stockBalance.updateMany({
+        where: { itemId, warehouseId, lotId },
+        data: { quantity: { increment: quantity } }
+      });
+
+      if (updated.count > 0) {
+        return findStockBalance(tx, itemId, warehouseId, lotId);
+      }
     }
-  });
+
+    throw error;
+  }
 }
 
 export async function decreaseStockBalance(
@@ -75,10 +90,26 @@ export async function decreaseStockBalance(
   }
 
   if (currentBalance) {
-    return tx.stockBalance.update({
-      where: { id: currentBalance.id },
-      data: { quantity: nextQuantity }
+    if (warehouse.allowsNegative) {
+      return tx.stockBalance.update({
+        where: { id: currentBalance.id },
+        data: { quantity: { decrement: quantity } }
+      });
+    }
+
+    const updated = await tx.stockBalance.updateMany({
+      where: {
+        id: currentBalance.id,
+        quantity: { gte: quantity }
+      },
+      data: { quantity: { decrement: quantity } }
     });
+
+    if (updated.count === 0) {
+      throw new Error("Saldo insuficiente para esta movimentacao.");
+    }
+
+    return findStockBalance(tx, itemId, warehouse.id, lotId);
   }
 
   return tx.stockBalance.create({
@@ -110,7 +141,7 @@ export async function reserveStockBalance(
   if (currentBalance) {
     return tx.stockBalance.update({
       where: { id: currentBalance.id },
-      data: { reserved: reservedQuantity.plus(quantity) }
+      data: { reserved: { increment: quantity } }
     });
   }
 
@@ -139,11 +170,16 @@ export async function releaseReservedStockBalance(
 
   const nextReserved = currentBalance.reserved.minus(quantity);
 
+  if (nextReserved.lessThan(0)) {
+    return tx.stockBalance.update({
+      where: { id: currentBalance.id },
+      data: { reserved: new Prisma.Decimal(0) }
+    });
+  }
+
   return tx.stockBalance.update({
     where: { id: currentBalance.id },
-    data: {
-      reserved: nextReserved.lessThan(0) ? new Prisma.Decimal(0) : nextReserved
-    }
+    data: { reserved: { decrement: quantity } }
   });
 }
 
@@ -197,10 +233,24 @@ export async function consumeStockFromWarehouse(
 
     const consumed = available.greaterThanOrEqualTo(remainingQuantity) ? remainingQuantity : available;
 
-    await tx.stockBalance.update({
-      where: { id: balance.id },
-      data: { quantity: balance.quantity.minus(consumed) }
-    });
+    if (warehouse.allowsNegative) {
+      await tx.stockBalance.update({
+        where: { id: balance.id },
+        data: { quantity: { decrement: consumed } }
+      });
+    } else {
+      const updated = await tx.stockBalance.updateMany({
+        where: {
+          id: balance.id,
+          quantity: { gte: balance.reserved.plus(consumed) }
+        },
+        data: { quantity: { decrement: consumed } }
+      });
+
+      if (updated.count === 0) {
+        throw new Error("Saldo alterado por outra operacao. Tente novamente.");
+      }
+    }
 
     consumedLots.push({
       lotId: balance.lotId,
@@ -216,7 +266,7 @@ export async function consumeStockFromWarehouse(
     if (balanceWithoutLot) {
       await tx.stockBalance.update({
         where: { id: balanceWithoutLot.id },
-        data: { quantity: balanceWithoutLot.quantity.minus(remainingQuantity) }
+        data: { quantity: { decrement: remainingQuantity } }
       });
     } else {
       await tx.stockBalance.create({

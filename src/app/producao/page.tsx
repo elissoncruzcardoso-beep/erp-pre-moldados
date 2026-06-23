@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { ProductionOrderStatus } from "@prisma/client";
 import {
   BarChart3,
   CalendarClock,
@@ -13,10 +13,11 @@ import {
   Sparkles,
   Users
 } from "lucide-react";
-import { getSession } from "@/lib/auth/session";
+import { requirePageSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
 import { decimalToNumber, formatQuantity } from "@/lib/formatters";
 import { autoReleaseCuredBatches } from "@/lib/production/auto-release-cured-batches";
+import { FORM_OPTION_LIMIT, RECENT_RECORD_LIMIT, TABLE_PAGE_LIMIT } from "@/lib/query-limits";
 import { ProductionNoteForm } from "./production-note-form";
 import { ProductionOrderForm } from "./production-order-form";
 
@@ -57,16 +58,10 @@ const statusLabels: Record<string, string> = {
   CANCELADA: "Cancelada"
 };
 
+const closedOrderStatuses = [ProductionOrderStatus.ENCERRADA, ProductionOrderStatus.CANCELADA];
+
 export default async function ProducaoPage() {
-  const session = await getSession();
-
-  if (!session) {
-    redirect("/login?next=/producao");
-  }
-
-  if (!session.permissions.includes("producao.view")) {
-    redirect("/dashboard");
-  }
+  const session = await requirePageSession({ nextPath: "/producao", permission: "producao.view" });
 
   const prisma = getPrisma();
   if (session.permissions.includes("producao.manage")) {
@@ -76,7 +71,7 @@ export default async function ProducaoPage() {
   const todayEnd = new Date();
   todayEnd.setHours(23, 59, 59, 999);
 
-  const [orders, products, molds, compositions, notes, dailyLogs, batches] = await Promise.all([
+  const [orders, products, molds, moldCount, compositions, notes, dailyLogs, batches, activeOrderCount, orderQuantityStats] = await Promise.all([
     prisma.productionOrder.findMany({
       include: {
         product: {
@@ -89,7 +84,8 @@ export default async function ProducaoPage() {
           orderBy: { sequence: "asc" }
         }
       },
-      orderBy: { createdAt: "desc" }
+      orderBy: { createdAt: "desc" },
+      take: TABLE_PAGE_LIMIT
     }),
     prisma.item.findMany({
       where: {
@@ -99,11 +95,16 @@ export default async function ProducaoPage() {
       include: {
         unit: true
       },
-      orderBy: { code: "asc" }
+      orderBy: { code: "asc" },
+      take: FORM_OPTION_LIMIT
     }),
     prisma.mold.findMany({
       where: { active: true },
-      orderBy: { code: "asc" }
+      orderBy: { code: "asc" },
+      take: FORM_OPTION_LIMIT
+    }),
+    prisma.mold.count({
+      where: { active: true }
     }),
     prisma.composition.findMany({
       include: {
@@ -112,7 +113,8 @@ export default async function ProducaoPage() {
       where: {
         approved: true
       },
-      orderBy: { code: "asc" }
+      orderBy: { code: "asc" },
+      take: FORM_OPTION_LIMIT
     }),
     prisma.productionNote.findMany({
       include: {
@@ -128,7 +130,7 @@ export default async function ProducaoPage() {
         user: true
       },
       orderBy: { createdAt: "desc" },
-      take: 12
+      take: RECENT_RECORD_LIMIT
     }),
     prisma.productionDailyLog.findMany({
       where: {
@@ -148,7 +150,7 @@ export default async function ProducaoPage() {
         }
       },
       orderBy: [{ logDate: "desc" }, { updatedAt: "desc" }],
-      take: 20
+      take: RECENT_RECORD_LIMIT
     }),
     prisma.productionBatch.findMany({
       where: {
@@ -169,13 +171,24 @@ export default async function ProducaoPage() {
         }
       },
       orderBy: [{ producedAt: "desc" }, { code: "desc" }],
-      take: 20
+      take: RECENT_RECORD_LIMIT
+    }),
+    prisma.productionOrder.count({
+      where: {
+        status: { notIn: closedOrderStatuses }
+      }
+    }),
+    prisma.productionOrder.aggregate({
+      _sum: {
+        plannedQuantity: true,
+        producedQuantity: true
+      }
     })
   ]);
 
-  const activeOrders = orders.filter((order) => !["ENCERRADA", "CANCELADA"].includes(order.status)).length;
-  const plannedQuantity = orders.reduce((total, order) => total + decimalToNumber(order.plannedQuantity), 0);
-  const producedQuantity = orders.reduce((total, order) => total + decimalToNumber(order.producedQuantity), 0);
+  const activeOrders = activeOrderCount;
+  const plannedQuantity = decimalToNumber(orderQuantityStats._sum.plannedQuantity);
+  const producedQuantity = decimalToNumber(orderQuantityStats._sum.producedQuantity);
   const productionPercent = plannedQuantity > 0 ? Math.round((producedQuantity / plannedQuantity) * 100) : 0;
   const producedByDiary = dailyLogs.reduce((sum, log) => {
     return sum + log.items.reduce((itemSum, item) => itemSum + decimalToNumber(item.quantity), 0);
@@ -368,7 +381,7 @@ export default async function ProducaoPage() {
               <div className="split-row"><span>OPs ativas</span><strong className="mono">{activeOrders}</strong></div>
               <div className="split-row"><span>Pecas previstas</span><strong className="mono">{formatQuantity(plannedQuantity)}</strong></div>
               <div className="split-row"><span>Apontado em OP</span><strong className="mono">{productionPercent}%</strong></div>
-              <div className="split-row"><span>Moldes ativos</span><strong className="mono">{molds.length}</strong></div>
+              <div className="split-row"><span>Moldes ativos</span><strong className="mono">{moldCount}</strong></div>
             </div>
           </section>
         </aside>

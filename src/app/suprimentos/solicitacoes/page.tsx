@@ -1,5 +1,6 @@
 import { ClipboardList, PackageCheck } from "lucide-react";
 import { getPrisma } from "@/lib/db/prisma";
+import { FORM_OPTION_LIMIT } from "@/lib/query-limits";
 import { SuprimentosNav } from "../_components/suprimentos-nav";
 import { decimalToNumber, requireSuprimentosSession, statusLabels } from "../_lib";
 import { PurchaseRequestActions } from "../purchase-request-actions";
@@ -10,14 +11,21 @@ export const dynamic = "force-dynamic";
 export default async function SolicitacoesPage() {
   const session = await requireSuprimentosSession("/suprimentos/solicitacoes");
   const prisma = getPrisma();
-  const [items, requests] = await Promise.all([
+  const [items, itemCount, requests] = await Promise.all([
     prisma.item.findMany({
       where: {
         active: true,
         type: { in: ["MATERIA_PRIMA", "INSUMO", "FORMA_MOLDE", "SERVICO"] }
       },
       include: { unit: true },
-      orderBy: { code: "asc" }
+      orderBy: { code: "asc" },
+      take: FORM_OPTION_LIMIT
+    }),
+    prisma.item.count({
+      where: {
+        active: true,
+        type: { in: ["MATERIA_PRIMA", "INSUMO", "FORMA_MOLDE", "SERVICO"] }
+      }
     }),
     prisma.purchaseRequest.findMany({
       include: {
@@ -79,7 +87,7 @@ export default async function SolicitacoesPage() {
         </article>
         <article className="metric-card accent-gray span-4">
           <div className="metric-top"><span className="mono">Itens compraveis</span><PackageCheck size={21} /></div>
-          <strong className="metric-value">{items.length}</strong>
+          <strong className="metric-value">{itemCount}</strong>
           <span className="metric-sub">Materiais e servicos ativos</span>
         </article>
       </section>

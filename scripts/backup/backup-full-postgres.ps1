@@ -1,6 +1,8 @@
 param(
   [string]$EnvFile = ".env",
   [string]$OutputDir = "",
+  [string]$EvidencePath = "docs/security/backups/latest.json",
+  [string]$Operator = "",
   [switch]$KeepLocal
 )
 
@@ -87,6 +89,7 @@ if ($LASTEXITCODE -ne 0) {
 
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $dumpPath).Hash.ToLowerInvariant()
 "$hash  $(Split-Path -Leaf $dumpPath)" | Set-Content -LiteralPath $shaPath -Encoding ASCII
+$dumpSize = (Get-Item -LiteralPath $dumpPath).Length
 
 $s3Base = "s3://$bucket/$prefix/full/$((Get-Date).ToUniversalTime().ToString('yyyy/MM/dd'))"
 $s3Dump = "$s3Base/$(Split-Path -Leaf $dumpPath)"
@@ -96,8 +99,10 @@ $awsArgs = @("s3", "cp", $dumpPath, $s3Dump, "--only-show-errors", "--storage-cl
 if ($region) { $awsArgs += @("--region", $region) }
 if ($kmsKeyId) {
   $awsArgs += @("--sse", "aws:kms", "--sse-kms-key-id", $kmsKeyId)
+  $encryption = "aws:kms"
 } else {
   $awsArgs += @("--sse", "AES256")
+  $encryption = "AES256"
 }
 
 & aws @awsArgs
@@ -121,9 +126,42 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "Backup enviado para $s3Dump"
 Write-Host "Checksum SHA256: $hash"
 
+if (-not $Operator) {
+  $Operator = $env:BACKUP_OPERATOR
+}
+if (-not $Operator) {
+  $Operator = $env:USERNAME
+}
+if (-not $Operator) {
+  $Operator = "Operador backup"
+}
+
+if ([System.IO.Path]::IsPathRooted($EvidencePath)) {
+  $evidenceFullPath = $EvidencePath
+} else {
+  $evidenceFullPath = Join-Path (Get-Location).Path $EvidencePath
+}
+$evidenceDir = Split-Path -Parent $evidenceFullPath
+New-Item -ItemType Directory -Force -Path $evidenceDir | Out-Null
+
+$evidence = [ordered]@{
+  schemaVersion = 1
+  performedAt = (Get-Date).ToUniversalTime().ToString("o")
+  operator = $Operator
+  type = "full-logical-backup"
+  destination = $s3Dump
+  checksumUri = $s3Sha
+  checksumSha256 = $hash
+  sizeBytes = [int64]$dumpSize
+  encryption = $encryption
+  result = "PASS"
+}
+
+$evidence | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $evidenceFullPath -Encoding UTF8
+Write-Host "Evidencia segura gravada em: $EvidencePath"
+
 if (-not $KeepLocal -and $env:BACKUP_KEEP_LOCAL -ne "true") {
   Remove-Item -LiteralPath $dumpPath -Force
   Remove-Item -LiteralPath $shaPath -Force
   Write-Host "Copia local temporaria removida."
 }
-

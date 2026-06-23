@@ -52,7 +52,16 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       return apiConflict("Ja existe cliente com este codigo.");
     }
 
-    return handleApiError(error, "Nao foi possivel atualizar o cliente.");
+    return handleApiError(error, "Nao foi possivel atualizar o cliente.", {
+      context: {
+        request,
+        module: "Cadastros",
+        action: "atualizar_cliente",
+        userId: auth.session.userId,
+        entity: "Customer"
+      },
+      event: "customer_update_error"
+    });
   }
 }
 

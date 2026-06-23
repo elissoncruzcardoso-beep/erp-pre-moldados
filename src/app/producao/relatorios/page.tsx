@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -18,10 +17,11 @@ import {
 } from "lucide-react";
 import { PaginationControls } from "@/components/pagination-controls";
 import { PrototypeAction } from "@/components/prototype-action";
-import { getSession } from "@/lib/auth/session";
+import { requirePageSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
 import { decimalToNumber, formatMoney, formatQuantity } from "@/lib/formatters";
 import { getPaginationMeta, parsePagination, type SearchParamsLike } from "@/lib/pagination";
+import { FORM_OPTION_LIMIT } from "@/lib/query-limits";
 import { ProductionExternalReport } from "./production-external-report";
 
 export const dynamic = "force-dynamic";
@@ -65,15 +65,7 @@ type ProducaoRelatoriosPageProps = {
 };
 
 export default async function ProducaoRelatoriosPage({ searchParams }: ProducaoRelatoriosPageProps) {
-  const session = await getSession();
-
-  if (!session) {
-    redirect("/login?next=/producao/relatorios");
-  }
-
-  if (!session.permissions.includes("producao.view")) {
-    redirect("/dashboard");
-  }
+  const session = await requirePageSession({ nextPath: "/producao/relatorios", permission: "producao.view" });
 
   const params = (await searchParams) || {};
   const batchPagination = parsePagination(params, {
@@ -155,7 +147,8 @@ export default async function ProducaoRelatoriosPage({ searchParams }: ProducaoR
         type: { in: ["PECA_PRE_MOLDADA", "PRODUTO_ACABADO"] }
       },
       include: { unit: true },
-      orderBy: [{ group: "asc" }, { code: "asc" }]
+      orderBy: [{ group: "asc" }, { code: "asc" }],
+      take: FORM_OPTION_LIMIT
     }),
     prisma.productionOrder.count(),
     prisma.productionBatch.count()

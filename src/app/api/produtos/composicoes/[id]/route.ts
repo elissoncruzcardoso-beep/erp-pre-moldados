@@ -9,6 +9,7 @@ import {
 import { requireApiSession } from "@/lib/auth/guards";
 import { normalizeManualCode } from "@/lib/codes/auto-code";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
 import { compositionSchema } from "@/lib/validations/product";
 
 type RouteContext = {
@@ -39,7 +40,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   const prisma = getPrisma();
 
   try {
-    const composition = await prisma.$transaction(async (tx) => {
+    const composition = await serializableTransaction(prisma, async (tx) => {
       const current = await tx.composition.findUnique({
         where: { id },
         include: { orders: true }
@@ -136,17 +137,29 @@ export async function PATCH(request: Request, context: RouteContext) {
       INVALID_PRODUCT_TYPE: "A composicao deve ser vinculada a peca pre-moldada ou produto acabado.",
       INVALID_MATERIAL: "Use apenas insumos ou materias-primas ativos na composicao."
     };
-    const message = error instanceof Error ? messages[error.message] || error.message : "Nao foi possivel alterar a composicao.";
+    const message =
+      error instanceof Error && messages[error.message]
+        ? messages[error.message]
+        : "Nao foi possivel alterar a composicao.";
 
     if (error instanceof Error && messages[error.message]) {
       return apiError(message, { status: 400 });
     }
 
-    return handleApiError(error, "Nao foi possivel alterar a composicao.");
+    return handleApiError(error, "Nao foi possivel alterar a composicao.", {
+      context: {
+        request,
+        module: "Produtos",
+        action: "alterar_composicao",
+        userId: auth.session.userId,
+        entity: "Composition"
+      },
+      event: "composition_update_error"
+    });
   }
 }
 
-export async function DELETE(_request: Request, context: RouteContext) {
+export async function DELETE(request: Request, context: RouteContext) {
   const auth = await requireProductManager();
 
   if (auth.response) return auth.response;
@@ -155,7 +168,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
   const prisma = getPrisma();
 
   try {
-    await prisma.$transaction(async (tx) => {
+    await serializableTransaction(prisma, async (tx) => {
       const current = await tx.composition.findUnique({
         where: { id },
         include: { orders: true }
@@ -198,8 +211,24 @@ export async function DELETE(_request: Request, context: RouteContext) {
       COMPOSITION_NOT_FOUND: "Ficha tecnica nao encontrada.",
       COMPOSITION_IN_USE: "Ficha tecnica com ordem de producao vinculada nao pode ser excluida."
     };
-    const message = error instanceof Error ? messages[error.message] || error.message : "Nao foi possivel excluir a composicao.";
+    const message =
+      error instanceof Error && messages[error.message]
+        ? messages[error.message]
+        : "Nao foi possivel excluir a composicao.";
 
-    return apiError(message, { status: 400 });
+    if (error instanceof Error && messages[error.message]) {
+      return apiError(message, { status: 400 });
+    }
+
+    return handleApiError(error, message, {
+      context: {
+        request,
+        module: "Produtos",
+        action: "excluir_composicao",
+        userId: auth.session.userId,
+        entity: "Composition"
+      },
+      event: "composition_delete_error"
+    });
   }
 }

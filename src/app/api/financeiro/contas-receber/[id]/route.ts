@@ -2,6 +2,7 @@ import { AuditAction, Prisma } from "@prisma/client";
 import { apiConflict, apiError, apiSuccess, apiValidationError, handleApiError } from "@/lib/api/responses";
 import { requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
 import { accountReceivableUpdateSchema } from "@/lib/validations/purchase";
 
 type RouteContext = {
@@ -28,7 +29,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   const prisma = getPrisma();
 
   try {
-    const updated = await prisma.$transaction(async (tx) => {
+    const updated = await serializableTransaction(prisma, async (tx) => {
       const current = await tx.accountReceivable.findUnique({
         where: { id },
         include: { customer: true, receipts: true, directSale: true }
@@ -98,11 +99,20 @@ export async function PATCH(request: Request, context: RouteContext) {
     const message = error instanceof Error ? messages[error.message] : null;
     if (message) return apiConflict(message);
 
-    return handleApiError(error, "Nao foi possivel editar a conta a receber.");
+    return handleApiError(error, "Nao foi possivel editar a conta a receber.", {
+      context: {
+        request,
+        module: "Financeiro",
+        action: "editar_conta_receber",
+        userId: auth.session.userId,
+        entity: "AccountReceivable"
+      },
+      event: "account_receivable_update_error"
+    });
   }
 }
 
-export async function DELETE(_request: Request, context: RouteContext) {
+export async function DELETE(request: Request, context: RouteContext) {
   const auth = await requireApiSession({
     permission: "financeiro.manage",
     forbiddenMessage: "Voce nao tem permissao para excluir contas a receber."
@@ -131,7 +141,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
       return apiConflict("Conta a receber com baixa financeira nao pode ser excluida.");
     }
 
-    await prisma.$transaction(async (tx) => {
+    await serializableTransaction(prisma, async (tx) => {
       await tx.accountReceivable.delete({ where: { id } });
 
       await tx.auditLog.create({
@@ -154,6 +164,15 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
     return apiSuccess({ deleted: true });
   } catch (error) {
-    return handleApiError(error, "Nao foi possivel excluir a conta a receber.");
+    return handleApiError(error, "Nao foi possivel excluir a conta a receber.", {
+      context: {
+        request,
+        module: "Financeiro",
+        action: "excluir_conta_receber",
+        userId: auth.session.userId,
+        entity: "AccountReceivable"
+      },
+      event: "account_receivable_delete_error"
+    });
   }
 }

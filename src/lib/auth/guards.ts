@@ -25,7 +25,8 @@ type ApiSessionResult =
   | { session: SessionUser; response?: never }
   | { session?: never; response: NextResponse };
 
-const AUDIT_ROLES = ["Administrador", "Diretoria"];
+const ADMIN_ROLE = "Administrador";
+const AUDIT_ROLES = [ADMIN_ROLE, "Diretoria"];
 
 export function hasPermission(session: SessionUser, permission: PermissionKey) {
   return session.permissions.includes(permission);
@@ -45,6 +46,18 @@ export function hasRole(session: SessionUser, roles: string[]) {
 
 export function canViewOperationAudit(session: SessionUser) {
   return hasRole(session, AUDIT_ROLES) && hasPermission(session, "auditoria.view");
+}
+
+export function canGrantAdminProfile(session: SessionUser) {
+  return session.role === ADMIN_ROLE || hasPermission(session, "usuarios.grant_admin");
+}
+
+export function canRunMaintenanceCleanup(session: SessionUser) {
+  return session.role === ADMIN_ROLE && hasPermission(session, "manutencao.cleanup");
+}
+
+export function isAdminRoleName(roleName: string) {
+  return roleName === ADMIN_ROLE;
 }
 
 function canAccess(
@@ -96,4 +109,8 @@ export async function requireApiSession({
   }
 
   return { session };
+}
+
+export async function getOptionalApiSession() {
+  return getSession();
 }

@@ -52,7 +52,16 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       return apiConflict("Ja existe fornecedor com este codigo.");
     }
 
-    return handleApiError(error, "Nao foi possivel atualizar o fornecedor.");
+    return handleApiError(error, "Nao foi possivel atualizar o fornecedor.", {
+      context: {
+        request,
+        module: "Cadastros",
+        action: "atualizar_fornecedor",
+        userId: auth.session.userId,
+        entity: "Supplier"
+      },
+      event: "supplier_update_error"
+    });
   }
 }
 

@@ -111,3 +111,43 @@ Para a arquitetura atual, a blindagem recomendada e:
 Os scripts de auditoria e blindagem estao em:
 
 `docs/security/supabase_rls_hardening.sql`
+
+## Validacao local
+
+O projeto tambem possui uma checagem local para evitar regressao no hardening:
+
+```bash
+npm run security:check-supabase-rls
+```
+
+Essa checagem falha se o SQL deixar de:
+
+- habilitar RLS nas tabelas publicas;
+- revogar acesso de `anon` e `authenticated`;
+- revogar privilegios padrao para tabelas, sequencias e funcoes;
+- bloquear grants ativos ou policies permissivas.
+
+Ela roda tambem no `prebuild`.
+
+Para auditar o banco real sem alterar nada:
+
+```bash
+npm run security:audit-supabase-live
+```
+
+Essa auditoria usa `SUPABASE_AUDIT_DATABASE_URL`, `DIRECT_URL` ou `DATABASE_URL`, nessa ordem. Ela executa apenas `SELECT` em catalogos do Postgres para validar RLS, grants, policies e funcoes expostas.
+
+## Como aplicar com seguranca
+
+1. Fazer backup ou snapshot antes.
+2. Rodar primeiro as consultas de auditoria do arquivo SQL no Supabase SQL Editor.
+3. Se houver grants ou RLS desligado, executar o bloco de hardening server-only.
+4. Testar login, cadastros, estoque, producao, suprimentos, vendas e financeiro.
+5. Rodar o Security Advisor do Supabase novamente.
+
+Nao ativar o bloco futuro com `auth.uid()` enquanto o ERP usar autenticacao propria e Prisma no servidor.
+
+Referencias usadas para esta decisao:
+
+- https://supabase.com/docs/guides/database/postgres/row-level-security
+- https://supabase.com/changelog

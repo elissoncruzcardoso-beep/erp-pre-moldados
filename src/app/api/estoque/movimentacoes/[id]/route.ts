@@ -2,6 +2,7 @@ import { AuditAction } from "@prisma/client";
 import { apiError, apiSuccess, apiValidationError, handleApiError } from "@/lib/api/responses";
 import { requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
 import {
   applyStockMovementBalance,
   negativeStockMovementTypes,
@@ -57,7 +58,7 @@ export async function PUT(request: Request, context: MovementRouteContext) {
   const lotId = input.lotId || null;
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await serializableTransaction(prisma, async (tx) => {
       const movement = await tx.stockMovement.findUnique({
         where: { id },
         include: {
@@ -161,11 +162,20 @@ export async function PUT(request: Request, context: MovementRouteContext) {
 
     return apiSuccess({ movement: result });
   } catch (error) {
-    return handleApiError(error, "Nao foi possivel editar a movimentacao.");
+    return handleApiError(error, "Nao foi possivel editar a movimentacao.", {
+      context: {
+        request,
+        module: "Estoque",
+        action: "editar_movimentacao",
+        userId: auth.session.userId,
+        entity: "StockMovement"
+      },
+      event: "stock_movement_update_error"
+    });
   }
 }
 
-export async function DELETE(_request: Request, context: MovementRouteContext) {
+export async function DELETE(request: Request, context: MovementRouteContext) {
   const auth = await requireApiSession({
     anyPermission: ["estoque.movements.manage"],
     anyRole: ["Administrador", "Diretoria"],
@@ -178,7 +188,7 @@ export async function DELETE(_request: Request, context: MovementRouteContext) {
   const prisma = getPrisma();
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await serializableTransaction(prisma, async (tx) => {
       const movement = await tx.stockMovement.findUnique({
         where: { id },
         include: {
@@ -234,6 +244,15 @@ export async function DELETE(_request: Request, context: MovementRouteContext) {
 
     return apiSuccess({ movement: result });
   } catch (error) {
-    return handleApiError(error, "Nao foi possivel excluir a movimentacao.");
+    return handleApiError(error, "Nao foi possivel excluir a movimentacao.", {
+      context: {
+        request,
+        module: "Estoque",
+        action: "excluir_movimentacao",
+        userId: auth.session.userId,
+        entity: "StockMovement"
+      },
+      event: "stock_movement_delete_error"
+    });
   }
 }

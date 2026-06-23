@@ -2,6 +2,7 @@ import { ReceiptText } from "lucide-react";
 import { PaginationControls } from "@/components/pagination-controls";
 import { getPrisma } from "@/lib/db/prisma";
 import { getPaginationMeta, parsePagination, type SearchParamsLike } from "@/lib/pagination";
+import { FORM_OPTION_LIMIT } from "@/lib/query-limits";
 import { SuprimentosNav } from "../_components/suprimentos-nav";
 import { decimalToNumber, formatCurrency, receiptStatusLabels, requireSuprimentosSession } from "../_lib";
 import { PurchaseReceiptActions } from "../purchase-receipt-actions";
@@ -45,7 +46,8 @@ export default async function NotasFiscaisPage({ searchParams }: NotasFiscaisPag
     }),
     prisma.warehouse.findMany({
       where: { active: true },
-      orderBy: { code: "asc" }
+      orderBy: { code: "asc" },
+      take: FORM_OPTION_LIMIT
     }),
     prisma.purchaseReceipt.findMany({
       include: {

@@ -1,7 +1,8 @@
 import { AuditAction, Prisma } from "@prisma/client";
-import { apiConflict, apiError, apiSuccess, apiValidationError } from "@/lib/api/responses";
+import { apiConflict, apiSuccess, apiValidationError, handleApiError } from "@/lib/api/responses";
 import { requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
 import { calculateBatchReadyAt } from "@/lib/production/auto-release-cured-batches";
 import { consumeApprovedCompositionForProduction } from "@/lib/production/consume-composition";
 import { productionDailyLogSchema } from "@/lib/validations/production";
@@ -14,11 +15,6 @@ function buildBatchCode(logDate: Date, sequence: number) {
   const stamp = logDate.toISOString().slice(0, 10).replace(/-/g, "");
   return `LOTE-${stamp}-${String(sequence).padStart(3, "0")}`;
 }
-
-const DAILY_LOG_TRANSACTION_OPTIONS = {
-  maxWait: 10000,
-  timeout: 30000
-};
 
 export async function POST(request: Request) {
   const auth = await requireApiSession({
@@ -39,7 +35,7 @@ export async function POST(request: Request) {
   const prisma = getPrisma();
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await serializableTransaction(prisma, async (tx) => {
       const productIds = input.items.map((item) => item.itemId);
       const products = await tx.item.findMany({
         where: {
@@ -47,22 +43,25 @@ export async function POST(request: Request) {
           active: true,
           type: { in: ["PECA_PRE_MOLDADA", "PRODUTO_ACABADO"] }
         },
-        select: { id: true, curingHours: true }
+        select: { id: true, curingHours: true },
+        take: productIds.length
       });
       const productsById = new Map(products.map((product) => [product.id, product]));
-      const approvedCompositions = await tx.composition.findMany({
-        where: {
-          productId: { in: productIds },
-          approved: true
-        },
-        select: {
-          productId: true,
-          curingHours: true,
-          updatedAt: true,
-          code: true
-        },
-        orderBy: [{ updatedAt: "desc" }, { code: "asc" }]
-      });
+      const approvedCompositions = (await Promise.all(
+        Array.from(new Set(productIds)).map((productId) =>
+          tx.composition.findFirst({
+            where: {
+              productId,
+              approved: true
+            },
+            select: {
+              productId: true,
+              curingHours: true
+            },
+            orderBy: [{ updatedAt: "desc" }, { code: "asc" }]
+          })
+        )
+      )).filter((composition) => composition !== null);
       const compositionsByProductId = new Map<string, { curingHours: number | null }>();
 
       for (const composition of approvedCompositions) {
@@ -168,7 +167,7 @@ export async function POST(request: Request) {
       });
 
       return log;
-    }, DAILY_LOG_TRANSACTION_OPTIONS);
+    });
 
     return apiSuccess({ dailyLog: result }, { status: 201 });
   } catch (error) {
@@ -176,10 +175,23 @@ export async function POST(request: Request) {
       return apiConflict("Ja existe um diario de producao seu para esta data.");
     }
 
-    const rawMessage = error instanceof Error ? error.message : "Nao foi possivel registrar o diario de producao.";
+    const rawMessage = error instanceof Error ? error.message : "";
     const message = rawMessage.includes("Transaction not found") || rawMessage.includes("Transaction API error")
       ? "Nao foi possivel concluir o diario porque a operacao demorou mais que o esperado. Tente salvar novamente; se repetir, revise se a ficha tecnica possui muitos insumos ou se o banco esta lento."
-      : rawMessage;
-    return apiError(message, { status: 400 });
+      : rawMessage === "Uma ou mais pecas selecionadas nao estao disponiveis para producao."
+        ? rawMessage
+        : rawMessage.startsWith("Saldo insuficiente.")
+          ? "Saldo insuficiente para baixar os insumos da ficha tecnica."
+          : "Nao foi possivel registrar o diario de producao.";
+    return handleApiError(error, message, {
+      context: {
+        request,
+        module: "Producao",
+        action: "registrar_diario",
+        userId: auth.session.userId,
+        entity: "ProductionDailyLog"
+      },
+      event: "production_daily_log_error"
+    });
   }
 }

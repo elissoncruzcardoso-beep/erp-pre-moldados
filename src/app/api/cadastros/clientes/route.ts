@@ -1,26 +1,21 @@
 import { AuditAction, Prisma } from "@prisma/client";
 import {
   apiConflict,
-  apiForbidden,
   apiSuccess,
-  apiUnauthorized,
   apiValidationError,
   handleApiError
 } from "@/lib/api/responses";
-import { getSession } from "@/lib/auth/session";
+import { requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
 import { customerSchema } from "@/lib/validations/cadastros";
 
 export async function POST(request: Request) {
-  const session = await getSession();
-
-  if (!session) {
-    return apiUnauthorized();
-  }
-
-  if (!session.permissions.includes("cadastros.manage")) {
-    return apiForbidden("Voce nao tem permissao para gerenciar cadastros.");
-  }
+  const auth = await requireApiSession({
+    permission: "cadastros.manage",
+    forbiddenMessage: "Voce nao tem permissao para gerenciar cadastros."
+  });
+  if (auth.response) return auth.response;
+  const { session } = auth;
 
   const body = await request.json().catch(() => null);
   const parsed = customerSchema.safeParse(body);
@@ -55,6 +50,15 @@ export async function POST(request: Request) {
       return apiConflict("Ja existe cliente com este codigo.");
     }
 
-    return handleApiError(error, "Nao foi possivel salvar o cliente.");
+    return handleApiError(error, "Nao foi possivel salvar o cliente.", {
+      context: {
+        request,
+        module: "Cadastros",
+        action: "salvar_cliente",
+        userId: session.userId,
+        entity: "Customer"
+      },
+      event: "customer_save_error"
+    });
   }
 }

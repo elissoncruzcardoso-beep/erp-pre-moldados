@@ -1,7 +1,7 @@
-import { redirect } from "next/navigation";
 import { ShieldCheck, UserCog, Users } from "lucide-react";
-import { getSession } from "@/lib/auth/session";
+import { requirePageSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
+import { FORM_OPTION_LIMIT, RECENT_RECORD_LIMIT, TABLE_PAGE_LIMIT } from "@/lib/query-limits";
 import { RoleManagement } from "./role-management";
 import { UserActions } from "./user-actions";
 import { UserForm } from "./user-form";
@@ -19,31 +19,30 @@ function formatAuditDate(date: Date) {
 }
 
 export default async function UsuariosPage() {
-  const session = await getSession();
-
-  if (!session) {
-    redirect("/login?next=/usuarios");
-  }
-
-  if (!session.permissions.includes("usuarios.manage")) {
-    redirect("/dashboard");
-  }
+  const session = await requirePageSession({ nextPath: "/usuarios", permission: "usuarios.manage" });
 
   const prisma = getPrisma();
-  const [users, roles, permissions, auditLogs] = await Promise.all([
+  const [users, userCount, activeUserCount, roles, permissions, auditLogs] = await Promise.all([
     prisma.user.findMany({
       include: { role: true },
-      orderBy: [{ status: "asc" }, { name: "asc" }]
+      orderBy: [{ status: "asc" }, { name: "asc" }],
+      take: TABLE_PAGE_LIMIT
+    }),
+    prisma.user.count(),
+    prisma.user.count({
+      where: { status: "ACTIVE" }
     }),
     prisma.role.findMany({
       include: {
         _count: { select: { users: true } },
         permissions: { include: { permission: true } }
       },
-      orderBy: { name: "asc" }
+      orderBy: { name: "asc" },
+      take: FORM_OPTION_LIMIT
     }),
     prisma.permission.findMany({
-      orderBy: [{ module: "asc" }, { key: "asc" }]
+      orderBy: [{ module: "asc" }, { key: "asc" }],
+      take: FORM_OPTION_LIMIT
     }),
     prisma.auditLog.findMany({
       where: {
@@ -55,11 +54,11 @@ export default async function UsuariosPage() {
       },
       include: { user: true },
       orderBy: { createdAt: "desc" },
-      take: 8
+      take: RECENT_RECORD_LIMIT
     })
   ]);
-  const activeUsers = users.filter((user) => user.status === "ACTIVE").length;
-  const inactiveUsers = users.length - activeUsers;
+  const activeUsers = activeUserCount;
+  const inactiveUsers = userCount - activeUsers;
   const roleOptions = roles.map((role) => ({ id: role.id, name: role.name }));
   const roleRecords = roles.map((role) => ({
     id: role.id,
@@ -107,7 +106,7 @@ export default async function UsuariosPage() {
             <span className="mono">Usuários cadastrados</span>
             <Users size={22} />
           </div>
-          <strong className="metric-value">{users.length}</strong>
+          <strong className="metric-value">{userCount}</strong>
           <span className="metric-sub">{activeUsers} ativo(s) e {inactiveUsers} inativo(s).</span>
         </article>
         <article className="metric-card accent-orange span-4">

@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation";
-import { getSession } from "@/lib/auth/session";
+import { requirePageSession } from "@/lib/auth/guards";
 import { decimalToNumber, formatMoney } from "@/lib/formatters";
 
 export const statusLabels: Record<string, string> = {
@@ -43,15 +42,5 @@ export { decimalToNumber };
 export const formatCurrency = formatMoney;
 
 export async function requireSuprimentosSession(nextPath: string) {
-  const session = await getSession();
-
-  if (!session) {
-    redirect(`/login?next=${nextPath}`);
-  }
-
-  if (!session.permissions.includes("suprimentos.view")) {
-    redirect("/dashboard");
-  }
-
-  return session;
+  return requirePageSession({ nextPath, permission: "suprimentos.view" });
 }

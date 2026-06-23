@@ -1,65 +1,27 @@
-import { AuditAction, Prisma, type Warehouse } from "@prisma/client";
+import { AuditAction, Prisma } from "@prisma/client";
 import {
   apiConflict,
   apiError,
-  apiForbidden,
   apiSuccess,
-  apiUnauthorized,
   apiValidationError,
   handleApiError
 } from "@/lib/api/responses";
-import { getSession } from "@/lib/auth/session";
+import { requireApiSession } from "@/lib/auth/guards";
 import { normalizeManualCode } from "@/lib/codes/auto-code";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
+import { decreaseStockBalance } from "@/lib/stock/transactions";
 import { purchaseReceiptUpdateSchema } from "@/lib/validations/purchase";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
-async function subtractBalance(
-  tx: ReturnType<typeof getPrisma>,
-  itemId: string,
-  warehouse: Warehouse,
-  quantity: Prisma.Decimal,
-  lotId: string | null
-) {
-  const currentBalance = await tx.stockBalance.findFirst({
-    where: {
-      itemId,
-      warehouseId: warehouse.id,
-      lotId
-    }
-  });
-  const availableQuantity = currentBalance?.quantity ?? new Prisma.Decimal(0);
-  const nextQuantity = availableQuantity.minus(quantity);
-
-  if (!warehouse.allowsNegative && nextQuantity.lessThan(0)) {
-    throw new Error("STOCK_INSUFFICIENT");
-  }
-
-  if (currentBalance) {
-    await tx.stockBalance.update({
-      where: { id: currentBalance.id },
-      data: { quantity: nextQuantity }
-    });
-    return;
-  }
-
-  await tx.stockBalance.create({
-    data: {
-      itemId,
-      warehouseId: warehouse.id,
-      lotId,
-      quantity: nextQuantity
-    }
-  });
-}
-
-async function updateOrderStatus(tx: ReturnType<typeof getPrisma>, purchaseOrderId: string) {
+async function updateOrderStatus(tx: Prisma.TransactionClient, purchaseOrderId: string) {
   const orderItems = await tx.purchaseOrderItem.findMany({
     where: { purchaseOrderId },
-    include: { receipts: true }
+    include: { receipts: true },
+    take: 500
   });
   const hasAnyReceipt = orderItems.some((item) => item.receipts.length > 0);
   const everyItemComplete = orderItems.length > 0 && orderItems.every((item) => {
@@ -79,15 +41,12 @@ async function updateOrderStatus(tx: ReturnType<typeof getPrisma>, purchaseOrder
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
-  const session = await getSession();
-
-  if (!session) {
-    return apiUnauthorized();
-  }
-
-  if (!session.permissions.includes("suprimentos.manage")) {
-    return apiForbidden("Voce nao tem permissao para editar notas fiscais.");
-  }
+  const auth = await requireApiSession({
+    permission: "suprimentos.manage",
+    forbiddenMessage: "Voce nao tem permissao para editar notas fiscais."
+  });
+  if (auth.response) return auth.response;
+  const { session } = auth;
 
   const body = await request.json().catch(() => null);
   const parsed = purchaseReceiptUpdateSchema.safeParse(body);
@@ -101,7 +60,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   const prisma = getPrisma();
 
   try {
-    const receipt = await prisma.$transaction(async (tx) => {
+    const receipt = await serializableTransaction(prisma, async (tx) => {
       const current = await tx.purchaseReceipt.findUnique({
         where: { id },
         include: {
@@ -178,26 +137,32 @@ export async function PATCH(request: Request, context: RouteContext) {
       return apiConflict("Ja existe recebimento com este numero.");
     }
 
-    return handleApiError(error, "Nao foi possivel editar a nota fiscal.");
+    return handleApiError(error, "Nao foi possivel editar a nota fiscal.", {
+      context: {
+        request,
+        module: "Suprimentos",
+        action: "editar_nota_fiscal_compra",
+        userId: session.userId,
+        entity: "PurchaseReceipt"
+      },
+      event: "purchase_receipt_update_error"
+    });
   }
 }
 
-export async function DELETE(_request: Request, context: RouteContext) {
-  const session = await getSession();
-
-  if (!session) {
-    return apiUnauthorized();
-  }
-
-  if (!session.permissions.includes("suprimentos.manage") || !session.permissions.includes("estoque.move")) {
-    return apiForbidden("Voce precisa de permissao de Suprimentos e Estoque para excluir nota fiscal.");
-  }
+export async function DELETE(request: Request, context: RouteContext) {
+  const auth = await requireApiSession({
+    permissions: ["suprimentos.manage", "estoque.move"],
+    forbiddenMessage: "Voce precisa de permissao de Suprimentos e Estoque para excluir nota fiscal."
+  });
+  if (auth.response) return auth.response;
+  const { session } = auth;
 
   const { id } = await context.params;
   const prisma = getPrisma();
 
   try {
-    await prisma.$transaction(async (tx) => {
+    await serializableTransaction(prisma, async (tx) => {
       const current = await tx.purchaseReceipt.findUnique({
         where: { id },
         include: {
@@ -220,10 +185,10 @@ export async function DELETE(_request: Request, context: RouteContext) {
         throw new Error("RECEIPT_HAS_PAYABLE");
       }
 
-      await subtractBalance(
-        tx as ReturnType<typeof getPrisma>,
+      await decreaseStockBalance(
+        tx,
         current.purchaseOrderItem.itemId,
-        current.warehouse as Warehouse,
+        current.warehouse,
         current.acceptedQuantity,
         current.lotId
       );
@@ -247,7 +212,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
         where: { id: current.id }
       });
 
-      await updateOrderStatus(tx as ReturnType<typeof getPrisma>, current.purchaseOrderId);
+      await updateOrderStatus(tx, current.purchaseOrderId);
 
       await tx.auditLog.create({
         data: {
@@ -282,6 +247,15 @@ export async function DELETE(_request: Request, context: RouteContext) {
       return apiConflict("Saldo insuficiente para estornar esta nota fiscal.");
     }
 
-    return handleApiError(error, "Nao foi possivel excluir a nota fiscal.");
+    return handleApiError(error, "Nao foi possivel excluir a nota fiscal.", {
+      context: {
+        request,
+        module: "Suprimentos",
+        action: "excluir_nota_fiscal_compra",
+        userId: session.userId,
+        entity: "PurchaseReceipt"
+      },
+      event: "purchase_receipt_delete_error"
+    });
   }
 }

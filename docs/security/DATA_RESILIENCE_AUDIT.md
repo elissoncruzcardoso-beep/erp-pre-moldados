@@ -93,6 +93,22 @@ Frequencia recomendada: a cada 1 hora.
 
 Limitacao importante: este export incremental nao e PITR/WAL. Ele ajuda a recuperar dados recentes e auditar alteracoes, mas nao reconstrui transacoes com a mesma fidelidade de WAL. Para recuperacao precisa em segundos/minutos, usar Supabase PITR.
 
+### Camada 4: Teste de restauracao
+
+Script criado:
+
+`scripts/backup/restore-drill.ps1`
+
+Funcoes:
+
+- Restaura um dump completo em banco temporario;
+- Valida checksum SHA256 antes da restauracao;
+- Bloqueia uso acidental do banco real comparando com `DATABASE_URL`, `DIRECT_URL` e `BACKUP_DATABASE_URL`;
+- Exige que o banco de destino pareca ambiente de teste (`restore`, `drill`, `teste`, `test`, `tmp`, `temp` ou `ci` no nome), salvo liberacao consciente por variavel;
+- Confere se as tabelas public foram restauradas e se a tabela `User` existe.
+
+Frequencia recomendada: mensal e sempre antes de mudancas grandes de schema.
+
 ## Variaveis de ambiente
 
 Configure no ambiente que vai rodar os backups, nao no frontend:
@@ -101,6 +117,7 @@ Configure no ambiente que vai rodar os backups, nao no frontend:
 BACKUP_DATABASE_URL="postgresql://postgres:senha@db.PROJECT_REF.supabase.co:5432/postgres"
 BACKUP_S3_BUCKET="nome-do-bucket-privado"
 BACKUP_S3_PREFIX="precast-erp/postgres"
+RESTORE_DATABASE_URL="postgresql://usuario:senha@host:5432/precast_erp_restore"
 AWS_REGION="sa-east-1"
 AWS_ACCESS_KEY_ID="..."
 AWS_SECRET_ACCESS_KEY="..."
@@ -109,7 +126,133 @@ BACKUP_S3_KMS_KEY_ID="opcional"
 
 Nunca use prefixo `NEXT_PUBLIC_` nessas variaveis.
 
+Use o template seguro como base:
+
+`docs/security/backups/precast-backup.env.template`
+
+Copie para um local fora do repositorio, por exemplo:
+
+`C:\seguro\precast-backup.env`
+
+No Windows, o projeto tem um inicializador em modo seguro. Por padrao ele so mostra o plano:
+
+```powershell
+npm run backup:init-env
+```
+
+Para criar o arquivo externo a partir do template:
+
+```powershell
+npm run backup:init-env -- -Apply
+```
+
+O script bloqueia destino dentro do repositorio e nao sobrescreve arquivo existente sem `-Force`.
+
+Opcionalmente defina uma variavel de ponteiro no servidor/agendador:
+
+```powershell
+$env:PRECAST_BACKUP_ENV_FILE="C:\seguro\precast-backup.env"
+```
+
+Quando `PRECAST_BACKUP_ENV_FILE` estiver definida, os comandos de backup usam esse arquivo automaticamente. Tambem e possivel informar manualmente com `--env-file`.
+
+Antes de rodar backup ou restore, valide a configuracao sem expor segredos:
+
+```powershell
+npm run backup:check-config -- --env-file "C:\seguro\precast-backup.env"
+```
+
+O comando confere variaveis obrigatorias, formato do bucket/prefixo S3, ausencia de variaveis publicas sensiveis, banco de restore isolado e ferramentas locais (`aws`, `pg_dump`, `pg_restore`, `psql`).
+
+Depois de criar o bucket S3 e configurar as credenciais no servidor/agendador, valide a postura de seguranca do bucket:
+
+```powershell
+npm run backup:check-s3 -- --env-file "C:\seguro\precast-backup.env"
+```
+
+Esse comando confere bloqueio publico, criptografia padrao, versionamento e bucket policy exigindo TLS. Lifecycle e Object Lock sao reportados como avisos quando ausentes.
+
+Para gravar evidencia operacional segura da postura S3:
+
+```powershell
+npm run backup:check-s3 -- --env-file "C:\seguro\precast-backup.env" --write-evidence "docs/security/backups/s3-posture-latest.json"
+```
+
+Valide a evidencia:
+
+```powershell
+npm run backup:check-s3-evidence
+```
+
+Templates de apoio:
+
+- `docs/security/backups/aws/iam-backup-writer-policy.json`
+- `docs/security/backups/aws/bucket-deny-insecure-transport-policy.json`
+- `docs/security/backups/aws/README.md`
+
+Depois de executar um restore drill real, registre uma evidencia segura em:
+
+`docs/security/restore-drills/latest.json`
+
+Depois de executar um backup completo real, o script grava uma evidencia segura em:
+
+`docs/security/backups/latest.json`
+
+Valide a evidencia do backup:
+
+```powershell
+npm run backup:check-evidence
+```
+
+Valide a evidencia:
+
+```powershell
+npm run backup:check-restore-drill
+```
+
+Esse check falha se a evidencia estiver ausente, vencida, incompleta ou se contiver senha/token/connection string completa. O objetivo e provar que o restore foi testado sem expor segredos no repositorio.
+
+Relatorio consolidado de prontidao:
+
+```powershell
+npm run backup:readiness -- --env-file "C:\seguro\precast-backup.env"
+```
+
+O relatorio retorna `PRONTO`, `PARCIAL` ou `BLOQUEADO`.
+
+- `PRONTO`: configuracao externa valida e restore drill recente aprovado.
+- `PARCIAL`: configuracao pronta, mas restore drill ausente, vencido ou incompleto.
+- `BLOQUEADO`: falta configuracao critica de backup externo ou existe risco de segredo exposto.
+
+Para usar como trava operacional:
+
+```powershell
+npm run backup:readiness -- --strict
+```
+
+O modo estrito falha quando o ambiente nao esta `PRONTO`.
+
 ## Agendamento recomendado no Windows
+
+O projeto possui um instalador de tarefas agendadas para Windows. Por padrao ele roda em modo dry-run e nao altera o sistema:
+
+```powershell
+npm run backup:install-windows-tasks
+```
+
+Para registrar as tarefas no servidor/agendador, execute conscientemente com `-Apply`:
+
+```powershell
+npm run backup:install-windows-tasks -- -ProjectPath "C:\caminho\erp-pre-moldados-prototype" -EnvFile "C:\seguro\precast-backup.env" -Apply
+```
+
+Tarefas criadas:
+
+- Backup completo diario;
+- Export incremental horario;
+- Verificacao diaria de configuracao;
+- Verificacao diaria de postura S3;
+- Verificacao semanal de evidencia de restore drill.
 
 Backup completo diario:
 
@@ -145,8 +288,24 @@ Exemplo:
 aws s3 cp s3://bucket/precast-erp/postgres/full/2026/05/31/precast-erp-full-YYYYMMDDTHHMMSSZ.dump .
 aws s3 cp s3://bucket/precast-erp/postgres/full/2026/05/31/precast-erp-full-YYYYMMDDTHHMMSSZ.sha256 .
 Get-FileHash -Algorithm SHA256 .\precast-erp-full-YYYYMMDDTHHMMSSZ.dump
-pg_restore --dbname "postgresql://usuario:senha@host:5432/postgres" --clean --if-exists --no-owner --no-privileges .\precast-erp-full-YYYYMMDDTHHMMSSZ.dump
+pg_restore --dbname $env:RESTORE_DATABASE_URL --clean --if-exists --no-owner --no-privileges .\precast-erp-full-YYYYMMDDTHHMMSSZ.dump
 ```
+
+Teste mensal recomendado usando o script seguro:
+
+```powershell
+npm run backup:restore-drill -- -DumpPath ".\precast-erp-full-YYYYMMDDTHHMMSSZ.dump" -ChecksumPath ".\precast-erp-full-YYYYMMDDTHHMMSSZ.sha256"
+```
+
+Ou baixando direto do S3:
+
+```powershell
+npm run backup:restore-drill -- -S3DumpUri "s3://bucket/precast-erp/postgres/full/2026/05/31/precast-erp-full-YYYYMMDDTHHMMSSZ.dump" -S3ChecksumUri "s3://bucket/precast-erp/postgres/full/2026/05/31/precast-erp-full-YYYYMMDDTHHMMSSZ.sha256"
+```
+
+Quando o restore usa `-S3DumpUri`, o script grava automaticamente a evidencia segura em `docs/security/restore-drills/latest.json`.
+
+Nunca aponte `RESTORE_DATABASE_URL` para o banco de producao.
 
 ### Restaurar dados incrementais
 
@@ -173,7 +332,9 @@ Politicas recomendadas:
 1. Criar bucket S3 privado.
 2. Criar usuario IAM exclusivo para backup.
 3. Configurar variaveis no servidor/agendador.
-4. Rodar backup completo manual uma vez.
-5. Testar restauracao em banco temporario.
-6. Depois automatizar agendamento.
-
+4. Rodar `npm run backup:check-config`.
+5. Rodar `npm run backup:check-s3`.
+6. Rodar backup completo manual uma vez.
+7. Testar restauracao em banco temporario.
+8. Rodar `npm run backup:readiness`.
+9. Depois automatizar agendamento.

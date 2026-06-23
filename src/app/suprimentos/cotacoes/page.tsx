@@ -3,6 +3,7 @@ import { PaginationControls } from "@/components/pagination-controls";
 import { makeComparisonMapNumber } from "@/lib/codes/supply-sequence";
 import { getPrisma } from "@/lib/db/prisma";
 import { getPaginationMeta, parsePagination, type SearchParamsLike } from "@/lib/pagination";
+import { FORM_OPTION_LIMIT } from "@/lib/query-limits";
 import { SuprimentosNav } from "../_components/suprimentos-nav";
 import {
   decimalToNumber,
@@ -55,7 +56,8 @@ export default async function CotacoesPage({ searchParams }: CotacoesPageProps) 
     }),
     prisma.supplier.findMany({
       where: { active: true },
-      orderBy: { code: "asc" }
+      orderBy: { code: "asc" },
+      take: FORM_OPTION_LIMIT
     }),
     prisma.purchaseQuote.findMany({
       include: {
@@ -112,7 +114,8 @@ export default async function CotacoesPage({ searchParams }: CotacoesPageProps) 
         },
         createdBy: true
       },
-      orderBy: { createdAt: "desc" }
+      orderBy: { createdAt: "desc" },
+      take: FORM_OPTION_LIMIT
     })
   ]);
 

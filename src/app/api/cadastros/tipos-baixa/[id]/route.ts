@@ -52,7 +52,16 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       return apiConflict("Ja existe tipo de baixa com este codigo.");
     }
 
-    return handleApiError(error, "Nao foi possivel atualizar o tipo de baixa.");
+    return handleApiError(error, "Nao foi possivel atualizar o tipo de baixa.", {
+      context: {
+        request,
+        module: "Cadastros",
+        action: "atualizar_tipo_baixa",
+        userId: auth.session.userId,
+        entity: "FinancialSettlementType"
+      },
+      event: "financial_settlement_type_update_error"
+    });
   }
 }
 

@@ -45,6 +45,15 @@ export async function POST(request: Request) {
       return apiConflict("Ja existe fornecedor com este codigo.");
     }
 
-    return handleApiError(error, "Nao foi possivel salvar o fornecedor.");
+    return handleApiError(error, "Nao foi possivel salvar o fornecedor.", {
+      context: {
+        request,
+        module: "Cadastros",
+        action: "salvar_fornecedor",
+        userId: auth.session.userId,
+        entity: "Supplier"
+      },
+      event: "supplier_save_error"
+    });
   }
 }

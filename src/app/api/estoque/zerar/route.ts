@@ -1,29 +1,39 @@
 import { AuditAction, Prisma } from "@prisma/client";
-import { apiSuccess, handleApiError } from "@/lib/api/responses";
-import { requireApiSession } from "@/lib/auth/guards";
+import { apiForbidden, apiSuccess, handleApiError } from "@/lib/api/responses";
+import { canRunMaintenanceCleanup, requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
 
 export async function POST(request: Request) {
-  const cleanupSecret = request.headers.get("x-cleanup-secret");
   const confirmation = request.headers.get("x-cleanup-confirmation");
-  const canUseSecret = Boolean(process.env.CRON_SECRET) && cleanupSecret === process.env.CRON_SECRET;
-  const auth = canUseSecret
-    ? null
-    : await requireApiSession({
-        anyPermission: ["estoque.adjust", "estoque.move"],
-        forbiddenMessage: "Voce nao tem permissao para zerar o estoque."
-      });
+  const auth = await requireApiSession({
+    permission: "manutencao.cleanup",
+    forbiddenMessage: "Voce nao tem permissao para zerar o estoque."
+  });
 
-  if (auth?.response) return auth.response;
+  if (auth.response) return auth.response;
+
+  if (!canRunMaintenanceCleanup(auth.session)) {
+    return apiForbidden("Apenas o Administrador pode executar limpezas destrutivas.");
+  }
 
   if (confirmation !== "ZERAR_ESTOQUE") {
-    return handleApiError(new Error("Confirmacao obrigatoria para zerar estoque."), "Confirmacao obrigatoria para zerar estoque.");
+    return handleApiError(new Error("Confirmacao obrigatoria para zerar estoque."), "Confirmacao obrigatoria para zerar estoque.", {
+      context: {
+        request,
+        module: "Estoque",
+        action: "validar_zeramento_estoque",
+        userId: auth.session.userId,
+        entity: "StockCleanup"
+      },
+      event: "stock_cleanup_confirmation_error"
+    });
   }
 
   const prisma = getPrisma();
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await serializableTransaction(prisma, async (tx) => {
       const [balancesBefore, movementsBefore, lotsBefore] = await Promise.all([
         tx.stockBalance.count(),
         tx.stockMovement.count(),
@@ -86,6 +96,15 @@ export async function POST(request: Request) {
 
     return apiSuccess({ cleanup: result });
   } catch (error) {
-    return handleApiError(error, "Nao foi possivel zerar o estoque.");
+    return handleApiError(error, "Nao foi possivel zerar o estoque.", {
+      context: {
+        request,
+        module: "Estoque",
+        action: "zerar_estoque",
+        userId: auth.session.userId,
+        entity: "StockCleanup"
+      },
+      event: "stock_cleanup_error"
+    });
   }
 }

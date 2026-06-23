@@ -1,7 +1,7 @@
-import { redirect } from "next/navigation";
 import { Boxes, ShieldCheck } from "lucide-react";
-import { getSession } from "@/lib/auth/session";
+import { requirePageSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
+import { FORM_OPTION_LIMIT, TABLE_PAGE_LIMIT } from "@/lib/query-limits";
 import { BaseRegisterForm } from "../_components/base-register-form";
 import { CadastrosNav } from "../_components/cadastros-nav";
 import { InputGroupActions } from "./input-group-actions";
@@ -16,25 +16,19 @@ const typeLabels: Record<string, string> = {
 };
 
 export default async function GruposInsumosPage() {
-  const session = await getSession();
-
-  if (!session) {
-    redirect("/login?next=/cadastros/grupos-insumos");
-  }
-
-  if (!session.permissions.includes("cadastros.manage")) {
-    redirect("/dashboard");
-  }
+  const session = await requirePageSession({ nextPath: "/cadastros/grupos-insumos", permission: "cadastros.manage" });
 
   const prisma = getPrisma();
   const [groups, financialGroups, groupedItems] = await Promise.all([
     prisma.inputGroup.findMany({
       include: { defaultFinancialGroup: true },
-      orderBy: [{ type: "asc" }, { code: "asc" }]
+      orderBy: [{ type: "asc" }, { code: "asc" }],
+      take: TABLE_PAGE_LIMIT
     }),
     prisma.financialGroup.findMany({
       where: { active: true },
-      orderBy: [{ type: "asc" }, { code: "asc" }]
+      orderBy: [{ type: "asc" }, { code: "asc" }],
+      take: FORM_OPTION_LIMIT
     }),
     prisma.item.groupBy({
       by: ["group"],

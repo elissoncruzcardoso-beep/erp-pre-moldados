@@ -1,22 +1,14 @@
-import { redirect } from "next/navigation";
 import { ArrowLeft, ClipboardList, ShieldCheck } from "lucide-react";
-import { getSession } from "@/lib/auth/session";
+import { requirePageSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
 import { decimalToNumber } from "@/lib/formatters";
+import { FORM_OPTION_LIMIT } from "@/lib/query-limits";
 import { CompositionForm } from "../../composition-form";
 
 export const dynamic = "force-dynamic";
 
 export default async function NovaComposicaoPage() {
-  const session = await getSession();
-
-  if (!session) {
-    redirect("/login?next=/produtos/composicoes/nova");
-  }
-
-  if (!session.permissions.includes("produtos.manage")) {
-    redirect("/dashboard");
-  }
+  const session = await requirePageSession({ nextPath: "/produtos/composicoes/nova", permission: "produtos.manage" });
 
   const prisma = getPrisma();
   const items = await prisma.item.findMany({
@@ -24,7 +16,8 @@ export default async function NovaComposicaoPage() {
       unit: true,
       stockBalances: true
     },
-    orderBy: [{ type: "asc" }, { code: "asc" }]
+    orderBy: [{ type: "asc" }, { code: "asc" }],
+    take: FORM_OPTION_LIMIT * 2
   });
 
   const products = items

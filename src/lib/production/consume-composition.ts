@@ -68,7 +68,10 @@ async function subtractAcrossAvailableBalances(
   });
 
   const availableQuantity = balances.reduce(
-    (total, balance) => total.plus(balance.quantity),
+    (total, balance) => {
+      const available = balance.quantity.minus(balance.reserved);
+      return available.greaterThan(0) ? total.plus(available) : total;
+    },
     new Prisma.Decimal(0)
   );
 
@@ -86,13 +89,25 @@ async function subtractAcrossAvailableBalances(
       break;
     }
 
-    const consumedQuantity = Prisma.Decimal.min(balance.quantity, remaining);
-    const nextQuantity = balance.quantity.minus(consumedQuantity);
+    const available = balance.quantity.minus(balance.reserved);
 
-    await tx.stockBalance.update({
-      where: { id: balance.id },
-      data: { quantity: nextQuantity }
+    if (available.lessThanOrEqualTo(0)) {
+      continue;
+    }
+
+    const consumedQuantity = Prisma.Decimal.min(available, remaining);
+
+    const updated = await tx.stockBalance.updateMany({
+      where: {
+        id: balance.id,
+        quantity: { gte: balance.reserved.plus(consumedQuantity) }
+      },
+      data: { quantity: { decrement: consumedQuantity } }
     });
+
+    if (updated.count === 0) {
+      throw new Error("Saldo alterado por outra operacao. Tente novamente.");
+    }
 
     consumedLots.push({
       lotId: balance.lotId,

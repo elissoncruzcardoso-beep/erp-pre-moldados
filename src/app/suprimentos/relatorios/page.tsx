@@ -3,6 +3,7 @@ import { PaginationControls } from "@/components/pagination-controls";
 import { getPrisma } from "@/lib/db/prisma";
 import { formatQuantity } from "@/lib/formatters";
 import { getPaginationMeta, parsePagination, type SearchParamsLike } from "@/lib/pagination";
+import { REPORT_RECORD_LIMIT } from "@/lib/query-limits";
 import { SuprimentosNav } from "../_components/suprimentos-nav";
 import { decimalToNumber, formatCurrency, requireSuprimentosSession } from "../_lib";
 import { SupplyExternalReport } from "./supply-external-report";
@@ -62,7 +63,7 @@ export default async function RelatoriosSuprimentosPage({ searchParams }: Relato
         }
       },
       orderBy: { createdAt: "desc" },
-      take: 80
+      take: REPORT_RECORD_LIMIT
     }),
     prisma.purchaseQuote.findMany({
       include: {
@@ -79,7 +80,7 @@ export default async function RelatoriosSuprimentosPage({ searchParams }: Relato
         }
       },
       orderBy: { createdAt: "desc" },
-      take: 80
+      take: REPORT_RECORD_LIMIT
     }),
     prisma.purchaseOrder.findMany({
       include: {
@@ -96,7 +97,7 @@ export default async function RelatoriosSuprimentosPage({ searchParams }: Relato
         }
       },
       orderBy: { createdAt: "desc" },
-      take: 80
+      take: REPORT_RECORD_LIMIT
     }),
     prisma.purchaseReceipt.findMany({
       include: {
@@ -117,7 +118,7 @@ export default async function RelatoriosSuprimentosPage({ searchParams }: Relato
         }
       },
       orderBy: { createdAt: "desc" },
-      take: 80
+      take: REPORT_RECORD_LIMIT
     }),
     prisma.stockMovement.findMany({
       where: { type: "ENTRADA_COMPRA" },
@@ -140,7 +141,7 @@ export default async function RelatoriosSuprimentosPage({ searchParams }: Relato
         }
       },
       orderBy: { createdAt: "desc" },
-      take: 80
+      take: REPORT_RECORD_LIMIT
     }),
     prisma.purchaseRequest.count(),
     prisma.purchaseReceipt.count(),
@@ -208,7 +209,7 @@ export default async function RelatoriosSuprimentosPage({ searchParams }: Relato
       responsible: movement.user.name,
       value: formatCurrency(movement.totalCost)
     }))
-  ].sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 80);
+  ].sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, REPORT_RECORD_LIMIT);
   const timelineMeta = getPaginationMeta(timeline.length, timelinePagination.page, timelinePagination.pageSize);
   const paginatedTimeline = timeline.slice(
     (timelineMeta.page - 1) * timelineMeta.pageSize,

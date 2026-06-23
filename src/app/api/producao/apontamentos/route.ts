@@ -1,14 +1,10 @@
 import { AuditAction, Prisma } from "@prisma/client";
-import { apiError, apiSuccess, apiValidationError } from "@/lib/api/responses";
+import { apiSuccess, apiValidationError, handleApiError } from "@/lib/api/responses";
 import { requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
 import { consumeApprovedCompositionForProduction } from "@/lib/production/consume-composition";
 import { productionNoteSchema } from "@/lib/validations/production";
-
-const PRODUCTION_NOTE_TRANSACTION_OPTIONS = {
-  maxWait: 10000,
-  timeout: 30000
-};
 
 export async function POST(request: Request) {
   const auth = await requireApiSession({
@@ -32,7 +28,7 @@ export async function POST(request: Request) {
   const scrapQuantity = new Prisma.Decimal(input.scrapQuantity);
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await serializableTransaction(prisma, async (tx) => {
       const order = await tx.productionOrder.findUnique({
         where: { id: input.productionOrderId },
         include: {
@@ -132,15 +128,28 @@ export async function POST(request: Request) {
       });
 
       return note;
-    }, PRODUCTION_NOTE_TRANSACTION_OPTIONS);
+    });
 
     return apiSuccess({ note: result }, { status: 201 });
   } catch (error) {
-    const rawMessage = error instanceof Error ? error.message : "Nao foi possivel registrar o apontamento.";
+    const rawMessage = error instanceof Error ? error.message : "";
     const message = rawMessage.includes("Transaction not found") || rawMessage.includes("Transaction API error")
       ? "Nao foi possivel concluir o apontamento porque a operacao demorou mais que o esperado. Tente novamente; se repetir, revise a ficha tecnica ou a conexao com o banco."
-      : rawMessage;
+      : rawMessage === "OP invalida para apontamento."
+        ? rawMessage
+        : rawMessage.startsWith("Saldo insuficiente.")
+          ? "Saldo insuficiente para baixar os insumos da ficha tecnica."
+          : "Nao foi possivel registrar o apontamento.";
 
-    return apiError(message, { status: 400 });
+    return handleApiError(error, message, {
+      context: {
+        request,
+        module: "Producao",
+        action: "registrar_apontamento",
+        userId: auth.session.userId,
+        entity: "ProductionNote"
+      },
+      event: "production_note_error"
+    });
   }
 }

@@ -1,29 +1,40 @@
 import { AuditAction, Prisma } from "@prisma/client";
-import { apiSuccess, handleApiError } from "@/lib/api/responses";
-import { requireApiSession } from "@/lib/auth/guards";
+import { apiForbidden, apiSuccess, handleApiError } from "@/lib/api/responses";
+import { canRunMaintenanceCleanup, requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
+import { MAINTENANCE_BATCH_LIMIT } from "@/lib/query-limits";
 
 export async function POST(request: Request) {
-  const cleanupSecret = request.headers.get("x-cleanup-secret");
   const confirmation = request.headers.get("x-cleanup-confirmation");
-  const canUseSecret = Boolean(process.env.CRON_SECRET) && cleanupSecret === process.env.CRON_SECRET;
-  const auth = canUseSecret
-    ? null
-    : await requireApiSession({
-        anyPermission: ["produtos.manage", "cadastros.manage"],
-        forbiddenMessage: "Voce nao tem permissao para limpar produtos de teste."
-      });
+  const auth = await requireApiSession({
+    permission: "manutencao.cleanup",
+    forbiddenMessage: "Voce nao tem permissao para limpar produtos de teste."
+  });
 
-  if (auth?.response) return auth.response;
+  if (auth.response) return auth.response;
+
+  if (!canRunMaintenanceCleanup(auth.session)) {
+    return apiForbidden("Apenas o Administrador pode executar limpezas destrutivas.");
+  }
 
   if (confirmation !== "LIMPAR_PRODUTOS_TESTE") {
-    return handleApiError(new Error("Confirmacao obrigatoria para limpar produtos de teste."), "Confirmacao obrigatoria para limpar produtos de teste.");
+    return handleApiError(new Error("Confirmacao obrigatoria para limpar produtos de teste."), "Confirmacao obrigatoria para limpar produtos de teste.", {
+      context: {
+        request,
+        module: "Produtos",
+        action: "validar_limpeza_produtos_teste",
+        userId: auth.session.userId,
+        entity: "TestProductsCleanup"
+      },
+      event: "test_products_cleanup_confirmation_error"
+    });
   }
 
   const prisma = getPrisma();
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await serializableTransaction(prisma, async (tx) => {
       const testItems = await tx.item.findMany({
         where: {
           OR: [
@@ -31,8 +42,14 @@ export async function POST(request: Request) {
             { description: { contains: "TESTE", mode: "insensitive" } }
           ]
         },
-        select: { id: true, code: true, description: true }
+        select: { id: true, code: true, description: true },
+        take: MAINTENANCE_BATCH_LIMIT + 1
       });
+
+      if (testItems.length > MAINTENANCE_BATCH_LIMIT) {
+        throw new Error(`Limpeza bloqueada: mais de ${MAINTENANCE_BATCH_LIMIT} itens de teste encontrados.`);
+      }
+
       const testItemIds = testItems.map((item) => item.id);
 
       const testCompositions = await tx.composition.findMany({
@@ -43,8 +60,14 @@ export async function POST(request: Request) {
             { items: { some: { itemId: { in: testItemIds } } } }
           ]
         },
-        select: { id: true, code: true }
+        select: { id: true, code: true },
+        take: MAINTENANCE_BATCH_LIMIT + 1
       });
+
+      if (testCompositions.length > MAINTENANCE_BATCH_LIMIT) {
+        throw new Error(`Limpeza bloqueada: mais de ${MAINTENANCE_BATCH_LIMIT} composicoes de teste encontradas.`);
+      }
+
       const testCompositionIds = testCompositions.map((composition) => composition.id);
 
       const productionOrders = await tx.productionOrder.deleteMany({
@@ -120,6 +143,15 @@ export async function POST(request: Request) {
 
     return apiSuccess({ cleanup: result });
   } catch (error) {
-    return handleApiError(error, "Nao foi possivel limpar produtos de teste.");
+    return handleApiError(error, "Nao foi possivel limpar produtos de teste.", {
+      context: {
+        request,
+        module: "Produtos",
+        action: "limpar_produtos_teste",
+        userId: auth.session.userId,
+        entity: "TestProductsCleanup"
+      },
+      event: "test_products_cleanup_error"
+    });
   }
 }

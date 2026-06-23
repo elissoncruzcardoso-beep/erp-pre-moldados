@@ -1,20 +1,17 @@
 import { AuditAction, Prisma } from "@prisma/client";
-import { apiConflict, apiForbidden, apiSuccess, apiUnauthorized, apiValidationError, handleApiError } from "@/lib/api/responses";
-import { getSession } from "@/lib/auth/session";
+import { apiConflict, apiSuccess, apiValidationError, handleApiError } from "@/lib/api/responses";
+import { requireApiSession } from "@/lib/auth/guards";
 import { makeAutomaticCode, normalizeManualCode } from "@/lib/codes/auto-code";
 import { getPrisma } from "@/lib/db/prisma";
 import { accountReceivableSchema } from "@/lib/validations/purchase";
 
 export async function POST(request: Request) {
-  const session = await getSession();
-
-  if (!session) {
-    return apiUnauthorized();
-  }
-
-  if (!session.permissions.includes("financeiro.manage")) {
-    return apiForbidden("Voce nao tem permissao para criar contas a receber.");
-  }
+  const auth = await requireApiSession({
+    permission: "financeiro.manage",
+    forbiddenMessage: "Voce nao tem permissao para criar contas a receber."
+  });
+  if (auth.response) return auth.response;
+  const { session } = auth;
 
   const body = await request.json().catch(() => null);
   const parsed = accountReceivableSchema.safeParse(body);
@@ -67,6 +64,15 @@ export async function POST(request: Request) {
       return apiConflict("Ja existe uma conta a receber com este numero.");
     }
 
-    return handleApiError(error, "Nao foi possivel criar a conta a receber.");
+    return handleApiError(error, "Nao foi possivel criar a conta a receber.", {
+      context: {
+        request,
+        module: "Financeiro",
+        action: "criar_conta_receber",
+        userId: session.userId,
+        entity: "AccountReceivable"
+      },
+      event: "account_receivable_error"
+    });
   }
 }

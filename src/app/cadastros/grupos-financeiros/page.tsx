@@ -1,7 +1,7 @@
-import { redirect } from "next/navigation";
 import { Calculator, ShieldCheck } from "lucide-react";
-import { getSession } from "@/lib/auth/session";
+import { requirePageSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
+import { TABLE_PAGE_LIMIT } from "@/lib/query-limits";
 import { BaseRegisterForm } from "../_components/base-register-form";
 import { CadastrosNav } from "../_components/cadastros-nav";
 
@@ -13,20 +13,13 @@ const typeLabels: Record<string, string> = {
 };
 
 export default async function GruposFinanceirosPage() {
-  const session = await getSession();
-
-  if (!session) {
-    redirect("/login?next=/cadastros/grupos-financeiros");
-  }
-
-  if (!session.permissions.includes("cadastros.manage")) {
-    redirect("/dashboard");
-  }
+  const session = await requirePageSession({ nextPath: "/cadastros/grupos-financeiros", permission: "cadastros.manage" });
 
   const prisma = getPrisma();
   const groups = await prisma.financialGroup.findMany({
     include: { _count: { select: { inputGroups: true } } },
-    orderBy: [{ type: "asc" }, { code: "asc" }]
+    orderBy: [{ type: "asc" }, { code: "asc" }],
+    take: TABLE_PAGE_LIMIT
   });
 
   return (

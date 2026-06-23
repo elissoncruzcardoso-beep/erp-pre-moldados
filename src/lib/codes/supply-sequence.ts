@@ -16,7 +16,9 @@ function nextCodeFromNumbers(prefix: string, numbers: string[]) {
 export async function makeSupplySequentialCode(tx: Prisma.TransactionClient, prefix: "SC" | "COT" | "PC") {
   const query = {
     where: { number: { startsWith: `${prefix}-` } },
-    select: { number: true }
+    select: { number: true },
+    orderBy: { createdAt: "desc" as const },
+    take: 500
   };
   const records =
     prefix === "SC"

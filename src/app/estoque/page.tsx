@@ -1,11 +1,11 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowDownUp, ClipboardCheck, PackageSearch, ReceiptText, ScanLine } from "lucide-react";
-import { getSession } from "@/lib/auth/session";
+import { requirePageSession } from "@/lib/auth/guards";
 import { PaginationControls } from "@/components/pagination-controls";
 import { getPrisma } from "@/lib/db/prisma";
 import { decimalToNumber, formatQuantity } from "@/lib/formatters";
 import { getPaginationMeta, parsePagination, type SearchParamsLike } from "@/lib/pagination";
+import { FORM_OPTION_LIMIT, STOCK_BALANCE_LIMIT } from "@/lib/query-limits";
 import { StockMovementForm } from "./stock-movement-form";
 import { StockMovementActions } from "./stock-movement-actions";
 
@@ -32,15 +32,7 @@ type EstoquePageProps = {
 };
 
 export default async function EstoquePage({ searchParams }: EstoquePageProps) {
-  const session = await getSession();
-
-  if (!session) {
-    redirect("/login?next=/estoque");
-  }
-
-  if (!session.permissions.includes("estoque.view")) {
-    redirect("/dashboard");
-  }
+  const session = await requirePageSession({ nextPath: "/estoque", permission: "estoque.view" });
 
   const prisma = getPrisma();
   const params = (await searchParams) || {};
@@ -68,11 +60,13 @@ export default async function EstoquePage({ searchParams }: EstoquePageProps) {
       include: {
         unit: true
       },
-      orderBy: { code: "asc" }
+      orderBy: { code: "asc" },
+      take: FORM_OPTION_LIMIT
     }),
     prisma.warehouse.findMany({
       where: { active: true },
-      orderBy: { code: "asc" }
+      orderBy: { code: "asc" },
+      take: FORM_OPTION_LIMIT
     }),
     prisma.stockBalance.findMany({
       include: {
@@ -84,7 +78,8 @@ export default async function EstoquePage({ searchParams }: EstoquePageProps) {
         warehouse: true,
         lot: true
       },
-      orderBy: [{ warehouse: { code: "asc" } }, { item: { code: "asc" } }]
+      orderBy: [{ warehouse: { code: "asc" } }, { item: { code: "asc" } }],
+      take: STOCK_BALANCE_LIMIT
     }),
     prisma.stockMovement.findMany({
       include: {

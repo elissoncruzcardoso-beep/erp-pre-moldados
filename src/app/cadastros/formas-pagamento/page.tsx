@@ -1,7 +1,7 @@
-import { redirect } from "next/navigation";
 import { CreditCard, ShieldCheck } from "lucide-react";
-import { getSession } from "@/lib/auth/session";
+import { requirePageSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
+import { TABLE_PAGE_LIMIT } from "@/lib/query-limits";
 import { BaseCrudActions } from "../_components/base-crud-actions";
 import { BaseRegisterForm } from "../_components/base-register-form";
 import { CadastrosNav } from "../_components/cadastros-nav";
@@ -20,19 +20,12 @@ const paymentTypes = [
 ];
 
 export default async function FormasPagamentoPage() {
-  const session = await getSession();
-
-  if (!session) {
-    redirect("/login?next=/cadastros/formas-pagamento");
-  }
-
-  if (!session.permissions.includes("cadastros.manage")) {
-    redirect("/dashboard");
-  }
+  const session = await requirePageSession({ nextPath: "/cadastros/formas-pagamento", permission: "cadastros.manage" });
 
   const prisma = getPrisma();
   const paymentMethods = await prisma.paymentMethod.findMany({
-    orderBy: [{ active: "desc" }, { code: "asc" }]
+    orderBy: [{ active: "desc" }, { code: "asc" }],
+    take: TABLE_PAGE_LIMIT
   });
 
   return (

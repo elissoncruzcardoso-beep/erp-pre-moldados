@@ -1,7 +1,8 @@
 import { AuditAction, Prisma } from "@prisma/client";
 import { apiConflict, apiError, apiSuccess, apiValidationError, handleApiError } from "@/lib/api/responses";
-import { requireApiSession } from "@/lib/auth/guards";
+import { canGrantAdminProfile, isAdminRoleName, requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
 import { roleSchema } from "@/lib/validations/role";
 
 type RouteContext = {
@@ -33,7 +34,8 @@ export async function PUT(request: Request, context: RouteContext) {
       }
     }),
     prisma.permission.findMany({
-      where: { id: { in: parsed.data.permissionIds } }
+      where: { id: { in: parsed.data.permissionIds } },
+      take: parsed.data.permissionIds.length
     })
   ]);
 
@@ -45,8 +47,17 @@ export async function PUT(request: Request, context: RouteContext) {
     return apiError("Uma ou mais permissões informadas não existem.", { status: 400 });
   }
 
+  const grantsAdmin =
+    isAdminRoleName(current.name) ||
+    isAdminRoleName(parsed.data.name) ||
+    permissions.some((permission) => permission.key === "usuarios.grant_admin");
+
+  if (grantsAdmin && !canGrantAdminProfile(auth.session)) {
+    return apiError("Voce nao tem permissao para alterar perfil com permissao de Administrador.", { status: 403 });
+  }
+
   try {
-    const role = await prisma.$transaction(async (tx) => {
+    const role = await serializableTransaction(prisma, async (tx) => {
       const updated = await tx.role.update({
         where: { id },
         data: {
@@ -93,7 +104,16 @@ export async function PUT(request: Request, context: RouteContext) {
       return apiConflict("Já existe perfil com este nome.");
     }
 
-    return handleApiError(error, "Não foi possível atualizar o perfil.");
+    return handleApiError(error, "Não foi possível atualizar o perfil.", {
+      context: {
+        request,
+        module: "Usuarios",
+        action: "atualizar_perfil",
+        userId: auth.session.userId,
+        entity: "Role"
+      },
+      event: "role_update_error"
+    });
   }
 }
 
@@ -119,7 +139,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
     return apiError("Perfil não encontrado.", { status: 404 });
   }
 
-  if (role.name === "Administrador") {
+  if (isAdminRoleName(role.name)) {
     return apiError("O perfil Administrador não pode ser excluído.", { status: 400 });
   }
 
@@ -127,7 +147,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
     return apiError("Não é possível excluir perfil vinculado a usuários.", { status: 400 });
   }
 
-  await prisma.$transaction(async (tx) => {
+  await serializableTransaction(prisma, async (tx) => {
     await tx.role.delete({ where: { id } });
     await tx.auditLog.create({
       data: {

@@ -1,20 +1,18 @@
 import { AuditAction, Prisma } from "@prisma/client";
-import { apiConflict, apiForbidden, apiSuccess, apiUnauthorized, apiValidationError, handleApiError } from "@/lib/api/responses";
-import { getSession } from "@/lib/auth/session";
+import { apiConflict, apiSuccess, apiValidationError, handleApiError } from "@/lib/api/responses";
+import { requireApiSession } from "@/lib/auth/guards";
 import { makeAutomaticCode, normalizeManualCode } from "@/lib/codes/auto-code";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
 import { accountPayableSchema } from "@/lib/validations/purchase";
 
 export async function POST(request: Request) {
-  const session = await getSession();
-
-  if (!session) {
-    return apiUnauthorized();
-  }
-
-  if (!session.permissions.includes("financeiro.manage")) {
-    return apiForbidden("Voce nao tem permissao para criar contas a pagar.");
-  }
+  const auth = await requireApiSession({
+    permission: "financeiro.manage",
+    forbiddenMessage: "Voce nao tem permissao para criar contas a pagar."
+  });
+  if (auth.response) return auth.response;
+  const { session } = auth;
 
   const body = await request.json().catch(() => null);
   const parsed = accountPayableSchema.safeParse(body);
@@ -27,7 +25,7 @@ export async function POST(request: Request) {
   const prisma = getPrisma();
 
   try {
-    const payable = await prisma.$transaction(async (tx) => {
+    const payable = await serializableTransaction(prisma, async (tx) => {
       const receipt = await tx.purchaseReceipt.findUnique({
         where: { id: input.purchaseReceiptId },
         include: {
@@ -114,8 +112,20 @@ export async function POST(request: Request) {
       RECEIPT_WITHOUT_VALUE: "Recebimento sem quantidade aceita nao gera conta a pagar."
     };
 
-    const message = error instanceof Error ? messages[error.message] || error.message : "Nao foi possivel criar a conta a pagar.";
+    const message =
+      error instanceof Error && messages[error.message]
+        ? messages[error.message]
+        : "Nao foi possivel criar a conta a pagar.";
 
-    return handleApiError(new Error(message), "Nao foi possivel criar a conta a pagar.");
+    return handleApiError(new Error(message), "Nao foi possivel criar a conta a pagar.", {
+      context: {
+        request,
+        module: "Financeiro",
+        action: "criar_conta_pagar",
+        userId: session.userId,
+        entity: "AccountPayable"
+      },
+      event: "account_payable_error"
+    });
   }
 }

@@ -72,11 +72,20 @@ export async function PUT(request: Request, context: RouteContext) {
       return apiConflict("Ja existe um grupo com este codigo ou nome.");
     }
 
-    return handleApiError(error, "Nao foi possivel atualizar o grupo de insumos.");
+    return handleApiError(error, "Nao foi possivel atualizar o grupo de insumos.", {
+      context: {
+        request,
+        module: "Cadastros",
+        action: "atualizar_grupo_insumos",
+        userId: auth.session.userId,
+        entity: "InputGroup"
+      },
+      event: "input_group_update_error"
+    });
   }
 }
 
-export async function DELETE(_request: Request, context: RouteContext) {
+export async function DELETE(request: Request, context: RouteContext) {
   const auth = await requireManageSession();
   if (auth.error) return auth.error;
 
@@ -109,6 +118,15 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
     return apiSuccess({ group });
   } catch (error) {
-    return handleApiError(error, "Nao foi possivel alterar o status do grupo de insumos.");
+    return handleApiError(error, "Nao foi possivel alterar o status do grupo de insumos.", {
+      context: {
+        request,
+        module: "Cadastros",
+        action: "alterar_status_grupo_insumos",
+        userId: auth.session.userId,
+        entity: "InputGroup"
+      },
+      event: "input_group_toggle_error"
+    });
   }
 }

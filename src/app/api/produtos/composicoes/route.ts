@@ -9,6 +9,7 @@ import {
 import { requireApiSession } from "@/lib/auth/guards";
 import { makeAutomaticCode, normalizeManualCode } from "@/lib/codes/auto-code";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
 import { compositionSchema } from "@/lib/validations/product";
 
 export async function POST(request: Request) {
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
   const prisma = getPrisma();
 
   try {
-    const composition = await prisma.$transaction(async (tx) => {
+    const composition = await serializableTransaction(prisma, async (tx) => {
       const product = await tx.item.findUnique({ where: { id: input.productId } });
 
       if (!product) {
@@ -113,12 +114,24 @@ export async function POST(request: Request) {
       INVALID_PRODUCT_TYPE: "A composicao deve ser vinculada a peca pre-moldada ou produto acabado.",
       INVALID_MATERIAL: "Use apenas insumos ou materias-primas ativos na composicao."
     };
-    const message = error instanceof Error ? messages[error.message] || error.message : "Nao foi possivel criar a composicao.";
+    const message =
+      error instanceof Error && messages[error.message]
+        ? messages[error.message]
+        : "Nao foi possivel criar a composicao.";
 
     if (error instanceof Error && messages[error.message]) {
       return apiError(message, { status: 400 });
     }
 
-    return handleApiError(error, "Nao foi possivel criar a composicao.");
+    return handleApiError(error, "Nao foi possivel criar a composicao.", {
+      context: {
+        request,
+        module: "Produtos",
+        action: "criar_composicao",
+        userId: auth.session.userId,
+        entity: "Composition"
+      },
+      event: "composition_create_error"
+    });
   }
 }

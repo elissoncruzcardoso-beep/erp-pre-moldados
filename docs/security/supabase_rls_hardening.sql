@@ -53,8 +53,19 @@ select
   privilege_type
 from information_schema.role_table_grants
 where table_schema = 'public'
-  and grantee in ('anon', 'authenticated')
+  and grantee in ('anon', 'authenticated', 'PUBLIC')
 order by grantee, table_name, privilege_type;
+
+select
+  grantee,
+  object_schema,
+  object_name,
+  object_type,
+  privilege_type
+from information_schema.usage_privileges
+where object_schema = 'public'
+  and grantee in ('anon', 'authenticated', 'PUBLIC')
+order by grantee, object_type, object_name, privilege_type;
 
 -- ============================================================
 -- 4) RECOMMENDED FOR CURRENT ERP ARCHITECTURE
@@ -76,15 +87,26 @@ begin
     execute format('alter table %I.%I enable row level security', r.schemaname, r.tablename);
     execute format('revoke all on table %I.%I from anon', r.schemaname, r.tablename);
     execute format('revoke all on table %I.%I from authenticated', r.schemaname, r.tablename);
+    execute format('revoke all on table %I.%I from public', r.schemaname, r.tablename);
   end loop;
 end $$;
 
+revoke all privileges on all tables in schema public from anon, authenticated, public;
+revoke all privileges on all sequences in schema public from anon, authenticated, public;
+revoke all privileges on all functions in schema public from anon, authenticated, public;
+
 alter default privileges in schema public revoke all on tables from anon;
 alter default privileges in schema public revoke all on tables from authenticated;
+alter default privileges in schema public revoke all on tables from public;
 alter default privileges in schema public revoke all on sequences from anon;
 alter default privileges in schema public revoke all on sequences from authenticated;
+alter default privileges in schema public revoke all on sequences from public;
 alter default privileges in schema public revoke all on functions from anon;
 alter default privileges in schema public revoke all on functions from authenticated;
+alter default privileges in schema public revoke all on functions from public;
+
+-- If this script is executed by a role other than the owner that creates future
+-- objects, repeat the ALTER DEFAULT PRIVILEGES commands as that owner too.
 
 -- Optional stricter defense. Test before enabling because FORCE RLS can affect
 -- owner roles. Usually not needed while the app accesses Postgres from trusted

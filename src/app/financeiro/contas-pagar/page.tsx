@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { AccountPayableStatus, Prisma } from "@prisma/client";
 import { ArrowDownCircle, ArrowLeft, Banknote, Filter, ShieldCheck } from "lucide-react";
 import { PaginationControls } from "@/components/pagination-controls";
-import { getSession } from "@/lib/auth/session";
+import { requirePageSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
 import { decimalToNumber, formatMoney } from "@/lib/formatters";
 import { getPaginationMeta, parsePagination, type SearchParamsLike } from "@/lib/pagination";
+import { FORM_OPTION_LIMIT } from "@/lib/query-limits";
 import { AccountPayableForm } from "../account-payable-form";
 import { AccountPaymentForm } from "../account-payment-form";
 import { AccountPayableActions } from "../account-payable-actions";
@@ -60,10 +60,7 @@ type PageProps = {
 };
 
 export default async function ContasPagarPage({ searchParams }: PageProps) {
-  const session = await getSession();
-
-  if (!session) redirect("/login?next=/financeiro/contas-pagar");
-  if (!session.permissions.includes("financeiro.view")) redirect("/dashboard");
+  const session = await requirePageSession({ nextPath: "/financeiro/contas-pagar", permission: "financeiro.view" });
   const canForceDeletePayables = ["Administrador", "Diretoria"].includes(session.role);
 
   const params = (await searchParams) || {};
@@ -188,7 +185,8 @@ export default async function ContasPagarPage({ searchParams }: PageProps) {
     }),
     prisma.supplier.findMany({
       where: { active: true },
-      orderBy: { name: "asc" }
+      orderBy: { name: "asc" },
+      take: FORM_OPTION_LIMIT
     })
   ]);
 

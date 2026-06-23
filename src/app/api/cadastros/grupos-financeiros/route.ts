@@ -61,6 +61,15 @@ export async function POST(request: Request) {
       return apiConflict("Ja existe um grupo financeiro com este codigo.");
     }
 
-    return handleApiError(error, "Nao foi possivel salvar o grupo financeiro.");
+    return handleApiError(error, "Nao foi possivel salvar o grupo financeiro.", {
+      context: {
+        request,
+        module: "Cadastros",
+        action: "salvar_grupo_financeiro",
+        userId: auth.session.userId,
+        entity: "FinancialGroup"
+      },
+      event: "financial_group_save_error"
+    });
   }
 }

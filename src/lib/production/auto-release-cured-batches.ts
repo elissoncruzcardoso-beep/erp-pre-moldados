@@ -1,5 +1,7 @@
 import { AuditAction, Prisma } from "@prisma/client";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
+import { increaseStockBalance } from "@/lib/stock/transactions";
 
 type AutoReleaseCuredBatchesInput = {
   userId: string;
@@ -12,38 +14,6 @@ function addHours(date: Date, hours: number) {
   return new Date(date.getTime() + hours * 60 * 60 * 1000);
 }
 
-async function addFinishedGoodsBalance(
-  tx: Prisma.TransactionClient,
-  itemId: string,
-  warehouseId: string,
-  lotId: string,
-  quantity: Prisma.Decimal
-) {
-  const currentBalance = await tx.stockBalance.findFirst({
-    where: {
-      itemId,
-      warehouseId,
-      lotId
-    }
-  });
-
-  if (currentBalance) {
-    return tx.stockBalance.update({
-      where: { id: currentBalance.id },
-      data: { quantity: currentBalance.quantity.plus(quantity) }
-    });
-  }
-
-  return tx.stockBalance.create({
-    data: {
-      itemId,
-      warehouseId,
-      lotId,
-      quantity
-    }
-  });
-}
-
 export async function autoReleaseCuredBatches({
   userId,
   responsible = "Sistema - cura automatica",
@@ -52,7 +22,7 @@ export async function autoReleaseCuredBatches({
 }: AutoReleaseCuredBatchesInput) {
   const prisma = getPrisma();
 
-  return prisma.$transaction(async (tx) => {
+  return serializableTransaction(prisma, async (tx) => {
     const finishedWarehouse = await tx.warehouse.findUnique({ where: { code: "PA" } });
 
     if (!finishedWarehouse || !finishedWarehouse.active) {
@@ -115,7 +85,7 @@ export async function autoReleaseCuredBatches({
         }
       });
 
-      await addFinishedGoodsBalance(tx, batch.itemId, finishedWarehouse.id, productionLot.id, releaseQuantity);
+      await increaseStockBalance(tx, batch.itemId, finishedWarehouse.id, releaseQuantity, productionLot.id);
 
       await tx.stockMovement.create({
         data: {

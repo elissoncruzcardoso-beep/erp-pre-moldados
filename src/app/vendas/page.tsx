@@ -3,6 +3,7 @@ import { ArrowRight, ClipboardCheck, PackageCheck, ReceiptText, ShoppingCart, Wa
 import { requirePageSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
 import { decimalToNumber, formatMoney } from "@/lib/formatters";
+import { FORM_OPTION_LIMIT, RECENT_RECORD_LIMIT, STOCK_BALANCE_LIMIT } from "@/lib/query-limits";
 import { parseSaleLines } from "@/lib/sales/parse-sale-lines";
 import { StockSaleForm } from "../estoque/stock-sale-form";
 import { DirectSaleActions } from "../estoque/venda-direta/direct-sale-actions";
@@ -26,14 +27,17 @@ export default async function VendasPage() {
         }
       },
       include: { unit: true },
-      orderBy: { code: "asc" }
+      orderBy: { code: "asc" },
+      take: FORM_OPTION_LIMIT
     }),
     prisma.warehouse.findMany({
       where: { active: true },
-      orderBy: { code: "asc" }
+      orderBy: { code: "asc" },
+      take: FORM_OPTION_LIMIT
     }),
     prisma.stockBalance.findMany({
       where: {
+        quantity: { gt: 0 },
         item: {
           type: {
             in: ["PECA_PRE_MOLDADA", "PRODUTO_ACABADO"]
@@ -44,7 +48,8 @@ export default async function VendasPage() {
         item: { include: { unit: true } },
         warehouse: true
       },
-      orderBy: [{ item: { code: "asc" } }, { warehouse: { code: "asc" } }]
+      orderBy: [{ item: { code: "asc" } }, { warehouse: { code: "asc" } }],
+      take: STOCK_BALANCE_LIMIT
     }),
     prisma.directSale.findMany({
       include: {
@@ -58,15 +63,17 @@ export default async function VendasPage() {
         }
       },
       orderBy: { issuedAt: "desc" },
-      take: 12
+      take: RECENT_RECORD_LIMIT
     }),
     prisma.customer.findMany({
       where: { active: true },
-      orderBy: { name: "asc" }
+      orderBy: { name: "asc" },
+      take: FORM_OPTION_LIMIT
     }),
     prisma.paymentMethod.findMany({
       where: { active: true },
-      orderBy: { name: "asc" }
+      orderBy: { name: "asc" },
+      take: FORM_OPTION_LIMIT
     })
   ]);
 

@@ -19,8 +19,8 @@ export type SessionUser = {
 function getAuthSecret() {
   const secret = process.env.AUTH_SECRET;
 
-  if (!secret || secret === "troque-por-uma-chave-segura") {
-    throw new Error("AUTH_SECRET precisa ser configurado com uma chave segura.");
+  if (!secret || secret === "troque-por-uma-chave-segura" || secret.length < 44) {
+    throw new Error("AUTH_SECRET precisa ser configurado com uma chave segura de pelo menos 44 caracteres.");
   }
 
   return secret;
@@ -68,7 +68,13 @@ export function verifySessionToken(token?: string): SessionUser | null {
     return null;
   }
 
-  const parsed = JSON.parse(base64UrlDecode(encodedPayload)) as SessionUser;
+  let parsed: SessionUser;
+
+  try {
+    parsed = JSON.parse(base64UrlDecode(encodedPayload)) as SessionUser;
+  } catch {
+    return null;
+  }
 
   if (!parsed.exp || parsed.exp < Math.floor(Date.now() / 1000)) {
     return null;
@@ -115,7 +121,7 @@ export async function getSession() {
       permissions: user.role.permissions.map((item) => item.permission.key as PermissionKey)
     };
   } catch {
-    return session;
+    return null;
   }
 }
 

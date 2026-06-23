@@ -4,6 +4,7 @@ import { ArrowLeft, Clock3, FileClock, PackageCheck, ReceiptText, ShieldCheck, W
 import { canViewOperationAudit, requirePageSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
 import { formatMoney, formatQuantityWithUnit } from "@/lib/formatters";
+import { RECENT_RECORD_LIMIT } from "@/lib/query-limits";
 import { parseSaleLines } from "@/lib/sales/parse-sale-lines";
 import { SaleReceiptDocument } from "../../_components/sale-receipt-document";
 import { PrintReceiptButton } from "../../../estoque/venda-direta/recibos/print-receipt-button";
@@ -73,7 +74,8 @@ export default async function ReciboVendaPage({ params }: { params: Promise<{ id
             targetWarehouse: true,
             user: true
           },
-          orderBy: { createdAt: "asc" }
+          orderBy: { createdAt: "asc" },
+          take: RECENT_RECORD_LIMIT
         }),
         prisma.auditLog.findMany({
           where: {
@@ -83,7 +85,8 @@ export default async function ReciboVendaPage({ params }: { params: Promise<{ id
             ]
           },
           include: { user: true },
-          orderBy: { createdAt: "asc" }
+          orderBy: { createdAt: "asc" },
+          take: RECENT_RECORD_LIMIT
         })
       ])
     : [[], []];
@@ -94,7 +97,8 @@ export default async function ReciboVendaPage({ params }: { params: Promise<{ id
           entityId: { in: stockMovements.map((movement) => movement.id) }
         },
         include: { user: true },
-        orderBy: { createdAt: "asc" }
+        orderBy: { createdAt: "asc" },
+        take: RECENT_RECORD_LIMIT
       })
     : [];
   const auditEvents = [...directAudits, ...movementAudits].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());

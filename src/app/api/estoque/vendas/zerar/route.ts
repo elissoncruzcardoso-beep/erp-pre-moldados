@@ -1,29 +1,39 @@
 import { AuditAction } from "@prisma/client";
-import { apiSuccess, handleApiError } from "@/lib/api/responses";
-import { requireApiSession } from "@/lib/auth/guards";
+import { apiForbidden, apiSuccess, handleApiError } from "@/lib/api/responses";
+import { canRunMaintenanceCleanup, requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
 
 export async function POST(request: Request) {
-  const cleanupSecret = request.headers.get("x-cleanup-secret");
   const confirmation = request.headers.get("x-cleanup-confirmation");
-  const canUseSecret = Boolean(process.env.CRON_SECRET) && cleanupSecret === process.env.CRON_SECRET;
-  const auth = canUseSecret
-    ? null
-    : await requireApiSession({
-        anyPermission: ["estoque.adjust", "financeiro.manage"],
-        forbiddenMessage: "Voce nao tem permissao para limpar vendas."
-      });
+  const auth = await requireApiSession({
+    permission: "manutencao.cleanup",
+    forbiddenMessage: "Voce nao tem permissao para limpar vendas."
+  });
 
-  if (auth?.response) return auth.response;
+  if (auth.response) return auth.response;
+
+  if (!canRunMaintenanceCleanup(auth.session)) {
+    return apiForbidden("Apenas o Administrador pode executar limpezas destrutivas.");
+  }
 
   if (confirmation !== "ZERAR_VENDAS") {
-    return handleApiError(new Error("Confirmacao obrigatoria para limpar vendas."), "Confirmacao obrigatoria para limpar vendas.");
+    return handleApiError(new Error("Confirmacao obrigatoria para limpar vendas."), "Confirmacao obrigatoria para limpar vendas.", {
+      context: {
+        request,
+        module: "Vendas",
+        action: "validar_limpeza_vendas",
+        userId: auth.session.userId,
+        entity: "SalesCleanup"
+      },
+      event: "sales_cleanup_confirmation_error"
+    });
   }
 
   const prisma = getPrisma();
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await serializableTransaction(prisma, async (tx) => {
       const [salesBefore, receivablesBefore, receiptsBefore] = await Promise.all([
         tx.directSale.count(),
         tx.accountReceivable.count({ where: { directSaleId: { not: null } } }),
@@ -83,6 +93,15 @@ export async function POST(request: Request) {
 
     return apiSuccess({ cleanup: result });
   } catch (error) {
-    return handleApiError(error, "Nao foi possivel limpar o modulo de vendas.");
+    return handleApiError(error, "Nao foi possivel limpar o modulo de vendas.", {
+      context: {
+        request,
+        module: "Vendas",
+        action: "limpar_vendas",
+        userId: auth.session.userId,
+        entity: "SalesCleanup"
+      },
+      event: "sales_cleanup_error"
+    });
   }
 }

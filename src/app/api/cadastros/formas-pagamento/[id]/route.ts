@@ -52,7 +52,16 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       return apiConflict("Ja existe forma de pagamento com este codigo.");
     }
 
-    return handleApiError(error, "Nao foi possivel atualizar a forma de pagamento.");
+    return handleApiError(error, "Nao foi possivel atualizar a forma de pagamento.", {
+      context: {
+        request,
+        module: "Cadastros",
+        action: "atualizar_forma_pagamento",
+        userId: auth.session.userId,
+        entity: "PaymentMethod"
+      },
+      event: "payment_method_update_error"
+    });
   }
 }
 

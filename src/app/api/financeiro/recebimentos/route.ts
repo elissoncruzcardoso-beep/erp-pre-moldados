@@ -1,19 +1,17 @@
 import { AuditAction, Prisma } from "@prisma/client";
-import { apiForbidden, apiSuccess, apiUnauthorized, apiValidationError, handleApiError } from "@/lib/api/responses";
-import { getSession } from "@/lib/auth/session";
+import { apiSuccess, apiValidationError, handleApiError } from "@/lib/api/responses";
+import { requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
 import { accountReceiptSchema } from "@/lib/validations/purchase";
 
 export async function POST(request: Request) {
-  const session = await getSession();
-
-  if (!session) {
-    return apiUnauthorized();
-  }
-
-  if (!session.permissions.includes("financeiro.manage")) {
-    return apiForbidden("Voce nao tem permissao para baixar contas a receber.");
-  }
+  const auth = await requireApiSession({
+    permission: "financeiro.manage",
+    forbiddenMessage: "Voce nao tem permissao para baixar contas a receber."
+  });
+  if (auth.response) return auth.response;
+  const { session } = auth;
 
   const body = await request.json().catch(() => null);
   const parsed = accountReceiptSchema.safeParse(body);
@@ -27,7 +25,7 @@ export async function POST(request: Request) {
   const prisma = getPrisma();
 
   try {
-    const receipt = await prisma.$transaction(async (tx) => {
+    const receipt = await serializableTransaction(prisma, async (tx) => {
       const receivable = await tx.accountReceivable.findUnique({
         where: { id: input.accountReceivableId },
         include: {
@@ -114,8 +112,20 @@ export async function POST(request: Request) {
       RECEIPT_EXCEEDS_BALANCE: "Valor recebido ultrapassa o saldo do titulo."
     };
 
-    const message = error instanceof Error ? messages[error.message] || error.message : "Nao foi possivel registrar o recebimento.";
+    const message =
+      error instanceof Error && messages[error.message]
+        ? messages[error.message]
+        : "Nao foi possivel registrar o recebimento.";
 
-    return handleApiError(new Error(message), "Nao foi possivel registrar o recebimento.");
+    return handleApiError(new Error(message), "Nao foi possivel registrar o recebimento.", {
+      context: {
+        request,
+        module: "Financeiro",
+        action: "registrar_recebimento",
+        userId: session.userId,
+        entity: "AccountReceipt"
+      },
+      event: "account_receipt_error"
+    });
   }
 }

@@ -63,11 +63,20 @@ export async function PUT(request: Request, context: RouteContext) {
       return apiConflict("Ja existe uma unidade com este codigo.");
     }
 
-    return handleApiError(error, "Nao foi possivel atualizar a unidade.");
+    return handleApiError(error, "Nao foi possivel atualizar a unidade.", {
+      context: {
+        request,
+        module: "Cadastros",
+        action: "atualizar_unidade_medida",
+        userId: auth.session.userId,
+        entity: "UnitOfMeasure"
+      },
+      event: "unit_of_measure_update_error"
+    });
   }
 }
 
-export async function DELETE(_request: Request, context: RouteContext) {
+export async function DELETE(request: Request, context: RouteContext) {
   const auth = await requireManageSession();
   if (auth.error) return auth.error;
 
@@ -107,6 +116,15 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
     return apiSuccess({ deleted: true });
   } catch (error) {
-    return handleApiError(error, "Nao foi possivel excluir a unidade.");
+    return handleApiError(error, "Nao foi possivel excluir a unidade.", {
+      context: {
+        request,
+        module: "Cadastros",
+        action: "excluir_unidade_medida",
+        userId: auth.session.userId,
+        entity: "UnitOfMeasure"
+      },
+      event: "unit_of_measure_delete_error"
+    });
   }
 }

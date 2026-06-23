@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { Bot, CalendarDays, CloudSun, Factory, PackageCheck, ShieldCheck, Users } from "lucide-react";
-import { getSession } from "@/lib/auth/session";
+import { requirePageSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
 import { decimalToNumber, formatQuantity } from "@/lib/formatters";
+import { FORM_OPTION_LIMIT, RECENT_RECORD_LIMIT } from "@/lib/query-limits";
 import { ProductionDailyLogForm } from "./production-daily-log-form";
 
 export const dynamic = "force-dynamic";
@@ -15,15 +15,7 @@ function formatLogDate(value: Date) {
 }
 
 export default async function DiarioProducaoPage() {
-  const session = await getSession();
-
-  if (!session) {
-    redirect("/login?next=/producao/diario");
-  }
-
-  if (!session.permissions.includes("producao.view")) {
-    redirect("/dashboard");
-  }
+  const session = await requirePageSession({ nextPath: "/producao/diario", permission: "producao.view" });
 
   const prisma = getPrisma();
   const todayEnd = new Date();
@@ -46,7 +38,8 @@ export default async function DiarioProducaoPage() {
           take: 1
         }
       },
-      orderBy: [{ group: "asc" }, { code: "asc" }]
+      orderBy: [{ group: "asc" }, { code: "asc" }],
+      take: FORM_OPTION_LIMIT
     }),
     prisma.productionDailyLog.findMany({
       where: {
@@ -67,7 +60,7 @@ export default async function DiarioProducaoPage() {
         }
       },
       orderBy: [{ logDate: "desc" }, { updatedAt: "desc" }],
-      take: 20
+      take: RECENT_RECORD_LIMIT
     })
   ]);
 

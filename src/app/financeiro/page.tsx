@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { AccountPayableStatus, AccountReceivableStatus, Prisma } from "@prisma/client";
 import { ArrowDownCircle, ArrowUpCircle, Banknote, CircleDollarSign, Landmark, ShieldCheck } from "lucide-react";
-import { getSession } from "@/lib/auth/session";
+import { requirePageSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
 import { activeAccountReceiptWhere, findRecentActiveAccountReceipts } from "@/lib/finance/queries";
 import { decimalToNumber, formatMoney } from "@/lib/formatters";
@@ -11,15 +10,7 @@ import { FinanceModuleTabs } from "./_components/finance-module-tabs";
 export const dynamic = "force-dynamic";
 
 export default async function FinanceiroPage() {
-  const session = await getSession();
-
-  if (!session) {
-    redirect("/login?next=/financeiro");
-  }
-
-  if (!session.permissions.includes("financeiro.view")) {
-    redirect("/dashboard");
-  }
+  const session = await requirePageSession({ nextPath: "/financeiro", permission: "financeiro.view" });
 
   const prisma = getPrisma();
   const openPayablesWhere: Prisma.AccountPayableWhereInput = {

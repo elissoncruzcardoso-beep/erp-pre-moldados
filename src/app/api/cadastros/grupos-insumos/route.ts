@@ -61,6 +61,15 @@ export async function POST(request: Request) {
       return apiConflict("Ja existe um grupo com este codigo ou nome.");
     }
 
-    return handleApiError(error, "Nao foi possivel salvar o grupo de insumos.");
+    return handleApiError(error, "Nao foi possivel salvar o grupo de insumos.", {
+      context: {
+        request,
+        module: "Cadastros",
+        action: "salvar_grupo_insumos",
+        userId: auth.session.userId,
+        entity: "InputGroup"
+      },
+      event: "input_group_save_error"
+    });
   }
 }

@@ -8,7 +8,7 @@ import {
   handleApiError
 } from "@/lib/api/responses";
 import { hashPassword } from "@/lib/auth/password";
-import { requireApiSession } from "@/lib/auth/guards";
+import { canGrantAdminProfile, isAdminRoleName, requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
 
 const updateUserSchema = z.object({
@@ -56,6 +56,10 @@ export async function PUT(request: Request, context: RouteContext) {
 
   if (!role) {
     return apiError("Perfil informado nao existe.", { status: 400 });
+  }
+
+  if ((isAdminRoleName(current.role.name) || isAdminRoleName(role.name)) && !canGrantAdminProfile(auth.session)) {
+    return apiError("Voce nao tem permissao para conceder ou alterar o perfil Administrador.", { status: 403 });
   }
 
   try {
@@ -107,7 +111,16 @@ export async function PUT(request: Request, context: RouteContext) {
       return apiConflict("Ja existe usuario com este e-mail.");
     }
 
-    return handleApiError(error, "Nao foi possivel atualizar o usuario.");
+    return handleApiError(error, "Nao foi possivel atualizar o usuario.", {
+      context: {
+        request,
+        module: "Usuarios",
+        action: "atualizar_usuario",
+        userId: auth.session.userId,
+        entity: "User"
+      },
+      event: "user_update_error"
+    });
   }
 }
 

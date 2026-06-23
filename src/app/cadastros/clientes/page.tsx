@@ -1,7 +1,7 @@
-import { redirect } from "next/navigation";
 import { ShieldCheck, Users } from "lucide-react";
-import { getSession } from "@/lib/auth/session";
+import { requirePageSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
+import { TABLE_PAGE_LIMIT } from "@/lib/query-limits";
 import { BaseCrudActions } from "../_components/base-crud-actions";
 import { BaseRegisterForm } from "../_components/base-register-form";
 import { CadastrosNav } from "../_components/cadastros-nav";
@@ -9,22 +9,15 @@ import { CadastrosNav } from "../_components/cadastros-nav";
 export const dynamic = "force-dynamic";
 
 export default async function ClientesPage() {
-  const session = await getSession();
-
-  if (!session) {
-    redirect("/login?next=/cadastros/clientes");
-  }
-
-  if (!session.permissions.includes("cadastros.manage")) {
-    redirect("/dashboard");
-  }
+  const session = await requirePageSession({ nextPath: "/cadastros/clientes", permission: "cadastros.manage" });
 
   const prisma = getPrisma();
   const customers = await prisma.customer.findMany({
     include: {
       _count: { select: { accountsReceivable: true, orders: true } }
     },
-    orderBy: [{ active: "desc" }, { code: "asc" }]
+    orderBy: [{ active: "desc" }, { code: "asc" }],
+    take: TABLE_PAGE_LIMIT
   });
 
   return (

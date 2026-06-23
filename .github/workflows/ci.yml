@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build e checks de seguranca
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+      DIRECT_URL: postgresql://ci:ci@localhost:5432/ci
+      AUTH_SECRET: ci_AUTH_SECRET_12345678901234567890123456789012345678901234
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      TELEGRAM_BOT_TOKEN: ci-token
+      TELEGRAM_WEBHOOK_SECRET: ci_TELEGRAM_WEBHOOK_SECRET_123456789012345678901234567890
+      CRON_SECRET: ci_CRON_SECRET_123456789012345678901234567890
+      CRON_USER_EMAIL: admin@erp.local
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Environment guard
+        run: npm run security:check-env
+
+      - name: SQL raw guard
+        run: npm run security:check-sql
+
+      - name: Query limit guard
+        run: npm run security:check-queries
+
+      - name: Public exposure guard
+        run: npm run security:check-public-exposure
+
+      - name: API error leak guard
+        run: npm run security:check-api-errors
+
+      - name: API auth guard
+        run: npm run security:check-api-auth
+
+      - name: API audit guard
+        run: npm run security:check-api-audit
+
+      - name: Prisma migrations guard
+        run: npm run security:check-migrations
+
+      - name: Backup config guard
+        env:
+          BACKUP_DATABASE_URL: postgresql://backup:secret@db.example.com:5432/postgres
+          RESTORE_DATABASE_URL: postgresql://restore:secret@db.example.com:5432/precast_erp_restore_ci
+          BACKUP_S3_BUCKET: precast-backups
+          BACKUP_S3_PREFIX: precast-erp/postgres
+          AWS_REGION: sa-east-1
+          AWS_ACCESS_KEY_ID: fake-access-key
+          AWS_SECRET_ACCESS_KEY: fake-secret-key
+        run: npm run backup:check-config -- --skip-tools
+
+      - name: Prisma validate
+        run: npx prisma validate
+
+      - name: Tests
+        run: npm test
+
+      - name: Build
+        run: npm run build

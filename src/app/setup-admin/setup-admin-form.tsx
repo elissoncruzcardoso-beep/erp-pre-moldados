@@ -6,6 +6,7 @@ import { KeyRound, LogIn } from "lucide-react";
 
 export function SetupAdminForm() {
   const [email, setEmail] = useState("admin@erp.local");
+  const [setupSecret, setSetupSecret] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState("");
@@ -25,7 +26,10 @@ export function SetupAdminForm() {
     setLoading(true);
     const response = await fetch("/api/setup/admin-password", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-setup-secret": setupSecret
+      },
       body: JSON.stringify({ email, password })
     });
     const data = await response.json().catch(() => ({}));
@@ -38,6 +42,7 @@ export function SetupAdminForm() {
 
     setPassword("");
     setConfirmPassword("");
+    setSetupSecret("");
     setMessage(data.reset ? "Senha redefinida. Agora voce ja pode entrar no ERP." : "Senha inicial definida. Agora voce ja pode entrar no ERP.");
   }
 
@@ -64,6 +69,18 @@ export function SetupAdminForm() {
           onChange={(event) => setPassword(event.target.value)}
           autoComplete="new-password"
           minLength={12}
+          required
+        />
+      </label>
+
+      <label className="field">
+        <span>Segredo de setup</span>
+        <input
+          className="form-input"
+          type="password"
+          value={setupSecret}
+          onChange={(event) => setSetupSecret(event.target.value)}
+          autoComplete="off"
           required
         />
       </label>

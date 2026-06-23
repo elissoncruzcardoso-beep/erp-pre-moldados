@@ -2,6 +2,7 @@ import { AuditAction } from "@prisma/client";
 import { apiError, apiSuccess, apiValidationError, handleApiError } from "@/lib/api/responses";
 import { requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
 import {
   applyStockMovementBalance,
   negativeStockMovementTypes,
@@ -44,7 +45,7 @@ export async function POST(request: Request) {
   const lotId = input.lotId || null;
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await serializableTransaction(prisma, async (tx) => {
       const item = await tx.item.findUnique({ where: { id: input.itemId } });
 
       if (!item || !item.active || !item.controlsStock) {
@@ -113,6 +114,15 @@ export async function POST(request: Request) {
 
     return apiSuccess({ movement: result }, { status: 201 });
   } catch (error) {
-    return handleApiError(error, "Nao foi possivel registrar a movimentacao.");
+    return handleApiError(error, "Nao foi possivel registrar a movimentacao.", {
+      context: {
+        request,
+        module: "Estoque",
+        action: "registrar_movimentacao",
+        userId: session.userId,
+        entity: "StockMovement"
+      },
+      event: "stock_movement_error"
+    });
   }
 }

@@ -2,14 +2,13 @@ import { AuditAction, Prisma } from "@prisma/client";
 import {
   apiConflict,
   apiError,
-  apiForbidden,
   apiSuccess,
-  apiUnauthorized,
   apiValidationError,
   handleApiError
 } from "@/lib/api/responses";
-import { getSession } from "@/lib/auth/session";
+import { requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
 import { purchaseOrderUpdateSchema } from "@/lib/validations/purchase";
 
 type RouteContext = {
@@ -17,15 +16,12 @@ type RouteContext = {
 };
 
 export async function PATCH(request: Request, context: RouteContext) {
-  const session = await getSession();
-
-  if (!session) {
-    return apiUnauthorized();
-  }
-
-  if (!session.permissions.includes("suprimentos.manage")) {
-    return apiForbidden("Voce nao tem permissao para editar pedidos.");
-  }
+  const auth = await requireApiSession({
+    permission: "suprimentos.manage",
+    forbiddenMessage: "Voce nao tem permissao para editar pedidos."
+  });
+  if (auth.response) return auth.response;
+  const { session } = auth;
 
   const body = await request.json().catch(() => null);
   const parsed = purchaseOrderUpdateSchema.safeParse(body);
@@ -39,7 +35,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   const prisma = getPrisma();
 
   try {
-    const order = await prisma.$transaction(async (tx) => {
+    const order = await serializableTransaction(prisma, async (tx) => {
       const current = await tx.purchaseOrder.findUnique({
         where: { id },
         include: {
@@ -140,26 +136,32 @@ export async function PATCH(request: Request, context: RouteContext) {
       return apiConflict("Ja existe um pedido com este numero.");
     }
 
-    return handleApiError(error, "Nao foi possivel editar o pedido.");
+    return handleApiError(error, "Nao foi possivel editar o pedido.", {
+      context: {
+        request,
+        module: "Suprimentos",
+        action: "editar_pedido",
+        userId: session.userId,
+        entity: "PurchaseOrder"
+      },
+      event: "purchase_order_update_error"
+    });
   }
 }
 
-export async function DELETE(_request: Request, context: RouteContext) {
-  const session = await getSession();
-
-  if (!session) {
-    return apiUnauthorized();
-  }
-
-  if (!session.permissions.includes("suprimentos.manage")) {
-    return apiForbidden("Voce nao tem permissao para excluir pedidos.");
-  }
+export async function DELETE(request: Request, context: RouteContext) {
+  const auth = await requireApiSession({
+    permission: "suprimentos.manage",
+    forbiddenMessage: "Voce nao tem permissao para excluir pedidos."
+  });
+  if (auth.response) return auth.response;
+  const { session } = auth;
 
   const { id } = await context.params;
   const prisma = getPrisma();
 
   try {
-    await prisma.$transaction(async (tx) => {
+    await serializableTransaction(prisma, async (tx) => {
       const current = await tx.purchaseOrder.findUnique({
         where: { id },
         include: {
@@ -219,6 +221,15 @@ export async function DELETE(_request: Request, context: RouteContext) {
       return apiConflict("Pedido com recebimento/nota fiscal nao pode ser excluido.");
     }
 
-    return handleApiError(error, "Nao foi possivel excluir o pedido.");
+    return handleApiError(error, "Nao foi possivel excluir o pedido.", {
+      context: {
+        request,
+        module: "Suprimentos",
+        action: "excluir_pedido",
+        userId: session.userId,
+        entity: "PurchaseOrder"
+      },
+      event: "purchase_order_delete_error"
+    });
   }
 }

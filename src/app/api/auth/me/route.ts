@@ -1,8 +1,8 @@
 import { apiSuccess } from "@/lib/api/responses";
-import { getSession } from "@/lib/auth/session";
+import { getOptionalApiSession } from "@/lib/auth/guards";
 
 export async function GET() {
-  const session = await getSession();
+  const session = await getOptionalApiSession();
 
   return apiSuccess({ user: session });
 }

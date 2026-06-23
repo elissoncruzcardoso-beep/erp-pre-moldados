@@ -1,9 +1,11 @@
 import { AuditAction } from "@prisma/client";
 import { z } from "zod";
-import { apiForbidden, apiSuccess, apiUnauthorized, apiValidationError, handleApiError } from "@/lib/api/responses";
-import { getSession } from "@/lib/auth/session";
+import { apiSuccess, apiValidationError, handleApiError } from "@/lib/api/responses";
+import { requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
-import { increaseStockBalance, toDecimal } from "@/lib/stock/transactions";
+import { serializableTransaction } from "@/lib/db/transactions";
+import { cancelDirectSale } from "@/lib/sales/direct-sale-service";
+import { toDecimal } from "@/lib/stock/transactions";
 
 const updateSaleSchema = z.object({
   customerName: z.string().trim().min(2).max(120),
@@ -18,81 +20,13 @@ const cancelSaleSchema = z.object({
   reason: z.string().trim().min(3).max(240).optional()
 });
 
-type ConsumedLot = {
-  lotId: string | null;
-  lotCode: string;
-  quantity: string;
-};
-
-type RestockLine = {
-  itemId: string;
-  warehouseId: string;
-  quantity: string;
-  unitPrice: string;
-  finalTotal: string;
-  consumedLots: ConsumedLot[];
-};
-
-function parseConsumedLotsList(value: unknown): ConsumedLot[] {
-  if (!Array.isArray(value)) return [];
-
-  return value
-    .map((item) => {
-      if (!item || typeof item !== "object") return null;
-
-      const record = item as Record<string, unknown>;
-      return {
-        lotId: typeof record.lotId === "string" ? record.lotId : null,
-        lotCode: typeof record.lotCode === "string" ? record.lotCode : "SEM_LOTE",
-        quantity: String(record.quantity || "0")
-      };
-    })
-    .filter((item): item is ConsumedLot => Boolean(item));
-}
-
-function parseRestockLines(value: unknown, fallback: RestockLine): RestockLine[] {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return [fallback];
-  }
-
-  const saleItems = (value as Record<string, unknown>).saleItems;
-  if (!Array.isArray(saleItems)) {
-    return [fallback];
-  }
-
-  const parsed = saleItems
-    .map((item) => {
-      if (!item || typeof item !== "object") return null;
-      const record = item as Record<string, unknown>;
-      const itemId = String(record.itemId || "");
-      const warehouseId = String(record.warehouseId || "");
-
-      if (!itemId || !warehouseId) return null;
-
-      return {
-        itemId,
-        warehouseId,
-        quantity: String(record.quantity || "0"),
-        unitPrice: String(record.unitPrice || "0"),
-        finalTotal: String(record.finalTotal || "0"),
-        consumedLots: parseConsumedLotsList(record.consumedLots)
-      };
-    })
-    .filter((item): item is RestockLine => Boolean(item));
-
-  return parsed.length > 0 ? parsed : [fallback];
-}
-
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
-
-  if (!session) {
-    return apiUnauthorized();
-  }
-
-  if (!session.permissions.includes("estoque.move")) {
-    return apiForbidden("Voce nao tem permissao para editar recibos.");
-  }
+  const auth = await requireApiSession({
+    permission: "estoque.move",
+    forbiddenMessage: "Voce nao tem permissao para editar recibos."
+  });
+  if (auth.response) return auth.response;
+  const { session } = auth;
 
   const { id } = await context.params;
   const body = await request.json().catch(() => null);
@@ -108,7 +42,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
   const discount = toDecimal(input.discount);
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await serializableTransaction(prisma, async (tx) => {
       const sale = await tx.directSale.findUnique({ where: { id } });
 
       if (!sale) {
@@ -195,20 +129,26 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
 
     return apiSuccess({ sale: result });
   } catch (error) {
-    return handleApiError(error, "Nao foi possivel editar o recibo.");
+    return handleApiError(error, "Nao foi possivel editar o recibo.", {
+      context: {
+        request,
+        module: "Vendas",
+        action: "editar_recibo_venda",
+        userId: session.userId,
+        entity: "DirectSale"
+      },
+      event: "direct_sale_update_error"
+    });
   }
 }
 
 export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
-
-  if (!session) {
-    return apiUnauthorized();
-  }
-
-  if (!session.permissions.includes("estoque.move")) {
-    return apiForbidden("Voce nao tem permissao para cancelar recibos.");
-  }
+  const auth = await requireApiSession({
+    permission: "estoque.move",
+    forbiddenMessage: "Voce nao tem permissao para cancelar recibos."
+  });
+  if (auth.response) return auth.response;
+  const { session } = auth;
 
   const { id } = await context.params;
   const body = await request.json().catch(() => ({}));
@@ -218,143 +158,20 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
     return apiValidationError("Revise o motivo do cancelamento.", parsed.error.flatten());
   }
 
-  const prisma = getPrisma();
-
   try {
-    const result = await prisma.$transaction(async (tx) => {
-      const sale = await tx.directSale.findUnique({
-        where: { id },
-        include: {
-          item: { include: { unit: true } },
-          warehouse: true,
-          accountsReceivable: {
-            include: {
-              receipts: true
-            }
-          }
-        }
-      });
-
-      if (!sale) {
-        throw new Error("Recibo nao encontrado.");
-      }
-
-      if (sale.status !== "ATIVA") {
-        throw new Error("Este recibo ja esta cancelado.");
-      }
-
-      const receivable = sale.accountsReceivable[0];
-
-      const restockLines = parseRestockLines(sale.consumedLots, {
-        itemId: sale.itemId,
-        warehouseId: sale.warehouseId,
-        quantity: sale.quantity.toString(),
-        unitPrice: sale.unitPrice.toString(),
-        finalTotal: sale.finalTotal.toString(),
-        consumedLots: []
-      });
-      const reversalIds: string[] = [];
-
-      for (const restockLine of restockLines) {
-        if (restockLine.consumedLots.length === 0) {
-          await increaseStockBalance(
-            tx,
-            restockLine.itemId,
-            restockLine.warehouseId,
-            toDecimal(restockLine.quantity),
-            null
-          );
-        } else {
-          for (const consumedLot of restockLine.consumedLots) {
-            await increaseStockBalance(
-              tx,
-              restockLine.itemId,
-              restockLine.warehouseId,
-              toDecimal(consumedLot.quantity),
-              consumedLot.lotId
-            );
-          }
-        }
-
-        const reversal = await tx.stockMovement.create({
-          data: {
-            type: "ESTORNO",
-            itemId: restockLine.itemId,
-            quantity: toDecimal(restockLine.quantity),
-            unitCost: toDecimal(restockLine.unitPrice),
-            totalCost: toDecimal(restockLine.finalTotal),
-            targetWarehouseId: restockLine.warehouseId,
-            userId: session.userId,
-            document: `${sale.number}-EST`,
-            justification: parsed.data.reason || `Cancelamento do recibo ${sale.number}`
-          }
-        });
-        reversalIds.push(reversal.id);
-      }
-
-      const updated = await tx.directSale.update({
-        where: { id },
-        data: {
-          status: "CANCELADA",
-          cancelledById: session.userId,
-          cancelledAt: new Date(),
-          cancelReason: parsed.data.reason || null
-        }
-      });
-
-      if (receivable) {
-        await tx.accountReceivable.update({
-          where: { id: receivable.id },
-          data: {
-            status: "CANCELADO",
-            receivedAmount: toDecimal(0),
-            receivedAt: null,
-            note: parsed.data.reason || `Cancelado junto com o recibo ${sale.number}`
-          }
-        });
-      }
-
-      await tx.auditLog.create({
-        data: {
-          userId: session.userId,
-          module: "Estoque",
-          action: AuditAction.CANCEL,
-          entity: "DirectSale",
-          entityId: id,
-          previousValue: {
-            status: sale.status,
-            number: sale.number,
-            accountReceivable: receivable
-              ? {
-                  id: receivable.id,
-                  number: receivable.number,
-                  status: receivable.status,
-                  receivedAmount: receivable.receivedAmount.toString(),
-                  receiptCount: receivable.receipts.length
-                }
-              : null
-          },
-          newValue: {
-            status: updated.status,
-            accountReceivable: receivable
-              ? {
-                  id: receivable.id,
-                  number: receivable.number,
-                  status: "CANCELADO",
-                  receivedAmount: "0"
-                }
-              : null,
-            reversalMovementIds: reversalIds
-          },
-          justification: parsed.data.reason || "Cancelamento de recibo com estorno de estoque"
-        }
-      });
-
-      return updated;
-    });
+    const result = await cancelDirectSale(getPrisma(), id, { userId: session.userId }, parsed.data.reason);
 
     return apiSuccess({ sale: result });
   } catch (error) {
-    return handleApiError(error, "Nao foi possivel cancelar o recibo.");
+    return handleApiError(error, "Nao foi possivel cancelar o recibo.", {
+      context: {
+        request,
+        module: "Vendas",
+        action: "cancelar_recibo_venda",
+        userId: session.userId,
+        entity: "DirectSale"
+      },
+      event: "direct_sale_cancel_error"
+    });
   }
 }

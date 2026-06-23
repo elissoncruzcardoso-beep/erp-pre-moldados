@@ -1,28 +1,26 @@
 import { AuditAction } from "@prisma/client";
-import { apiConflict, apiError, apiForbidden, apiSuccess, apiUnauthorized, handleApiError } from "@/lib/api/responses";
-import { getSession } from "@/lib/auth/session";
+import { apiConflict, apiError, apiSuccess, handleApiError } from "@/lib/api/responses";
+import { requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
-export async function PATCH(_request: Request, context: RouteContext) {
-  const session = await getSession();
-
-  if (!session) {
-    return apiUnauthorized();
-  }
-
-  if (!session.permissions.includes("suprimentos.manage")) {
-    return apiForbidden("Voce nao tem permissao para aprovar cotacoes.");
-  }
+export async function PATCH(request: Request, context: RouteContext) {
+  const auth = await requireApiSession({
+    permission: "suprimentos.manage",
+    forbiddenMessage: "Voce nao tem permissao para aprovar cotacoes."
+  });
+  if (auth.response) return auth.response;
+  const { session } = auth;
 
   const { id } = await context.params;
   const prisma = getPrisma();
 
   try {
-    const quote = await prisma.$transaction(async (tx) => {
+    const quote = await serializableTransaction(prisma, async (tx) => {
       const current = await tx.purchaseQuote.findUnique({
         where: { id },
         include: {
@@ -94,6 +92,15 @@ export async function PATCH(_request: Request, context: RouteContext) {
       return apiConflict("Cotacao cancelada nao pode ser aprovada.");
     }
 
-    return handleApiError(error, "Nao foi possivel aprovar a cotacao.");
+    return handleApiError(error, "Nao foi possivel aprovar a cotacao.", {
+      context: {
+        request,
+        module: "Suprimentos",
+        action: "aprovar_cotacao",
+        userId: session.userId,
+        entity: "PurchaseQuote"
+      },
+      event: "purchase_quote_approve_error"
+    });
   }
 }

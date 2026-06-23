@@ -1,13 +1,13 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { AccountReceivableStatus, Prisma } from "@prisma/client";
 import { ArrowLeft, ArrowUpCircle, CircleDollarSign, ExternalLink, Filter, ReceiptText, ShieldCheck } from "lucide-react";
 import { PaginationControls } from "@/components/pagination-controls";
-import { getSession } from "@/lib/auth/session";
+import { requirePageSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
 import { findRecentActiveAccountReceipts } from "@/lib/finance/queries";
 import { decimalToNumber, formatMoney } from "@/lib/formatters";
 import { getPaginationMeta, parsePagination, type SearchParamsLike } from "@/lib/pagination";
+import { FORM_OPTION_LIMIT } from "@/lib/query-limits";
 import { AccountReceiptForm } from "../account-receipt-form";
 import { AccountReceivableForm } from "../account-receivable-form";
 import { AccountReceivableActions } from "../account-receivable-actions";
@@ -61,10 +61,7 @@ function firstParam(params: SearchParamsLike, key: string) {
 }
 
 export default async function ContasReceberPage({ searchParams }: PageProps) {
-  const session = await getSession();
-
-  if (!session) redirect("/login?next=/financeiro/contas-receber");
-  if (!session.permissions.includes("financeiro.view")) redirect("/dashboard");
+  const session = await requirePageSession({ nextPath: "/financeiro/contas-receber", permission: "financeiro.view" });
 
   const params = (await searchParams) || {};
   const statusFilter = firstParam(params, "status") || "ABERTOS";
@@ -154,7 +151,7 @@ export default async function ContasReceberPage({ searchParams }: PageProps) {
       orderBy: { dueDate: "asc" },
       take: 100
     }),
-    prisma.customer.findMany({ where: { active: true }, orderBy: { code: "asc" } }),
+    prisma.customer.findMany({ where: { active: true }, orderBy: { code: "asc" }, take: FORM_OPTION_LIMIT }),
     findRecentActiveAccountReceipts(prisma, 20)
   ]);
 

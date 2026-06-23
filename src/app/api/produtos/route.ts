@@ -73,6 +73,15 @@ export async function POST(request: Request) {
       return apiConflict("Ja existe um produto com este codigo.");
     }
 
-    return handleApiError(error, "Nao foi possivel cadastrar o produto.");
+    return handleApiError(error, "Nao foi possivel cadastrar o produto.", {
+      context: {
+        request,
+        module: "Produtos",
+        action: "cadastrar_produto",
+        userId: auth.session.userId,
+        entity: "Item"
+      },
+      event: "product_create_error"
+    });
   }
 }

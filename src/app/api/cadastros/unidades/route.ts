@@ -54,6 +54,15 @@ export async function POST(request: Request) {
       return apiConflict("Ja existe uma unidade com este codigo.");
     }
 
-    return handleApiError(error, "Nao foi possivel salvar a unidade.");
+    return handleApiError(error, "Nao foi possivel salvar a unidade.", {
+      context: {
+        request,
+        module: "Cadastros",
+        action: "salvar_unidade_medida",
+        userId: session.userId,
+        entity: "UnitOfMeasure"
+      },
+      event: "unit_of_measure_save_error"
+    });
   }
 }

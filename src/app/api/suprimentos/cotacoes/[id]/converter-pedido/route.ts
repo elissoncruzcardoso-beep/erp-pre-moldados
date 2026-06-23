@@ -1,8 +1,9 @@
 import { AuditAction, Prisma } from "@prisma/client";
-import { apiConflict, apiError, apiForbidden, apiSuccess, apiUnauthorized, handleApiError } from "@/lib/api/responses";
-import { getSession } from "@/lib/auth/session";
+import { apiConflict, apiError, apiSuccess, handleApiError } from "@/lib/api/responses";
+import { requireApiSession } from "@/lib/auth/guards";
 import { makeSupplySequentialCode } from "@/lib/codes/supply-sequence";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -14,22 +15,19 @@ function addDays(date: Date, days: number) {
   return next;
 }
 
-export async function POST(_request: Request, context: RouteContext) {
-  const session = await getSession();
-
-  if (!session) {
-    return apiUnauthorized();
-  }
-
-  if (!session.permissions.includes("suprimentos.manage")) {
-    return apiForbidden("Voce nao tem permissao para converter pedidos.");
-  }
+export async function POST(request: Request, context: RouteContext) {
+  const auth = await requireApiSession({
+    permission: "suprimentos.manage",
+    forbiddenMessage: "Voce nao tem permissao para converter pedidos."
+  });
+  if (auth.response) return auth.response;
+  const { session } = auth;
 
   const { id } = await context.params;
   const prisma = getPrisma();
 
   try {
-    const order = await prisma.$transaction(async (tx) => {
+    const order = await serializableTransaction(prisma, async (tx) => {
       const quote = await tx.purchaseQuote.findUnique({
         where: { id },
         include: {
@@ -161,6 +159,15 @@ export async function POST(_request: Request, context: RouteContext) {
       return apiConflict("Ja existe um pedido com este numero. Tente novamente.");
     }
 
-    return handleApiError(error, "Nao foi possivel converter a cotacao em pedido.");
+    return handleApiError(error, "Nao foi possivel converter a cotacao em pedido.", {
+      context: {
+        request,
+        module: "Suprimentos",
+        action: "converter_cotacao_pedido",
+        userId: session.userId,
+        entity: "PurchaseOrder"
+      },
+      event: "purchase_quote_convert_error"
+    });
   }
 }

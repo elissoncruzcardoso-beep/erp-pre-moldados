@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { Boxes, ClipboardList, Factory, PackageSearch, ShieldCheck } from "lucide-react";
-import { getSession } from "@/lib/auth/session";
+import { requirePageSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
 import { decimalToNumber, formatQuantity } from "@/lib/formatters";
+import { FORM_OPTION_LIMIT, TABLE_PAGE_LIMIT } from "@/lib/query-limits";
 import { ProductCreateForm } from "@/app/produtos/product-create-form";
 import { CadastrosNav } from "../_components/cadastros-nav";
 import { ProductCatalogActions } from "./product-catalog-actions";
@@ -25,34 +25,32 @@ function itemUsesCuring(type: string) {
 }
 
 export default async function CadastroProdutosPage() {
-  const session = await getSession();
-
-  if (!session) {
-    redirect("/login?next=/cadastros/produtos");
-  }
-
-  if (!session.permissions.includes("produtos.manage") && !session.permissions.includes("cadastros.manage")) {
-    redirect("/dashboard");
-  }
+  const session = await requirePageSession({
+    nextPath: "/cadastros/produtos",
+    anyPermission: ["produtos.manage", "cadastros.manage"]
+  });
 
   const prisma = getPrisma();
-  const [items, units, inputGroups] = await Promise.all([
+  const [items, units, inputGroups, itemCount, precastCount, inputCount, unitCount] = await Promise.all([
     prisma.item.findMany({
       include: {
         unit: true,
         stockBalances: true
       },
       orderBy: [{ type: "asc" }, { code: "asc" }],
-      take: 60
+      take: TABLE_PAGE_LIMIT
     }),
-    prisma.unitOfMeasure.findMany({ orderBy: { code: "asc" } }),
+    prisma.unitOfMeasure.findMany({ orderBy: { code: "asc" }, take: FORM_OPTION_LIMIT }),
     prisma.inputGroup.findMany({
       where: { active: true },
-      orderBy: [{ type: "asc" }, { code: "asc" }]
-    })
+      orderBy: [{ type: "asc" }, { code: "asc" }],
+      take: FORM_OPTION_LIMIT
+    }),
+    prisma.item.count(),
+    prisma.item.count({ where: { type: "PECA_PRE_MOLDADA" } }),
+    prisma.item.count({ where: { type: { in: ["MATERIA_PRIMA", "INSUMO"] } } }),
+    prisma.unitOfMeasure.count()
   ]);
-  const precastCount = items.filter((item) => item.type === "PECA_PRE_MOLDADA").length;
-  const inputCount = items.filter((item) => item.type === "MATERIA_PRIMA" || item.type === "INSUMO").length;
 
   return (
     <>
@@ -81,7 +79,7 @@ export default async function CadastroProdutosPage() {
       <section className="product-metric-grid" style={{ marginBottom: 20 }}>
         <article className="product-metric-card accent-blue">
           <div className="metric-top"><span className="mono">Itens</span><ClipboardList size={22} /></div>
-          <strong className="metric-value">{items.length}</strong>
+          <strong className="metric-value">{itemCount}</strong>
           <span className="metric-sub">Produtos, peças, insumos e serviços cadastrados.</span>
         </article>
         <article className="product-metric-card accent-orange">
@@ -96,7 +94,7 @@ export default async function CadastroProdutosPage() {
         </article>
         <article className="product-metric-card accent-blue">
           <div className="metric-top"><span className="mono">Unidades</span><PackageSearch size={22} /></div>
-          <strong className="metric-value">{units.length}</strong>
+          <strong className="metric-value">{unitCount}</strong>
           <span className="metric-sub">Base para quantidades e casas decimais.</span>
         </article>
       </section>

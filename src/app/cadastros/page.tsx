@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { Boxes, Calculator, ClipboardList, CreditCard, HandCoins, Ruler, Settings2, ShieldCheck, Truck, Users } from "lucide-react";
-import { getSession } from "@/lib/auth/session";
+import { requirePageSession } from "@/lib/auth/guards";
 import { CadastrosNav } from "./_components/cadastros-nav";
 
 export const dynamic = "force-dynamic";
@@ -58,15 +57,7 @@ const modules = [
 ];
 
 export default async function CadastrosPage() {
-  const session = await getSession();
-
-  if (!session) {
-    redirect("/login?next=/cadastros");
-  }
-
-  if (!session.permissions.includes("cadastros.manage")) {
-    redirect("/dashboard");
-  }
+  const session = await requirePageSession({ nextPath: "/cadastros", permission: "cadastros.manage" });
 
   return (
     <>

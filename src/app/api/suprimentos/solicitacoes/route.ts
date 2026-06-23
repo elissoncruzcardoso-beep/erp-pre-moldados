@@ -1,20 +1,18 @@
 import { AuditAction, Prisma } from "@prisma/client";
-import { apiConflict, apiError, apiForbidden, apiSuccess, apiUnauthorized, apiValidationError } from "@/lib/api/responses";
-import { getSession } from "@/lib/auth/session";
+import { apiConflict, apiSuccess, apiValidationError, handleApiError } from "@/lib/api/responses";
+import { requireApiSession } from "@/lib/auth/guards";
 import { makeSupplySequentialCode } from "@/lib/codes/supply-sequence";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
 import { purchaseRequestSchema } from "@/lib/validations/purchase";
 
 export async function POST(request: Request) {
-  const session = await getSession();
-
-  if (!session) {
-    return apiUnauthorized();
-  }
-
-  if (!session.permissions.includes("suprimentos.manage")) {
-    return apiForbidden("Voce nao tem permissao para criar solicitacoes.");
-  }
+  const auth = await requireApiSession({
+    permission: "suprimentos.manage",
+    forbiddenMessage: "Voce nao tem permissao para criar solicitacoes."
+  });
+  if (auth.response) return auth.response;
+  const { session } = auth;
 
   const body = await request.json().catch(() => null);
   const parsed = purchaseRequestSchema.safeParse(body);
@@ -27,7 +25,7 @@ export async function POST(request: Request) {
   const prisma = getPrisma();
 
   try {
-    const requestRecord = await prisma.$transaction(async (tx) => {
+    const requestRecord = await serializableTransaction(prisma, async (tx) => {
       const created = await tx.purchaseRequest.create({
         data: {
           number: await makeSupplySequentialCode(tx, "SC"),
@@ -84,6 +82,15 @@ export async function POST(request: Request) {
       return apiConflict("Ja existe uma solicitacao com este numero.");
     }
 
-    return apiError("Nao foi possivel criar a solicitacao.", { status: 500 });
+    return handleApiError(error, "Nao foi possivel criar a solicitacao.", {
+      context: {
+        request,
+        module: "Suprimentos",
+        action: "criar_solicitacao",
+        userId: session.userId,
+        entity: "PurchaseRequest"
+      },
+      event: "purchase_request_create_error"
+    });
   }
 }

@@ -2,6 +2,7 @@ import { AccountReceivableStatus, AuditAction, Prisma } from "@prisma/client";
 import { apiError, apiSuccess, apiValidationError, handleApiError } from "@/lib/api/responses";
 import { requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
 import { accountReceiptReversalSchema } from "@/lib/validations/purchase";
 
 type RouteContext = {
@@ -39,7 +40,7 @@ export async function DELETE(request: Request, context: RouteContext) {
   const prisma = getPrisma();
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await serializableTransaction(prisma, async (tx) => {
       const receipt = await tx.accountReceipt.findUnique({
         where: { id },
         include: {
@@ -109,6 +110,15 @@ export async function DELETE(request: Request, context: RouteContext) {
       return apiError("Baixa financeira nao encontrada.", { status: 404, code: "NOT_FOUND" });
     }
 
-    return handleApiError(error, "Nao foi possivel estornar a baixa financeira.");
+    return handleApiError(error, "Nao foi possivel estornar a baixa financeira.", {
+      context: {
+        request,
+        module: "Financeiro",
+        action: "estornar_recebimento",
+        userId: auth.session.userId,
+        entity: "AccountReceipt"
+      },
+      event: "account_receipt_reversal_error"
+    });
   }
 }

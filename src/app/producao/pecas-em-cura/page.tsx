@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { ClipboardEdit, Hourglass, PackageCheck, ShieldCheck, TimerReset } from "lucide-react";
-import { getSession } from "@/lib/auth/session";
+import { requirePageSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
 import { decimalToNumber, formatQuantity } from "@/lib/formatters";
 import { autoReleaseCuredBatches } from "@/lib/production/auto-release-cured-batches";
@@ -34,15 +33,7 @@ function firstParam(params: Record<string, string | string[] | undefined>, key: 
 }
 
 export default async function PecasEmCuraPage({ searchParams }: PageProps) {
-  const session = await getSession();
-
-  if (!session) {
-    redirect("/login?next=/producao/pecas-em-cura");
-  }
-
-  if (!session.permissions.includes("producao.view")) {
-    redirect("/dashboard");
-  }
+  const session = await requirePageSession({ nextPath: "/producao/pecas-em-cura", permission: "producao.view" });
 
   const prisma = getPrisma();
   if (session.permissions.includes("producao.manage")) {

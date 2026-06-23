@@ -1,10 +1,10 @@
-import { redirect } from "next/navigation";
 import { Boxes, ClipboardList, Factory, Plus, Ruler, ShieldCheck } from "lucide-react";
-import { getSession } from "@/lib/auth/session";
+import { requirePageSession } from "@/lib/auth/guards";
 import { PaginationControls } from "@/components/pagination-controls";
 import { getPrisma } from "@/lib/db/prisma";
 import { decimalToNumber, formatQuantity } from "@/lib/formatters";
 import { getPaginationMeta, parsePagination, type SearchParamsLike } from "@/lib/pagination";
+import { FORM_OPTION_LIMIT } from "@/lib/query-limits";
 import { CompositionActions } from "./composition-actions";
 
 export const dynamic = "force-dynamic";
@@ -22,15 +22,7 @@ type ProdutosPageProps = {
 };
 
 export default async function ProdutosPage({ searchParams }: ProdutosPageProps) {
-  const session = await getSession();
-
-  if (!session) {
-    redirect("/login?next=/produtos");
-  }
-
-  if (!session.permissions.includes("produtos.manage")) {
-    redirect("/dashboard");
-  }
+  const session = await requirePageSession({ nextPath: "/produtos", permission: "produtos.manage" });
 
   const prisma = getPrisma();
   const params = (await searchParams) || {};
@@ -117,7 +109,8 @@ export default async function ProdutosPage({ searchParams }: ProdutosPageProps) 
         },
         orders: true
       },
-      orderBy: { code: "asc" }
+      orderBy: { code: "asc" },
+      take: FORM_OPTION_LIMIT
     })
   ]);
 

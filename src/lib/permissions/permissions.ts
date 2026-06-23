@@ -1,4 +1,6 @@
 export const permissions = [
+  { key: "usuarios.grant_admin", module: "Usuarios", description: "Conceder ou manter perfil Administrador" },
+  { key: "manutencao.cleanup", module: "Manutencao", description: "Executar limpezas destrutivas de implantacao" },
   { key: "dashboard.view", module: "Dashboard", description: "Visualizar dashboard operacional" },
   { key: "diretoria.view", module: "Diretoria", description: "Visualizar painéis executivos" },
   { key: "usuarios.manage", module: "Usuários", description: "Criar e alterar usuários e perfis" },

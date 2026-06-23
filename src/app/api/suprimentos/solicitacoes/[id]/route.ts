@@ -1,7 +1,8 @@
 import { AuditAction, Prisma } from "@prisma/client";
-import { apiConflict, apiError, apiForbidden, apiSuccess, apiUnauthorized, apiValidationError } from "@/lib/api/responses";
-import { getSession } from "@/lib/auth/session";
+import { apiConflict, apiError, apiSuccess, apiValidationError, handleApiError } from "@/lib/api/responses";
+import { requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
 import { purchaseRequestSchema } from "@/lib/validations/purchase";
 
 type RouteContext = {
@@ -13,15 +14,12 @@ function isRequestStatusLocked(status: string) {
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
-  const session = await getSession();
-
-  if (!session) {
-    return apiUnauthorized();
-  }
-
-  if (!session.permissions.includes("suprimentos.manage")) {
-    return apiForbidden("Voce nao tem permissao para editar solicitacoes.");
-  }
+  const auth = await requireApiSession({
+    permission: "suprimentos.manage",
+    forbiddenMessage: "Voce nao tem permissao para editar solicitacoes."
+  });
+  if (auth.response) return auth.response;
+  const { session } = auth;
 
   const body = await request.json().catch(() => null);
   const parsed = purchaseRequestSchema.safeParse(body);
@@ -35,7 +33,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   const prisma = getPrisma();
 
   try {
-    const requestRecord = await prisma.$transaction(async (tx) => {
+    const requestRecord = await serializableTransaction(prisma, async (tx) => {
       const current = await tx.purchaseRequest.findUnique({
         where: { id },
         include: {
@@ -116,26 +114,32 @@ export async function PATCH(request: Request, context: RouteContext) {
       return apiConflict("Ja existe uma solicitacao com este numero.");
     }
 
-    return apiError("Nao foi possivel editar a solicitacao.", { status: 500 });
+    return handleApiError(error, "Nao foi possivel editar a solicitacao.", {
+      context: {
+        request,
+        module: "Suprimentos",
+        action: "editar_solicitacao",
+        userId: session.userId,
+        entity: "PurchaseRequest"
+      },
+      event: "purchase_request_update_error"
+    });
   }
 }
 
-export async function DELETE(_request: Request, context: RouteContext) {
-  const session = await getSession();
-
-  if (!session) {
-    return apiUnauthorized();
-  }
-
-  if (!session.permissions.includes("suprimentos.manage")) {
-    return apiForbidden("Voce nao tem permissao para excluir solicitacoes.");
-  }
+export async function DELETE(request: Request, context: RouteContext) {
+  const auth = await requireApiSession({
+    permission: "suprimentos.manage",
+    forbiddenMessage: "Voce nao tem permissao para excluir solicitacoes."
+  });
+  if (auth.response) return auth.response;
+  const { session } = auth;
 
   const { id } = await context.params;
   const prisma = getPrisma();
 
   try {
-    await prisma.$transaction(async (tx) => {
+    await serializableTransaction(prisma, async (tx) => {
       const current = await tx.purchaseRequest.findUnique({
         where: { id },
         include: {
@@ -184,6 +188,15 @@ export async function DELETE(_request: Request, context: RouteContext) {
       return apiConflict("Solicitacao com cotacao ou pedido nao pode ser excluida.");
     }
 
-    return apiError("Nao foi possivel excluir a solicitacao.", { status: 500 });
+    return handleApiError(error, "Nao foi possivel excluir a solicitacao.", {
+      context: {
+        request,
+        module: "Suprimentos",
+        action: "excluir_solicitacao",
+        userId: session.userId,
+        entity: "PurchaseRequest"
+      },
+      event: "purchase_request_delete_error"
+    });
   }
 }

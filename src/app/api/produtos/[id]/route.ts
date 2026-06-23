@@ -4,7 +4,9 @@ import { apiConflict, apiError, apiSuccess, apiValidationError, handleApiError }
 import { requireApiSession } from "@/lib/auth/guards";
 import { normalizeManualCode } from "@/lib/codes/auto-code";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
 import { calculateBatchReadyAt } from "@/lib/production/auto-release-cured-batches";
+import { MAINTENANCE_BATCH_LIMIT } from "@/lib/query-limits";
 import { itemTypeSchema } from "@/lib/validations/product";
 
 type RouteContext = {
@@ -45,7 +47,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   const input = parsed.data;
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await serializableTransaction(prisma, async (tx) => {
       const current = await tx.item.findUnique({ where: { id } });
 
       if (!current) {
@@ -78,25 +80,40 @@ export async function PATCH(request: Request, context: RouteContext) {
         data
       });
 
-      const openBatches = await tx.productionBatch.findMany({
-        where: {
-          itemId: id,
-          status: { in: ["EM_CURA", "RETIRADA_PARCIAL"] },
-          autoStockedAt: null
-        },
-        select: {
-          id: true,
-          producedAt: true
-        }
-      });
+      let recalculatedOpenBatches = 0;
+      let cursor: string | undefined;
 
-      for (const batch of openBatches) {
-        await tx.productionBatch.update({
-          where: { id: batch.id },
-          data: {
-            readyAt: calculateBatchReadyAt(batch.producedAt, item.curingHours)
-          }
+      while (true) {
+        const openBatches = await tx.productionBatch.findMany({
+          where: {
+            itemId: id,
+            status: { in: ["EM_CURA", "RETIRADA_PARCIAL"] },
+            autoStockedAt: null
+          },
+          select: {
+            id: true,
+            producedAt: true
+          },
+          orderBy: { id: "asc" },
+          ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+          take: MAINTENANCE_BATCH_LIMIT
         });
+
+        if (openBatches.length === 0) {
+          break;
+        }
+
+        for (const batch of openBatches) {
+          await tx.productionBatch.update({
+            where: { id: batch.id },
+            data: {
+              readyAt: calculateBatchReadyAt(batch.producedAt, item.curingHours)
+            }
+          });
+        }
+
+        recalculatedOpenBatches += openBatches.length;
+        cursor = openBatches.at(-1)?.id;
       }
 
       await tx.auditLog.create({
@@ -119,12 +136,12 @@ export async function PATCH(request: Request, context: RouteContext) {
             type: item.type,
             active: item.active,
             curingHours: item.curingHours,
-            recalculatedOpenBatches: openBatches.length
+            recalculatedOpenBatches
           }
         }
       });
 
-      return { item, recalculatedOpenBatches: openBatches.length };
+      return { item, recalculatedOpenBatches };
     });
 
     return apiSuccess(result);
@@ -133,11 +150,20 @@ export async function PATCH(request: Request, context: RouteContext) {
       return apiConflict("Ja existe um produto com este codigo.");
     }
 
-    return handleApiError(error, "Nao foi possivel atualizar o produto.");
+    return handleApiError(error, "Nao foi possivel atualizar o produto.", {
+      context: {
+        request,
+        module: "Produtos",
+        action: "atualizar_produto",
+        userId: auth.session.userId,
+        entity: "Item"
+      },
+      event: "product_update_error"
+    });
   }
 }
 
-export async function DELETE(_request: Request, context: RouteContext) {
+export async function DELETE(request: Request, context: RouteContext) {
   const auth = await requireApiSession({
     anyPermission: ["produtos.manage", "cadastros.manage"],
     forbiddenMessage: "Voce nao tem permissao para alterar produtos."
@@ -216,6 +242,15 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
     return apiSuccess({ deleted: true, mode: "delete" });
   } catch (error) {
-    return handleApiError(error, "Nao foi possivel excluir ou inativar o produto.");
+    return handleApiError(error, "Nao foi possivel excluir ou inativar o produto.", {
+      context: {
+        request,
+        module: "Produtos",
+        action: "excluir_ou_inativar_produto",
+        userId: auth.session.userId,
+        entity: "Item"
+      },
+      event: "product_delete_error"
+    });
   }
 }

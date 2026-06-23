@@ -1,8 +1,9 @@
 import { AuditAction, Prisma } from "@prisma/client";
-import { apiConflict, apiError, apiSuccess, apiValidationError } from "@/lib/api/responses";
+import { apiConflict, apiSuccess, apiValidationError, handleApiError } from "@/lib/api/responses";
 import { requireApiSession } from "@/lib/auth/guards";
 import { makeAutomaticCode, normalizeManualCode } from "@/lib/codes/auto-code";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
 import { productionOrderSchema } from "@/lib/validations/production";
 
 const defaultStages = [
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
   const input = parsed.data;
 
   try {
-    const order = await prisma.$transaction(async (tx) => {
+    const order = await serializableTransaction(prisma, async (tx) => {
       if (input.compositionId) {
         const composition = await tx.composition.findUnique({
           where: { id: input.compositionId },
@@ -103,7 +104,21 @@ export async function POST(request: Request) {
       return apiConflict("Ja existe uma OP com este numero.");
     }
 
-    const message = error instanceof Error ? error.message : "Nao foi possivel criar a ordem de producao.";
-    return apiError(message, { status: 400 });
+    const rawMessage = error instanceof Error ? error.message : "";
+    const message =
+      rawMessage === "A ficha tecnica selecionada nao pertence ao produto da OP." ||
+      rawMessage.startsWith("A ficha tecnica ")
+        ? rawMessage
+        : "Nao foi possivel criar a ordem de producao.";
+    return handleApiError(error, message, {
+      context: {
+        request,
+        module: "Producao",
+        action: "criar_ordem",
+        userId: auth.session.userId,
+        entity: "ProductionOrder"
+      },
+      event: "production_order_error"
+    });
   }
 }

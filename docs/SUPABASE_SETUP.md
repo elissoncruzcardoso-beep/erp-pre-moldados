@@ -19,6 +19,7 @@ Recomendação:
 
 - `DATABASE_URL`: usar connection pooler quando formos rodar em produção/Vercel.
 - `DIRECT_URL`: usar conexão direta para migrations.
+- `npm.cmd run security:check-env` bloqueia `DATABASE_URL` direto do Supabase em ambiente Vercel.
 
 Exemplo:
 

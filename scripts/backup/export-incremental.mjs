@@ -7,6 +7,13 @@ import { pipeline } from "node:stream/promises";
 import { Client } from "pg";
 
 const root = process.cwd();
+const args = process.argv.slice(2);
+
+function getArg(name, fallback = undefined) {
+  const index = args.indexOf(name);
+  if (index === -1) return fallback;
+  return args[index + 1] || fallback;
+}
 
 function loadDotEnv(file = ".env") {
   const envPath = path.join(root, file);
@@ -48,7 +55,7 @@ function s3Path(...parts) {
     .join("/");
 }
 
-loadDotEnv();
+loadDotEnv(getArg("--env-file", ".env"));
 
 const databaseUrl = process.env.BACKUP_DATABASE_URL || process.env.DIRECT_URL || process.env.DATABASE_URL;
 if (!databaseUrl) {

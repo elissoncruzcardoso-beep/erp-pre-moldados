@@ -1,40 +1,10 @@
 import { AuditAction, Prisma } from "@prisma/client";
-import { apiError, apiSuccess, apiValidationError } from "@/lib/api/responses";
+import { apiSuccess, apiValidationError, handleApiError } from "@/lib/api/responses";
 import { requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
+import { increaseStockBalance } from "@/lib/stock/transactions";
 import { productionBatchReleaseSchema } from "@/lib/validations/production";
-
-async function addFinishedGoodsBalance(
-  tx: Prisma.TransactionClient,
-  itemId: string,
-  warehouseId: string,
-  lotId: string,
-  quantity: Prisma.Decimal
-) {
-  const currentBalance = await tx.stockBalance.findFirst({
-    where: {
-      itemId,
-      warehouseId,
-      lotId
-    }
-  });
-
-  if (currentBalance) {
-    return tx.stockBalance.update({
-      where: { id: currentBalance.id },
-      data: { quantity: currentBalance.quantity.plus(quantity) }
-    });
-  }
-
-  return tx.stockBalance.create({
-    data: {
-      itemId,
-      warehouseId,
-      lotId,
-      quantity
-    }
-  });
-}
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireApiSession({
@@ -56,7 +26,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const input = parsed.data;
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await serializableTransaction(prisma, async (tx) => {
       const batch = await tx.productionBatch.findUnique({
         where: { id },
         include: {
@@ -113,7 +83,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         }
       });
 
-      await addFinishedGoodsBalance(tx, batch.itemId, finishedWarehouse.id, productionLot.id, releaseQuantity);
+      await increaseStockBalance(tx, batch.itemId, finishedWarehouse.id, releaseQuantity, productionLot.id);
 
       await tx.stockMovement.create({
         data: {
@@ -159,7 +129,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     return apiSuccess({ batch: result });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Nao foi possivel liberar o lote.";
-    return apiError(message, { status: 400 });
+    const messages: Record<string, string> = {
+      "Lote invalido para liberacao.": "Lote invalido para liberacao.",
+      "Quantidade liberada maior que a quantidade em cura.": "Quantidade liberada maior que a quantidade em cura.",
+      "Deposito de produto acabado PA nao encontrado ou inativo.": "Deposito de produto acabado PA nao encontrado ou inativo."
+    };
+    const message =
+      error instanceof Error && messages[error.message]
+        ? messages[error.message]
+        : "Nao foi possivel liberar o lote.";
+    return handleApiError(error, message, {
+      context: {
+        request,
+        module: "Producao",
+        action: "liberar_lote",
+        userId: auth.session.userId,
+        entity: "ProductionBatch"
+      },
+      event: "production_batch_release_error"
+    });
   }
 }

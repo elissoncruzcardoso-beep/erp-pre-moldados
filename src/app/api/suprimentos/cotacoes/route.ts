@@ -2,27 +2,23 @@ import { AuditAction, Prisma } from "@prisma/client";
 import {
   apiConflict,
   apiError,
-  apiForbidden,
   apiSuccess,
-  apiUnauthorized,
   apiValidationError,
   handleApiError
 } from "@/lib/api/responses";
-import { getSession } from "@/lib/auth/session";
+import { requireApiSession } from "@/lib/auth/guards";
 import { makeSupplySequentialCode } from "@/lib/codes/supply-sequence";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
 import { purchaseQuoteSchema } from "@/lib/validations/purchase";
 
 export async function POST(request: Request) {
-  const session = await getSession();
-
-  if (!session) {
-    return apiUnauthorized();
-  }
-
-  if (!session.permissions.includes("suprimentos.manage")) {
-    return apiForbidden("Voce nao tem permissao para criar cotacoes.");
-  }
+  const auth = await requireApiSession({
+    permission: "suprimentos.manage",
+    forbiddenMessage: "Voce nao tem permissao para criar cotacoes."
+  });
+  if (auth.response) return auth.response;
+  const { session } = auth;
 
   const body = await request.json().catch(() => null);
   const parsed = purchaseQuoteSchema.safeParse(body);
@@ -35,7 +31,7 @@ export async function POST(request: Request) {
   const prisma = getPrisma();
 
   try {
-    const quote = await prisma.$transaction(async (tx) => {
+    const quote = await serializableTransaction(prisma, async (tx) => {
       const requestRecord = await tx.purchaseRequest.findUnique({
         where: { id: input.purchaseRequestId },
         include: { items: true }
@@ -145,6 +141,15 @@ export async function POST(request: Request) {
       return apiConflict("Ja existe uma cotacao com este numero.");
     }
 
-    return handleApiError(error, "Nao foi possivel criar a cotacao.");
+    return handleApiError(error, "Nao foi possivel criar a cotacao.", {
+      context: {
+        request,
+        module: "Suprimentos",
+        action: "criar_cotacao",
+        userId: session.userId,
+        entity: "PurchaseQuote"
+      },
+      event: "purchase_quote_create_error"
+    });
   }
 }

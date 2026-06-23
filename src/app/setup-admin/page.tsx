@@ -3,7 +3,11 @@ import { KeyRound } from "lucide-react";
 import { SetupAdminForm } from "./setup-admin-form";
 
 export default function SetupAdminPage() {
-  if (process.env.NODE_ENV === "production") {
+  if (
+    process.env.NODE_ENV === "production" ||
+    process.env.ADMIN_SETUP_ENABLED !== "true" ||
+    !process.env.ADMIN_SETUP_SECRET
+  ) {
     notFound();
   }
 

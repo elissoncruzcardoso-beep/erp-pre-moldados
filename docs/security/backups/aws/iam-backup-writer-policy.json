@@ -1,0 +1,43 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ListOnlyBackupPrefix",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket",
+        "s3:GetBucketLocation",
+        "s3:GetBucketVersioning",
+        "s3:GetBucketPublicAccessBlock",
+        "s3:GetEncryptionConfiguration",
+        "s3:GetBucketPolicy",
+        "s3:GetLifecycleConfiguration",
+        "s3:GetObjectLockConfiguration"
+      ],
+      "Resource": "arn:aws:s3:::SEU_BUCKET_BACKUP",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": [
+            "precast-erp/postgres/*",
+            "precast-erp/incremental/*",
+            "precast-erp/state/*"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "WriteAndReadOnlyBackupObjects",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:GetObjectVersion"
+      ],
+      "Resource": [
+        "arn:aws:s3:::SEU_BUCKET_BACKUP/precast-erp/postgres/*",
+        "arn:aws:s3:::SEU_BUCKET_BACKUP/precast-erp/incremental/*",
+        "arn:aws:s3:::SEU_BUCKET_BACKUP/precast-erp/state/*"
+      ]
+    }
+  ]
+}

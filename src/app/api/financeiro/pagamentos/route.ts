@@ -1,19 +1,17 @@
 import { AuditAction, Prisma } from "@prisma/client";
-import { apiForbidden, apiSuccess, apiUnauthorized, apiValidationError, handleApiError } from "@/lib/api/responses";
-import { getSession } from "@/lib/auth/session";
+import { apiSuccess, apiValidationError, handleApiError } from "@/lib/api/responses";
+import { requireApiSession } from "@/lib/auth/guards";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
 import { accountPaymentSchema } from "@/lib/validations/purchase";
 
 export async function POST(request: Request) {
-  const session = await getSession();
-
-  if (!session) {
-    return apiUnauthorized();
-  }
-
-  if (!session.permissions.includes("financeiro.manage")) {
-    return apiForbidden("Voce nao tem permissao para baixar contas a pagar.");
-  }
+  const auth = await requireApiSession({
+    permission: "financeiro.manage",
+    forbiddenMessage: "Voce nao tem permissao para baixar contas a pagar."
+  });
+  if (auth.response) return auth.response;
+  const { session } = auth;
 
   const body = await request.json().catch(() => null);
   const parsed = accountPaymentSchema.safeParse(body);
@@ -27,7 +25,7 @@ export async function POST(request: Request) {
   const prisma = getPrisma();
 
   try {
-    const payment = await prisma.$transaction(async (tx) => {
+    const payment = await serializableTransaction(prisma, async (tx) => {
       const payable = await tx.accountPayable.findUnique({
         where: { id: input.accountPayableId },
         include: {
@@ -114,8 +112,20 @@ export async function POST(request: Request) {
       PAYMENT_EXCEEDS_BALANCE: "Valor pago ultrapassa o saldo do titulo."
     };
 
-    const message = error instanceof Error ? messages[error.message] || error.message : "Nao foi possivel registrar o pagamento.";
+    const message =
+      error instanceof Error && messages[error.message]
+        ? messages[error.message]
+        : "Nao foi possivel registrar o pagamento.";
 
-    return handleApiError(new Error(message), "Nao foi possivel registrar o pagamento.");
+    return handleApiError(new Error(message), "Nao foi possivel registrar o pagamento.", {
+      context: {
+        request,
+        module: "Financeiro",
+        action: "registrar_pagamento",
+        userId: session.userId,
+        entity: "AccountPayment"
+      },
+      event: "account_payment_error"
+    });
   }
 }

@@ -1,48 +1,16 @@
-import { AuditAction, Prisma, type Warehouse } from "@prisma/client";
+import { AuditAction, Prisma } from "@prisma/client";
 import {
   apiConflict,
-  apiError,
-  apiForbidden,
+  handleApiError,
   apiSuccess,
-  apiUnauthorized,
   apiValidationError
 } from "@/lib/api/responses";
-import { getSession } from "@/lib/auth/session";
+import { requireApiSession } from "@/lib/auth/guards";
 import { makeAutomaticCode, normalizeManualCode } from "@/lib/codes/auto-code";
 import { getPrisma } from "@/lib/db/prisma";
+import { serializableTransaction } from "@/lib/db/transactions";
+import { increaseStockBalance } from "@/lib/stock/transactions";
 import { purchaseReceiptBatchSchema, purchaseReceiptSchema } from "@/lib/validations/purchase";
-
-async function addBalance(
-  tx: Prisma.TransactionClient,
-  itemId: string,
-  warehouseId: string,
-  quantity: Prisma.Decimal,
-  lotId: string | null
-) {
-  const currentBalance = await tx.stockBalance.findFirst({
-    where: {
-      itemId,
-      warehouseId,
-      lotId
-    }
-  });
-
-  if (currentBalance) {
-    return tx.stockBalance.update({
-      where: { id: currentBalance.id },
-      data: { quantity: currentBalance.quantity.plus(quantity) }
-    });
-  }
-
-  return tx.stockBalance.create({
-    data: {
-      itemId,
-      warehouseId,
-      lotId,
-      quantity
-    }
-  });
-}
 
 function makeReceiptStatus(receivedQuantity: Prisma.Decimal, acceptedQuantity: Prisma.Decimal) {
   return acceptedQuantity.lessThan(receivedQuantity) ? "DIVERGENTE" : "LIBERADO_ESTOQUE";
@@ -62,7 +30,8 @@ function getPaymentDays(paymentTerms?: string | null) {
 async function updateOrderReceiptStatus(tx: Prisma.TransactionClient, purchaseOrderId: string) {
   const allOrderItems = await tx.purchaseOrderItem.findMany({
     where: { purchaseOrderId },
-    include: { receipts: true }
+    include: { receipts: true },
+    take: 500
   });
 
   const everyItemComplete = allOrderItems.every((item) => {
@@ -143,15 +112,12 @@ async function createPayableFromReceipt(
 }
 
 export async function POST(request: Request) {
-  const session = await getSession();
-
-  if (!session) {
-    return apiUnauthorized();
-  }
-
-  if (!session.permissions.includes("suprimentos.manage") || !session.permissions.includes("estoque.move")) {
-    return apiForbidden("Voce precisa de permissao de Suprimentos e Estoque para receber pedido.");
-  }
+  const auth = await requireApiSession({
+    permissions: ["suprimentos.manage", "estoque.move"],
+    forbiddenMessage: "Voce precisa de permissao de Suprimentos e Estoque para receber pedido."
+  });
+  if (auth.response) return auth.response;
+  const { session } = auth;
 
   const body = await request.json().catch(() => null);
 
@@ -166,7 +132,7 @@ export async function POST(request: Request) {
     const prisma = getPrisma();
 
     try {
-      const receipts = await prisma.$transaction(async (tx) => {
+      const receipts = await serializableTransaction(prisma, async (tx) => {
         const order = await tx.purchaseOrder.findUnique({
           where: { id: input.purchaseOrderId },
           include: {
@@ -255,10 +221,10 @@ export async function POST(request: Request) {
           const totalCost = acceptedQuantity.mul(unitCost);
           const receiptNumber = `${(input.receiptPrefix || makeAutomaticCode("REC")).trim().toUpperCase()}-${String(index + 1).padStart(2, "0")}`.slice(0, 40);
 
-          await addBalance(
+          await increaseStockBalance(
             tx,
             orderItem.itemId,
-            (warehouse as Warehouse).id,
+            warehouse.id,
             acceptedQuantity,
             lotId
           );
@@ -359,9 +325,21 @@ export async function POST(request: Request) {
         RECEIPT_EXCEEDS_ORDER: "Quantidade aceita ultrapassa o saldo pendente do pedido."
       };
 
-      const message = error instanceof Error ? messages[error.message] || error.message : "Nao foi possivel registrar a nota fiscal.";
+      const message =
+        error instanceof Error && messages[error.message]
+          ? messages[error.message]
+          : "Nao foi possivel registrar a nota fiscal.";
 
-      return apiError(message, { status: 400 });
+      return handleApiError(error, message, {
+        context: {
+          request,
+          module: "Suprimentos",
+          action: "registrar_nota_fiscal_compra",
+          userId: session.userId,
+          entity: "PurchaseReceipt"
+        },
+        event: "purchase_receipt_batch_error"
+      });
     }
   }
 
@@ -382,7 +360,7 @@ export async function POST(request: Request) {
   const prisma = getPrisma();
 
   try {
-    const receipt = await prisma.$transaction(async (tx) => {
+    const receipt = await serializableTransaction(prisma, async (tx) => {
       const orderItem = await tx.purchaseOrderItem.findUnique({
         where: { id: input.purchaseOrderItemId },
         include: {
@@ -454,10 +432,10 @@ export async function POST(request: Request) {
       const totalCost = acceptedQuantity.mul(unitCost);
       const receiptNumber = normalizeManualCode(input.number) || makeAutomaticCode("REC");
 
-      await addBalance(
+      await increaseStockBalance(
         tx,
         orderItem.itemId,
-        (warehouse as Warehouse).id,
+        warehouse.id,
         acceptedQuantity,
         lotId
       );
@@ -551,8 +529,20 @@ export async function POST(request: Request) {
       RECEIPT_EXCEEDS_ORDER: "Quantidade aceita ultrapassa o saldo pendente do pedido."
     };
 
-    const message = error instanceof Error ? messages[error.message] || error.message : "Nao foi possivel registrar o recebimento.";
+    const message =
+      error instanceof Error && messages[error.message]
+        ? messages[error.message]
+        : "Nao foi possivel registrar o recebimento.";
 
-    return apiError(message, { status: 400 });
+    return handleApiError(error, message, {
+      context: {
+        request,
+        module: "Suprimentos",
+        action: "registrar_recebimento",
+        userId: session.userId,
+        entity: "PurchaseReceipt"
+      },
+      event: "purchase_receipt_create_error"
+    });
   }
 }

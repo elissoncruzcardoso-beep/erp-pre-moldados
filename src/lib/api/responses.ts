@@ -1,11 +1,27 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
+import { logApiError } from "@/lib/observability/api-logger";
 
 type ApiErrorOptions = {
   status?: number;
   code?: string;
   details?: unknown;
+};
+
+type ApiErrorLogContext = {
+  request?: Request;
+  requestId?: string;
+  module: string;
+  action: string;
+  userId?: string | null;
+  entity?: string;
+};
+
+type HandleApiErrorOptions = {
+  context?: ApiErrorLogContext;
+  event?: string;
+  status?: number;
 };
 
 export function apiError(message: string, options: ApiErrorOptions = {}) {
@@ -40,7 +56,11 @@ export function apiConflict(message: string) {
   return apiError(message, { status: 409, code: "CONFLICT" });
 }
 
-export function handleApiError(error: unknown, fallback = "Nao foi possivel concluir a operacao.") {
+export function handleApiError(
+  error: unknown,
+  fallback = "Nao foi possivel concluir a operacao.",
+  options: HandleApiErrorOptions = {}
+) {
   if (error instanceof ZodError) {
     return apiValidationError(fallback, error.flatten());
   }
@@ -51,6 +71,13 @@ export function handleApiError(error: unknown, fallback = "Nao foi possivel conc
     }
   }
 
-  const message = error instanceof Error ? error.message : fallback;
-  return apiError(message || fallback, { status: 400 });
+  if (options.context) {
+    logApiError(error, options.event || "api_error", options.context);
+  }
+
+  if (process.env.NODE_ENV !== "production") {
+    console.error(error);
+  }
+
+  return apiError(fallback, { status: options.status || 400 });
 }
