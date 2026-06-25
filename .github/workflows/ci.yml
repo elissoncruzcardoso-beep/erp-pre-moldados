@@ -59,8 +59,8 @@ jobs:
 
       - name: Backup config guard
         env:
-          BACKUP_DATABASE_URL: postgresql://backup:secret@db.example.com:5432/postgres
-          RESTORE_DATABASE_URL: postgresql://restore:secret@db.example.com:5432/precast_erp_restore_ci
+          BACKUP_DATABASE_URL: postgresql://backup:secret@ci-backup.local:5432/postgres
+          RESTORE_DATABASE_URL: postgresql://restore:secret@ci-backup.local:5432/precast_erp_restore_ci
           BACKUP_S3_BUCKET: precast-backups
           BACKUP_S3_PREFIX: precast-erp/postgres
           AWS_REGION: sa-east-1
