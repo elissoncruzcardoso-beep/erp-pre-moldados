@@ -21,8 +21,10 @@ export function resolveBackupEnvFile(explicitValue, {
 export function resolveEnvFilePath(file, {
   root = process.cwd()
 } = {}) {
-  const isWindowsAbsolute = /^[A-Za-z]:[\\/]/.test(file) || /^\\\\/.test(file);
-  return path.isAbsolute(file) || isWindowsAbsolute ? file : path.resolve(root, file);
+  const isWindowsAbsolute = (value) => /^[A-Za-z]:[\\/]/.test(value) || /^\\\\/.test(value);
+  if (path.isAbsolute(file) || isWindowsAbsolute(file)) return file;
+
+  return isWindowsAbsolute(root) ? path.win32.resolve(root, file) : path.resolve(root, file);
 }
 
 export function loadDotEnv(file, {
