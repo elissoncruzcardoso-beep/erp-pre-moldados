@@ -34,7 +34,7 @@ export async function POST(request: Request) {
 
   const email = parsed.data.email.toLowerCase().trim();
   const clientIp = getClientIp(request);
-  const rateLimit = checkLoginRateLimit(clientIp, email);
+  const rateLimit = await checkLoginRateLimit(clientIp, email);
 
   if (!rateLimit.allowed) {
     logApiEvent("auth_login_rate_limited", logContext, "blocked");
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     });
 
     if (!user || user.status !== "ACTIVE" || !user.passwordHash) {
-      registerFailedLogin(clientIp, email);
+      await registerFailedLogin(clientIp, email);
       logApiEvent("auth_login_failed", logContext, "blocked");
       return apiUnauthorized("Acesso nao autorizado.");
     }
@@ -71,12 +71,12 @@ export async function POST(request: Request) {
     const validPassword = verifyPassword(parsed.data.password, user.passwordHash);
 
     if (!validPassword) {
-      registerFailedLogin(clientIp, email);
+      await registerFailedLogin(clientIp, email);
       logApiEvent("auth_login_failed", logContext, "blocked");
       return apiUnauthorized("Acesso nao autorizado.");
     }
 
-    clearFailedLogins(clientIp, email);
+    await clearFailedLogins(clientIp, email);
 
     const permissions = user.role.permissions.map((item) => item.permission.key as PermissionKey);
     const token = createSessionToken({

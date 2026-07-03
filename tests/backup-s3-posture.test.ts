@@ -34,6 +34,16 @@ const versioning = {
   Status: "Enabled"
 };
 
+const lifecycle = {
+  Rules: [{ ID: "daily-retention", Status: "Enabled" }]
+};
+
+const objectLock = {
+  ObjectLockConfiguration: {
+    ObjectLockEnabled: "Enabled"
+  }
+};
+
 const tlsPolicy = {
   Version: "2012-10-17",
   Statement: [
@@ -62,12 +72,8 @@ test("S3 backup posture passes with private encrypted versioned bucket", () => {
     encryption: kmsEncryption,
     versioning,
     policy: tlsPolicy,
-    lifecycle: { Rules: [{ ID: "daily-retention", Status: "Enabled" }] },
-    objectLock: {
-      ObjectLockConfiguration: {
-        ObjectLockEnabled: "Enabled"
-      }
-    }
+    lifecycle,
+    objectLock
   });
 
   assert.equal(report.ok, true);
@@ -81,12 +87,8 @@ test("S3 backup posture evidence is safe and valid after a passing audit", () =>
     encryption: kmsEncryption,
     versioning,
     policy: tlsPolicy,
-    lifecycle: { Rules: [{ ID: "daily-retention", Status: "Enabled" }] },
-    objectLock: {
-      ObjectLockConfiguration: {
-        ObjectLockEnabled: "Enabled"
-      }
-    }
+    lifecycle,
+    objectLock
   });
 
   const evidence = buildS3PostureEvidence(
@@ -115,7 +117,9 @@ test("S3 backup posture blocks public access settings disabled", () => {
     },
     encryption: kmsEncryption,
     versioning,
-    policy: tlsPolicy
+    policy: tlsPolicy,
+    lifecycle,
+    objectLock
   });
 
   assert.equal(report.ok, false);
@@ -128,7 +132,9 @@ test("S3 backup posture blocks missing versioning", () => {
     publicAccessBlock,
     encryption: kmsEncryption,
     versioning: {},
-    policy: tlsPolicy
+    policy: tlsPolicy,
+    lifecycle,
+    objectLock
   });
 
   assert.equal(report.ok, false);
@@ -144,7 +150,9 @@ test("S3 backup posture blocks missing TLS deny policy", () => {
     policy: {
       Version: "2012-10-17",
       Statement: []
-    }
+    },
+    lifecycle,
+    objectLock
   });
 
   assert.equal(report.ok, false);
@@ -220,7 +228,9 @@ test("S3 backup posture warns when using AES256 instead of KMS", () => {
       }
     },
     versioning,
-    policy: tlsPolicy
+    policy: tlsPolicy,
+    lifecycle,
+    objectLock
   });
 
   assert.equal(report.ok, true);

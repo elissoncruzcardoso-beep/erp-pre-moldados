@@ -37,7 +37,7 @@ test("health URL monitor resolves explicit argument before environment", () => {
     args: ["--url", "https://manual.example.com"],
     env: {
       HEALTHCHECK_URL: "https://env.example.com"
-    } as NodeJS.ProcessEnv
+    } as unknown as NodeJS.ProcessEnv
   });
 
   assert.equal(url, "https://manual.example.com/api/health");

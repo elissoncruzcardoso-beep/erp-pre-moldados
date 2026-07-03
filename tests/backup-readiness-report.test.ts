@@ -120,6 +120,7 @@ test("backup readiness report is blocked when external backup config is missing"
       errors: ["BACKUP_S3_BUCKET: ausente"]
     }),
     backupEvidence: validBackupEvidence(),
+    s3PostureEvidence: validS3PostureEvidence(),
     restoreEvidence: validRestoreEvidence(),
     generatedAt: "2026-06-18T12:00:00.000Z"
   });
@@ -133,6 +134,7 @@ test("backup readiness report is blocked when a child check returns no details",
   const report = buildReadinessReport({
     backupConfig: { ok: false },
     backupEvidence: validBackupEvidence(),
+    s3PostureEvidence: validS3PostureEvidence(),
     restoreEvidence: validRestoreEvidence(),
     generatedAt: "2026-06-18T12:00:00.000Z"
   });
@@ -145,6 +147,7 @@ test("backup readiness report is partial when config is ready but restore eviden
   const report = buildReadinessReport({
     backupConfig: validBackupConfig(),
     backupEvidence: validBackupEvidence(),
+    s3PostureEvidence: validS3PostureEvidence(),
     restoreEvidence: {
       ok: false,
       evidencePath: "docs/security/restore-drills/latest.json",
@@ -166,6 +169,7 @@ test("backup readiness report is partial when full backup evidence is missing", 
       evidencePath: "docs/security/backups/latest.json",
       errors: ["evidencia de backup completo ausente"]
     },
+    s3PostureEvidence: validS3PostureEvidence(),
     restoreEvidence: validRestoreEvidence(),
     generatedAt: "2026-06-18T12:00:00.000Z"
   });
@@ -181,6 +185,7 @@ test("backup readiness report blocks if a generated report would leak secrets", 
       backupDatabase: "postgresql://user:password@db.example.com:5432/postgres"
     }),
     backupEvidence: validBackupEvidence(),
+    s3PostureEvidence: validS3PostureEvidence(),
     restoreEvidence: validRestoreEvidence(),
     generatedAt: "2026-06-18T12:00:00.000Z"
   });
