@@ -92,7 +92,8 @@ function Parse-TimeToday {
 }
 
 $projectRoot = Resolve-ProjectPath -PathValue $ProjectPath
-$envFileArg = "-EnvFile `"$EnvFile`""
+$powerShellEnvFileArg = "-EnvFile `"$EnvFile`""
+$nodeEnvFileArg = "--env-file `"$EnvFile`""
 
 if ($IncrementalIntervalMinutes -lt 15) {
   throw "IncrementalIntervalMinutes minimo: 15."
@@ -122,7 +123,7 @@ $fullBackupTrigger = New-ScheduledTaskTrigger -Daily -At (Parse-TimeToday -Value
 $fullBackupAction = New-TaskActionFromNpm `
   -ProjectRoot $projectRoot `
   -ScriptName "backup:full" `
-  -ExtraArgs $envFileArg
+  -ExtraArgs $powerShellEnvFileArg
 
 Register-Or-PreviewTask `
   -Name "$TaskPrefix - Backup completo diario" `
@@ -138,7 +139,7 @@ $incrementalTrigger = New-ScheduledTaskTrigger `
 $incrementalAction = New-TaskActionFromNpm `
   -ProjectRoot $projectRoot `
   -ScriptName "backup:incremental" `
-  -ExtraArgs $envFileArg
+  -ExtraArgs $nodeEnvFileArg
 
 Register-Or-PreviewTask `
   -Name "$TaskPrefix - Backup incremental" `

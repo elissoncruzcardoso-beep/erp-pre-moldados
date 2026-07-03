@@ -34,6 +34,13 @@ estado atual do repositório.
   com Postgres de serviço e `SHADOW_DATABASE_URL`.
 - GitHub Actions `28664320154`: CI verde em `main`, incluindo Prisma migrations
   guard com shadow database, testes e build.
+- `docs/security/BACKUP_DR_RUNBOOK.md`: criado para orientar a configuração
+  segura de backup externo, restore drill e agendamento.
+- `scripts/backup/export-incremental.mjs`: ajustado para respeitar
+  `PRECAST_BACKUP_ENV_FILE`/`BACKUP_ENV_FILE` ou `--env-file`, igual aos demais
+  checks de backup.
+- `scripts/backup/install-windows-backup-tasks.ps1`: ajustado para passar
+  `--env-file` ao job incremental Node e `-EnvFile` ao job PowerShell.
 - `src/lib/auth/rate-limit.ts`: rate limit de login foi migrado para
   armazenamento durável via Prisma/Postgres.
 - `prisma/migrations/20260703000000_add_login_attempts/`: migration criada para
@@ -71,7 +78,8 @@ O cabeçalho da auditoria externa afirma que backup com restore-drill já estava
 resolvido e verificado. No ambiente local atual, isso não foi comprovado:
 `npm run backup:readiness` segue bloqueado. Antes de considerar backup/DR como
 pronto, é necessário configurar as variáveis externas e gerar evidências de
-backup e restore.
+backup e restore. O runbook operacional foi criado, mas a aprovação final
+depende de execução real no servidor/agendador.
 
 ---
 

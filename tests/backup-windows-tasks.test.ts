@@ -30,6 +30,13 @@ test("Windows backup task installer registers all expected backup checks", () =>
   assert.match(script, /--write-evidence/);
 });
 
+test("Windows backup task installer passes env file using the right script conventions", () => {
+  assert.match(script, /\$powerShellEnvFileArg = "-EnvFile/);
+  assert.match(script, /\$nodeEnvFileArg = "--env-file/);
+  assert.match(script, /ScriptName "backup:full"[.\s\S]+ExtraArgs \$powerShellEnvFileArg/);
+  assert.match(script, /ScriptName "backup:incremental"[.\s\S]+ExtraArgs \$nodeEnvFileArg/);
+});
+
 test("Windows backup task installer does not embed secret names or credentials", () => {
   assert.doesNotMatch(script, /AWS_SECRET_ACCESS_KEY\s*=/);
   assert.doesNotMatch(script, /postgresql:\/\/[^"'\s]+:[^@"'\s]+@/);

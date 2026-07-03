@@ -1,10 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { createGzip } from "node:zlib";
-import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createReadStream, createWriteStream, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Client } from "pg";
+import { loadDotEnv, resolveBackupEnvFile } from "./backup-env.mjs";
 
 const root = process.cwd();
 const args = process.argv.slice(2);
@@ -13,23 +14,6 @@ function getArg(name, fallback = undefined) {
   const index = args.indexOf(name);
   if (index === -1) return fallback;
   return args[index + 1] || fallback;
-}
-
-function loadDotEnv(file = ".env") {
-  const envPath = path.join(root, file);
-  if (!existsSync(envPath)) return;
-
-  for (const rawLine of readFileSync(envPath, "utf8").split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) continue;
-
-    const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
-    if (!match) continue;
-
-    const [, key, rawValue] = match;
-    if (process.env[key]) continue;
-    process.env[key] = rawValue.trim().replace(/^['"]|['"]$/g, "");
-  }
 }
 
 function requireEnv(name) {
@@ -55,7 +39,7 @@ function s3Path(...parts) {
     .join("/");
 }
 
-loadDotEnv(getArg("--env-file", ".env"));
+loadDotEnv(resolveBackupEnvFile(getArg("--env-file")));
 
 const databaseUrl = process.env.BACKUP_DATABASE_URL || process.env.DIRECT_URL || process.env.DATABASE_URL;
 if (!databaseUrl) {

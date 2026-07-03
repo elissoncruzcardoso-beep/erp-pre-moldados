@@ -338,3 +338,11 @@ Politicas recomendadas:
 7. Testar restauracao em banco temporario.
 8. Rodar `npm run backup:readiness`.
 9. Depois automatizar agendamento.
+
+## Runbook operacional
+
+O procedimento operacional consolidado fica em:
+
+`docs/security/BACKUP_DR_RUNBOOK.md`
+
+Use esse runbook para executar a primeira configuracao, validar o bucket, fazer o primeiro backup, testar restauracao e instalar as tarefas agendadas.
