@@ -509,6 +509,13 @@ h3 {
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.pagination-actions .mini-button {
+  min-width: 104px;
+  justify-content: center;
 }
 
 .error-boundary-page {
@@ -1758,6 +1765,31 @@ select.form-input {
   width: min(760px, 100%);
 }
 
+.purchase-request-edit-modal {
+  width: min(980px, 100%);
+}
+
+.purchase-request-modal-form {
+  min-width: 0;
+  margin-top: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.purchase-request-modal-form footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.purchase-request-modal-lines {
+  max-height: 46vh;
+  overflow: auto;
+}
+
 .product-hero-panel {
   display: flex;
   justify-content: space-between;
@@ -2637,25 +2669,120 @@ select.form-input {
 
 .composition-record-stack {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .composition-record-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(230px, 280px);
-  gap: 16px;
-  align-items: stretch;
+  grid-template-columns: minmax(0, 1fr) minmax(210px, 240px);
+  gap: 14px;
+  align-items: start;
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 14px;
   background: #fff;
-  padding: 18px;
-  box-shadow: 0 14px 34px rgba(17, 24, 39, 0.07);
+  padding: 14px 16px;
+  box-shadow: 0 10px 26px rgba(17, 24, 39, 0.05);
+}
+
+.composition-record-card.composition-list-row {
+  border-left: 4px solid var(--primary);
 }
 
 .composition-record-main {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
+}
+
+.composition-list-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.composition-list-title {
+  min-width: 0;
+}
+
+.composition-list-title h3 {
+  margin: 3px 0 2px;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.composition-list-meta {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(90px, 1fr));
+  gap: 8px;
+}
+
+.composition-list-meta > div {
+  min-height: 62px;
+  border: 1px solid #d9dee7;
+  border-radius: 10px;
+  background: #f4f7fb;
+  padding: 9px 10px;
+}
+
+.composition-list-meta span,
+.composition-capacity-box span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.composition-list-meta strong,
+.composition-capacity-box strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--text);
+  font-size: 15px;
+}
+
+.composition-items-details {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.composition-items-details summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 900;
+}
+
+.composition-list-side {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.composition-capacity-box {
+  border: 1px solid #d6dce8;
+  border-radius: 12px;
+  background: #f7f8fb;
+  padding: 12px;
+}
+
+.composition-capacity-box strong {
+  font-size: 22px;
+}
+
+.composition-capacity-box small {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
 }
 
 .composition-items-table {
@@ -4852,6 +4979,16 @@ select.form-input {
 
   .composition-product-fields {
     grid-template-columns: 1fr;
+  }
+
+  .composition-list-head,
+  .composition-list-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .composition-items-details summary {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .composition-product-fields .span-wide {

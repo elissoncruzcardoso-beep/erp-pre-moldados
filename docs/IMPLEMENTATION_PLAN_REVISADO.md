@@ -22,6 +22,10 @@ Aplicar somente os conceitos compatíveis:
 - Transições em links, botões e cards clicáveis.
 - `table-shell` com scroll horizontal seguro quando necessário.
 - Proteção de largura mínima em elementos de tabela e painéis.
+- Fichas técnicas em `/produtos` reorganizadas como lista compacta, com consumo técnico recolhido.
+- Edição de composição pela lista de produtos feita por modal centralizado.
+- Edição de solicitações em Suprimentos feita por modal centralizado.
+- Paginação ajustada para preservar o `pageSize` real e evitar retorno para a mesma lista.
 
 ## Não aplicado
 
@@ -29,3 +33,10 @@ Aplicar somente os conceitos compatíveis:
 - Alteração estrutural do layout raiz.
 - Criação de sidebar mobile nova, pois o projeto já possui navegação mobile inferior.
 - Mudança em regras de negócio, dados, APIs ou permissões.
+
+## Padrão mantido
+
+- Tema claro industrial.
+- Fluxos reais já criados para produtos, composições, suprimentos, estoque, vendas e financeiro.
+- Modais apenas para edição iniciada em listas/cards.
+- Páginas próprias continuam existindo quando o fluxo exige cadastro completo.

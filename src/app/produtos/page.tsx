@@ -57,7 +57,8 @@ export default async function ProdutosPage({ searchParams }: ProdutosPageProps) 
 
   const [
     compositions,
-    approvedCapacityCompositions
+    approvedCapacityCompositions,
+    formItems
   ] = await Promise.all([
     prisma.composition.findMany({
       include: {
@@ -111,6 +112,17 @@ export default async function ProdutosPage({ searchParams }: ProdutosPageProps) 
       },
       orderBy: { code: "asc" },
       take: FORM_OPTION_LIMIT
+    }),
+    prisma.item.findMany({
+      include: {
+        unit: true,
+        stockBalances: true
+      },
+      orderBy: [
+        { type: "asc" },
+        { code: "asc" }
+      ],
+      take: FORM_OPTION_LIMIT * 2
     })
   ]);
 
@@ -170,6 +182,25 @@ export default async function ProdutosPage({ searchParams }: ProdutosPageProps) 
   const productiveCapacityCount = productionCapacity.filter((item) => (item.capacity ?? 0) > 0).length;
   const blockedCapacityCount = productionCapacity.filter((item) => (item.capacity ?? 0) <= 0).length;
   const compositionCapacityById = new Map(compositionCapacity.map((item) => [item.id, item]));
+  const compositionFormProducts = formItems
+    .filter((item) => item.type === "PECA_PRE_MOLDADA" || item.type === "PRODUTO_ACABADO")
+    .map((item) => ({
+      id: item.id,
+      code: item.code,
+      description: item.description,
+      unitCode: item.unit.code,
+      curingHours: item.curingHours ?? 24
+    }));
+  const compositionFormMaterials = formItems
+    .filter((item) => item.type === "MATERIA_PRIMA" || item.type === "INSUMO")
+    .map((item) => ({
+      id: item.id,
+      code: item.code,
+      description: item.description,
+      unitCode: item.unit.code,
+      stockQuantity: item.stockBalances.reduce((total, balance) => total + decimalToNumber(balance.quantity), 0),
+      standardCost: decimalToNumber(item.standardCost)
+    }));
 
   const formatCapacity = (capacity: number | null) => {
     if (capacity === null) {
@@ -334,10 +365,10 @@ export default async function ProdutosPage({ searchParams }: ProdutosPageProps) 
           </div>
           <div className="composition-record-stack">
             {compositions.map((composition) => (
-              <article className="composition-record-card" key={composition.id}>
+              <article className="composition-record-card composition-list-row" key={composition.id}>
                 <div className="composition-record-main">
-                  <div className="supply-record-title">
-                    <div>
+                  <div className="composition-list-head">
+                    <div className="composition-list-title">
                       <p className="eyebrow">Ficha tecnica</p>
                       <h3 className="mono">{composition.code}</h3>
                       <span className="metric-sub">{composition.product.code} - {composition.product.description}</span>
@@ -350,7 +381,7 @@ export default async function ProdutosPage({ searchParams }: ProdutosPageProps) 
                     </div>
                   </div>
 
-                  <div className="quote-meta-grid">
+                  <div className="composition-list-meta">
                     <div>
                       <span>Versao</span>
                       <strong>{composition.version} / {composition.revision}</strong>
@@ -367,35 +398,45 @@ export default async function ProdutosPage({ searchParams }: ProdutosPageProps) 
                       <span>Cura</span>
                       <strong>{composition.curingHours ?? composition.product.curingHours}h</strong>
                     </div>
+                    <div>
+                      <span>Insumos</span>
+                      <strong>{composition.items.length}</strong>
+                    </div>
                   </div>
 
-                  <div className="quote-items-table composition-items-table">
-                    <div className="composition-items-row composition-items-head">
-                      <span>Insumo</span>
-                      <span>Qtd.</span>
-                      <span>Perda</span>
-                      <span>Etapa</span>
-                      <span>Saldo</span>
-                    </div>
-                    {composition.items.map((compositionItem) => (
-                      <div className="composition-items-row" key={compositionItem.id}>
-                        <div>
-                          <strong>{compositionItem.item.code}</strong>
-                          <small>{compositionItem.item.description}</small>
-                        </div>
-                        <strong className="mono">{decimalToString(compositionItem.quantity)} {compositionItem.item.unit.code}</strong>
-                        <span className="mono">{decimalToString(compositionItem.lossPercent)}%</span>
-                        <span>{compositionItem.stage || "Sem etapa"}</span>
-                        <span className="mono">
-                          {formatQuantity(compositionItem.item.stockBalances.reduce((total, balance) => total + decimalToNumber(balance.quantity), 0))}
-                        </span>
+                  <details className="composition-items-details">
+                    <summary>
+                      <span>{composition.items.length} insumo(s) da ficha</span>
+                      <span className="metric-sub">Abrir consumo tecnico</span>
+                    </summary>
+                    <div className="quote-items-table composition-items-table">
+                      <div className="composition-items-row composition-items-head">
+                        <span>Insumo</span>
+                        <span>Qtd.</span>
+                        <span>Perda</span>
+                        <span>Etapa</span>
+                        <span>Saldo</span>
                       </div>
-                    ))}
-                  </div>
+                      {composition.items.map((compositionItem) => (
+                        <div className="composition-items-row" key={compositionItem.id}>
+                          <div>
+                            <strong>{compositionItem.item.code}</strong>
+                            <small>{compositionItem.item.description}</small>
+                          </div>
+                          <strong className="mono">{decimalToString(compositionItem.quantity)} {compositionItem.item.unit.code}</strong>
+                          <span className="mono">{decimalToString(compositionItem.lossPercent)}%</span>
+                          <span>{compositionItem.stage || "Sem etapa"}</span>
+                          <span className="mono">
+                            {formatQuantity(compositionItem.item.stockBalances.reduce((total, balance) => total + decimalToNumber(balance.quantity), 0))}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
                 </div>
 
-                <aside className="supply-record-actions">
-                  <div className="quote-total-box">
+                <aside className="composition-list-side">
+                  <div className="composition-capacity-box">
                     <span>Capacidade estimada</span>
                     <strong>{formatCapacity(compositionCapacityById.get(composition.id)?.capacity ?? null)}</strong>
                     <small>Limitada pelo menor saldo de insumo</small>
@@ -403,8 +444,23 @@ export default async function ProdutosPage({ searchParams }: ProdutosPageProps) 
                   <CompositionActions
                     compositionId={composition.id}
                     locked={composition.orders.length > 0}
+                    products={compositionFormProducts}
+                    materials={compositionFormMaterials}
                     editData={{
-                      code: composition.code
+                      code: composition.code,
+                      productId: composition.productId,
+                      version: composition.version,
+                      revision: composition.revision,
+                      baseQuantity: decimalToString(composition.baseQuantity),
+                      expectedLoss: decimalToString(composition.expectedLoss),
+                      curingHours: String(composition.curingHours ?? composition.product.curingHours ?? 24),
+                      approved: composition.approved,
+                      items: composition.items.map((compositionItem) => ({
+                        itemId: compositionItem.itemId,
+                        quantity: decimalToString(compositionItem.quantity),
+                        lossPercent: decimalToString(compositionItem.lossPercent),
+                        stage: compositionItem.stage || ""
+                      }))
                     }}
                   />
                 </aside>

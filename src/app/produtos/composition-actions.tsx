@@ -2,23 +2,28 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2, X } from "lucide-react";
 import { fetchJson, isApiRequestError } from "@/lib/api-client";
-
-type EditData = {
-  code: string;
-};
+import {
+  CompositionForm,
+  type CompositionInitialData,
+  type CompositionMaterialOption,
+  type CompositionProductOption
+} from "./composition-form";
 
 type Props = {
   compositionId: string;
   locked: boolean;
-  editData: EditData;
+  editData: CompositionInitialData;
+  products: CompositionProductOption[];
+  materials: CompositionMaterialOption[];
 };
 
-export function CompositionActions({ compositionId, locked, editData }: Props) {
+export function CompositionActions({ compositionId, locked, editData, products, materials }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState("");
   const [error, setError] = useState("");
+  const [editing, setEditing] = useState(false);
   const isTestComposition = editData.code.startsWith("TEST-COMP-");
   const lockedForActions = locked && !isTestComposition;
 
@@ -46,15 +51,16 @@ export function CompositionActions({ compositionId, locked, editData }: Props) {
   return (
     <div className="quote-action-cell decision-actions">
       <div className="button-row compact-actions">
-        <a
-          className={`secondary-button mini-button${lockedForActions || loading ? " disabled-link" : ""}`}
-          href={lockedForActions || loading ? undefined : `/produtos/composicoes/${compositionId}/editar`}
-          aria-disabled={lockedForActions || Boolean(loading)}
+        <button
+          className="secondary-button mini-button"
+          type="button"
+          onClick={() => setEditing(true)}
+          disabled={lockedForActions || Boolean(loading)}
           title={`Editar ${editData.code}`}
         >
           <Pencil size={15} />
           Editar
-        </a>
+        </button>
         <button className="secondary-button mini-button danger-text" type="button" onClick={deleteComposition} disabled={lockedForActions || Boolean(loading)}>
           <Trash2 size={15} />
           Excluir
@@ -65,6 +71,36 @@ export function CompositionActions({ compositionId, locked, editData }: Props) {
       {locked && isTestComposition ? <small className="metric-sub">Teste: exclusao remove OP vinculada.</small> : null}
       {loading ? <small className="mono">Processando...</small> : null}
       {error ? <small className="action-error">{error}</small> : null}
+
+      {editing ? (
+        <div className="composition-edit-overlay" role="dialog" aria-modal="true" aria-labelledby={`composition-edit-${compositionId}`}>
+          <section className="composition-edit-form composition-edit-modal">
+            <header className="composition-edit-header">
+              <div>
+                <p className="eyebrow">Editar composicao</p>
+                <h2 id={`composition-edit-${compositionId}`} className="mono">{editData.code}</h2>
+              </div>
+              <button className="icon-button" type="button" onClick={() => setEditing(false)} aria-label="Fechar edicao">
+                <X size={18} />
+              </button>
+            </header>
+            <div className="composition-edit-body">
+              <CompositionForm
+                mode="edit"
+                compositionId={compositionId}
+                products={products}
+                materials={materials}
+                initialData={editData}
+                onCancel={() => setEditing(false)}
+                onDone={() => {
+                  setEditing(false);
+                  router.refresh();
+                }}
+              />
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

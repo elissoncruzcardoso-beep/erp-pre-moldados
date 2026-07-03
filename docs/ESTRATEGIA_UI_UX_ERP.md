@@ -20,6 +20,7 @@ Padronizar as telas do ERP para uso corporativo, com foco em leitura rapida, dec
 - Destaque para numero, prioridade e status.
 - Itens em chips compactos.
 - Andamento com quantidade de cotacoes e pedidos.
+- Edicao deve abrir em modal centralizado, mantendo a lista limpa e evitando formularios inline estreitos.
 
 ### Cotacoes
 
@@ -47,9 +48,26 @@ Padronizar as telas do ERP para uso corporativo, com foco em leitura rapida, dec
 
 - Card por peca/produto controlado.
 - Composicao como ficha tecnica vinculada a uma peca.
-- Insumos em linhas internas com quantidade, perda, etapa e saldo disponivel.
+- Fichas tecnicas em lista compacta, com dados principais visiveis e consumo tecnico recolhido.
+- Insumos em linhas internas com quantidade, perda, etapa e saldo disponivel ao abrir `Abrir consumo tecnico`.
 - Capacidade estimada destacada no painel lateral da ficha.
-- Acoes compactas; ficha tecnica usada em ordem de producao fica travada para edicao/exclusao.
+- Acoes compactas; `Editar` na lista abre modal centralizado reutilizando o formulario de composicao.
+- Ficha tecnica usada em ordem de producao fica travada para edicao/exclusao.
+
+### Modais de edicao
+
+- Usar modal centralizado para edicoes iniciadas por listas/cards.
+- Cabecalho com tipo do registro e codigo principal.
+- Conteudo com largura maxima confortavel para desktop e rolagem interna quando necessario.
+- Rodape fixo com acoes `Salvar` e `Cancelar`.
+- Evitar formularios laterais improvisados quando houver muitos campos.
+
+### Paginacao
+
+- Controles devem preservar o `pageSize` real da tela.
+- Links de pagina devem manter os demais filtros da URL.
+- Botoes `Anterior` e `Proxima` devem ter largura minima consistente.
+- Quando houver somente uma pagina, os botoes ficam desabilitados sem mudar a lista.
 
 ## Regras de espacamento
 
@@ -74,3 +92,4 @@ Padronizar as telas do ERP para uso corporativo, com foco em leitura rapida, dec
 - Aplicar o mesmo padrao em estoque, financeiro e producao.
 - Criar componentes compartilhados para `RecordCard`, `MetaGrid`, `ItemChipList` e `ActionPanel`.
 - Reduzir CSS duplicado quando o layout estabilizar.
+- Revisar modais similares em pedidos, notas fiscais, contas a pagar e contas a receber.

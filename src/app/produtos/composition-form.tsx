@@ -30,7 +30,7 @@ type CompositionLine = {
   stage: string;
 };
 
-type CompositionInitialData = {
+export type CompositionInitialData = {
   code: string;
   productId: string;
   version: string;
@@ -48,6 +48,8 @@ type Props = {
   mode?: "create" | "edit";
   compositionId?: string;
   initialData?: CompositionInitialData;
+  onCancel?: () => void;
+  onDone?: () => void;
 };
 
 function makeCompositionCode(product?: CompositionProductOption) {
@@ -59,7 +61,7 @@ function emptyLine(materials: CompositionMaterialOption[]): CompositionLine {
   return { itemId: materials[0]?.id || "", quantity: "", lossPercent: "0", stage: "Concreto" };
 }
 
-export function CompositionForm({ products, materials, mode = "create", compositionId, initialData }: Props) {
+export function CompositionForm({ products, materials, mode = "create", compositionId, initialData, onCancel, onDone }: Props) {
   const router = useRouter();
   const isEdit = mode === "edit";
   const [productId, setProductId] = useState(initialData?.productId || products[0]?.id || "");
@@ -134,6 +136,11 @@ export function CompositionForm({ products, materials, mode = "create", composit
       if (!isEdit) {
         setApproved(false);
         setLines([emptyLine(materials)]);
+      }
+
+      if (onDone) {
+        onDone();
+        return;
       }
 
       router.push("/produtos");
@@ -288,7 +295,13 @@ export function CompositionForm({ products, materials, mode = "create", composit
           Liberar ficha para producao
         </label>
         <div className="button-row">
-          <a className="secondary-button" href="/produtos">Cancelar</a>
+          {onCancel ? (
+            <button className="secondary-button" type="button" onClick={onCancel}>
+              Cancelar
+            </button>
+          ) : (
+            <a className="secondary-button" href="/produtos">Cancelar</a>
+          )}
           <button className="primary-button" type="submit" disabled={loading || products.length === 0 || materials.length === 0}>
             <ClipboardList size={17} />
             {loading ? "Salvando..." : isEdit ? "Salvar alteracoes" : "Salvar"}

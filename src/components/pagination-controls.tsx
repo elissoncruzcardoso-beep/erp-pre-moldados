@@ -17,8 +17,8 @@ export function PaginationControls({
   pageParam = "page",
   pageSizeParam = "pageSize"
 }: PaginationControlsProps) {
-  const previousHref = buildPageHref(pathname, params, meta.page - 1, { pageParam, pageSizeParam });
-  const nextHref = buildPageHref(pathname, params, meta.page + 1, { pageParam, pageSizeParam });
+  const previousHref = buildPageHref(pathname, params, meta.page - 1, { pageParam, pageSizeParam, pageSize: meta.pageSize });
+  const nextHref = buildPageHref(pathname, params, meta.page + 1, { pageParam, pageSizeParam, pageSize: meta.pageSize });
 
   return (
     <nav className="pagination-controls" aria-label="Paginacao">

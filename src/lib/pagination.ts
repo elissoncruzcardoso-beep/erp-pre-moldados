@@ -69,7 +69,7 @@ export function buildPageHref(
   pathname: string,
   params: SearchParamsLike,
   page: number,
-  options: Pick<ParsePaginationOptions, "pageParam" | "pageSizeParam"> = {}
+  options: Pick<ParsePaginationOptions, "pageParam" | "pageSizeParam"> & { pageSize?: number } = {}
 ) {
   const pageParam = options.pageParam || "page";
   const pageSizeParam = options.pageSizeParam || "pageSize";
@@ -83,8 +83,8 @@ export function buildPageHref(
 
   query.set(pageParam, String(page));
 
-  if (!query.has(pageSizeParam)) {
-    query.set(pageSizeParam, "20");
+  if (!query.has(pageSizeParam) && options.pageSize) {
+    query.set(pageSizeParam, String(options.pageSize));
   }
 
   return `${pathname}?${query.toString()}`;

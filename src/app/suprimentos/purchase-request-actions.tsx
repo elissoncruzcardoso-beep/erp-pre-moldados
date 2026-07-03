@@ -144,95 +144,104 @@ export function PurchaseRequestActions({ requestId, locked, items, editData }: P
       </div>
 
       {editing ? (
-        <form className="quote-edit-form" onSubmit={updateRequest}>
-          <div className="receipt-helper">
-            <strong className="mono">{editData.number}</strong>
-            <p>Numero gerado automaticamente. Nao e editavel.</p>
-          </div>
-          <div className="form-two">
-            <label className="field">
-              <span>Prioridade</span>
-              <select className="form-input" name="priority" defaultValue={editData.priority}>
-                <option value="BAIXA">Baixa</option>
-                <option value="NORMAL">Normal</option>
-                <option value="ALTA">Alta</option>
-                <option value="URGENTE">Urgente</option>
-              </select>
-            </label>
-          </div>
-
-          <div className="form-two">
-            <label className="field">
-              <span>Departamento</span>
-              <input className="form-input" name="department" defaultValue={editData.department} maxLength={80} />
-            </label>
-            <label className="field">
-              <span>Centro de custo</span>
-              <input className="form-input" name="costCenter" defaultValue={editData.costCenter} maxLength={80} />
-            </label>
-          </div>
-
-          <div className="form-two">
-            <label className="field">
-              <span>Necessario em</span>
-              <input className="form-input mono" name="neededAt" type="date" defaultValue={editData.neededAt} />
-            </label>
-            <label className="field">
-              <span>Justificativa</span>
-              <input className="form-input" name="justification" defaultValue={editData.justification} maxLength={500} />
-            </label>
-          </div>
-
-          <div className="daily-lines">
-            <div className="metric-top">
-              <span className="mono">Itens</span>
-              <button className="secondary-button mini-button" type="button" onClick={addLine} disabled={items.length === 0}>
-                <Plus size={14} />
-                Item
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby={`purchase-request-edit-${requestId}`}>
+          <section className="controlled-cancel-modal purchase-request-edit-modal">
+            <header>
+              <div>
+                <p className="eyebrow">Editar solicitacao</p>
+                <h2 id={`purchase-request-edit-${requestId}`} className="mono">{editData.number}</h2>
+                <span>Numero gerado automaticamente. Nao e editavel.</span>
+              </div>
+              <button className="icon-button" type="button" onClick={() => setEditing(false)} disabled={Boolean(loading)} aria-label="Fechar edicao">
+                <X size={18} />
               </button>
-            </div>
+            </header>
 
-            {lines.map((line, index) => (
-              <div className="purchase-line" key={`${index}-${line.itemId}`}>
+            <form className="quote-edit-form purchase-request-modal-form" onSubmit={updateRequest}>
+              <div className="form-two">
                 <label className="field">
-                  <span>Item</span>
-                  <select className="form-input" value={line.itemId} onChange={(event) => updateLine(index, "itemId", event.target.value)} required>
-                    {items.map((item) => (
-                      <option value={item.id} key={item.id}>
-                        {item.code} - {item.description} ({item.unitCode})
-                      </option>
-                    ))}
+                  <span>Prioridade</span>
+                  <select className="form-input" name="priority" defaultValue={editData.priority}>
+                    <option value="BAIXA">Baixa</option>
+                    <option value="NORMAL">Normal</option>
+                    <option value="ALTA">Alta</option>
+                    <option value="URGENTE">Urgente</option>
                   </select>
                 </label>
-
                 <label className="field">
-                  <span>Quantidade</span>
-                  <input className="form-input mono" type="number" min="0.001" step="0.001" value={line.quantity} onChange={(event) => updateLine(index, "quantity", event.target.value)} required />
+                  <span>Necessario em</span>
+                  <input className="form-input mono" name="neededAt" type="date" defaultValue={editData.neededAt} />
                 </label>
-
-                <label className="field">
-                  <span>Observacao</span>
-                  <input className="form-input" value={line.note} onChange={(event) => updateLine(index, "note", event.target.value)} maxLength={240} />
-                </label>
-
-                <button className="icon-button daily-remove" type="button" onClick={() => removeLine(index)} disabled={lines.length === 1} aria-label="Remover item">
-                  <Trash2 size={16} />
-                </button>
               </div>
-            ))}
-          </div>
 
-          <div className="button-row">
-            <button className="primary-button mini-button" type="submit" disabled={Boolean(loading)}>
-              <Save size={15} />
-              Salvar
-            </button>
-            <button className="secondary-button mini-button" type="button" onClick={() => setEditing(false)} disabled={Boolean(loading)}>
-              <X size={15} />
-              Cancelar
-            </button>
-          </div>
-        </form>
+              <div className="form-two">
+                <label className="field">
+                  <span>Departamento</span>
+                  <input className="form-input" name="department" defaultValue={editData.department} maxLength={80} />
+                </label>
+                <label className="field">
+                  <span>Centro de custo</span>
+                  <input className="form-input" name="costCenter" defaultValue={editData.costCenter} maxLength={80} />
+                </label>
+              </div>
+
+              <label className="field">
+                <span>Justificativa</span>
+                <input className="form-input" name="justification" defaultValue={editData.justification} maxLength={500} />
+              </label>
+
+              <div className="daily-lines purchase-request-modal-lines">
+                <div className="metric-top">
+                  <span className="mono">Itens</span>
+                  <button className="secondary-button mini-button" type="button" onClick={addLine} disabled={items.length === 0}>
+                    <Plus size={14} />
+                    Item
+                  </button>
+                </div>
+
+                {lines.map((line, index) => (
+                  <div className="purchase-line" key={`${index}-${line.itemId}`}>
+                    <label className="field">
+                      <span>Item</span>
+                      <select className="form-input" value={line.itemId} onChange={(event) => updateLine(index, "itemId", event.target.value)} required>
+                        {items.map((item) => (
+                          <option value={item.id} key={item.id}>
+                            {item.code} - {item.description} ({item.unitCode})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="field">
+                      <span>Quantidade</span>
+                      <input className="form-input mono" type="number" min="0.001" step="0.001" value={line.quantity} onChange={(event) => updateLine(index, "quantity", event.target.value)} required />
+                    </label>
+
+                    <label className="field">
+                      <span>Observacao</span>
+                      <input className="form-input" value={line.note} onChange={(event) => updateLine(index, "note", event.target.value)} maxLength={240} />
+                    </label>
+
+                    <button className="icon-button daily-remove" type="button" onClick={() => removeLine(index)} disabled={lines.length === 1} aria-label="Remover item">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <footer>
+                <button className="secondary-button" type="button" onClick={() => setEditing(false)} disabled={Boolean(loading)}>
+                  <X size={15} />
+                  Cancelar
+                </button>
+                <button className="primary-button" type="submit" disabled={Boolean(loading)}>
+                  <Save size={15} />
+                  {loading === "editar" ? "Salvando..." : "Salvar alteracoes"}
+                </button>
+              </footer>
+            </form>
+          </section>
+        </div>
       ) : null}
 
       {locked ? <small className="metric-sub">Travada por cotacao/pedido.</small> : null}

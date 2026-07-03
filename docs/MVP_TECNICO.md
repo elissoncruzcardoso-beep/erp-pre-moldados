@@ -25,6 +25,17 @@ Implementado nesta fundação:
 - `prisma/seed.ts` com perfis, permissões, unidades, depósitos e itens iniciais.
 - `.env.example` com variáveis necessárias.
 
+Implementado nas etapas seguintes do MVP:
+
+- Autenticação local, perfis, matriz de permissões e auditoria.
+- Cadastros reais de produtos, clientes, fornecedores, unidades, grupos de insumos, grupos financeiros, formas de pagamento e tipos de baixa.
+- Produtos e fichas técnicas com composição, tempo de cura, capacidade estimada e edição por modal na lista.
+- Suprimentos com solicitações, cotações, mapa comparativo, pedidos, notas fiscais de compra e relatórios.
+- Estoque real com depósitos, saldos, lotes, movimentações, filtros e permissão específica para editar movimentações.
+- Produção com diário de obra, apontamento, geração de lotes, cura automática e listas de peças em cura/aptas.
+- Vendas com venda direta multi-itens, recibo A4, baixa de estoque, contas a receber e cancelamento/estorno controlado.
+- Financeiro com contas a pagar, contas a receber, baixas, estornos, filtros e resumos agregados.
+
 ## Configurar banco PostgreSQL
 
 Criar um banco PostgreSQL no Supabase, Neon ou outro provedor.
@@ -136,10 +147,8 @@ npm.cmd run db:studio
 
 ## Próxima etapa recomendada
 
-Depois de conectar o banco:
-
-1. Criar autenticação real.
-2. Criar telas reais de usuários e perfis.
-3. Criar CRUD de produtos e matérias-primas.
-4. Criar entrada/saída de estoque com saldo real.
-5. Criar ordens de produção com apontamentos reais.
+1. Revisar e commitar o pacote atual de ajustes pendentes.
+2. Validar os fluxos principais no navegador: produtos/composições, suprimentos, estoque, vendas, financeiro e produção.
+3. Consolidar regras de limpeza de dados de teste antes do uso real.
+4. Preparar homologação fiscal com a Focus NFe, começando por NF-e de venda.
+5. Depois evoluir CT-e, MDF-e, cancelamentos, carta de correção e webhooks fiscais.
