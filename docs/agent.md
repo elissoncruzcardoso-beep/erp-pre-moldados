@@ -5,7 +5,7 @@ Voce esta trabalhando no MVP real de um ERP industrial para fabrica de pre-molda
 
 ## Como agir neste projeto
 - Priorize implementacoes pequenas, testaveis e conectadas ao fluxo real da industria.
-- Antes de alterar regras de negocio, leia `Memory.md`, `soul.md`, `docs/MVP_TECNICO.md` e `ERP_PRE_MOLDADOS.md` na pasta superior do workspace, se disponivel.
+- Antes de alterar regras de negocio, leia `docs/Memory.md`, `docs/soul.md`, `docs/MVP_TECNICO.md` e `ERP_PRE_MOLDADOS.md` na pasta superior do workspace, se disponivel.
 - Nao exponha segredos do `.env`. Use `.env.example` para documentar variaveis.
 - Mantenha o design industrial ja aprovado: azul institucional, cinzas concretos, laranja para alertas, grid denso, tabelas fortes e cards tecnicos.
 - Preserve a separacao dos modulos:
@@ -67,14 +67,16 @@ Modelos mais importantes:
 - `AuditLog`
 
 ## Modulos ja iniciados
-- Diretoria: pagina de apresentacao executiva.
-- Dashboard: prototipo visual.
-- Produtos: leitura real e cadastro real de item/produto.
-- Estoque: movimentacao real com saldo e auditoria.
-- Venda direta: recibo profissional, baixa de estoque, CRUD basico, cancelamento com estorno e impressao A4.
-- Suprimentos: ambiente visual reorganizado para compras, contratos, recebimento e conferencia.
-- Financeiro: prototipo visual.
-- Usuarios: tela real protegida para visualizar usuarios, perfis e permissoes.
+- Dashboard: resumo operacional real com cuidado para usar agregacoes e evitar divergencia entre producao, estoque, vendas e financeiro.
+- Produtos: leitura real de itens e fichas tecnicas; cadastro de produtos fica em `/cadastros/produtos`.
+- Produtos/composicoes: fichas tecnicas em lista compacta, detalhes de insumos recolhidos e edicao rapida por modal em `/produtos`.
+- Estoque: movimentacao real com saldo, lotes, auditoria, filtros de saldo e permissao especifica para editar/excluir movimentacoes.
+- Venda direta: pagina dedicada em `/vendas`, multi-itens, recibo profissional, baixa de estoque, contas a receber, cancelamento com estorno e impressao A4.
+- Suprimentos: paginas separadas para solicitacoes, cotacoes, pedidos, notas fiscais e relatorios.
+- Suprimentos/solicitacoes: criacao com varios itens, lista por card e edicao por modal.
+- Financeiro: contas a pagar e contas a receber reais, baixas, estornos controlados, filtros e auditoria.
+- Cadastros: produtos, clientes, fornecedores, unidades, grupos de insumos, grupos financeiros, formas de pagamento e tipos de baixa.
+- Usuarios: tela real protegida para visualizar usuarios, perfis, permissoes e matriz de acesso.
 
 ## Regras de seguranca
 - Toda API real deve validar sessao.
@@ -83,10 +85,14 @@ Modelos mais importantes:
 - Nao permitir saldo negativo em deposito que nao permite negativo.
 - Nao duplicar responsabilidade entre modulos.
 
+## Padroes recentes de UI
+- Formularios longos nao devem abrir espremidos dentro de cards estreitos.
+- Para edicao rapida de registros em listas, preferir modal centralizado com fundo escurecido, cabecalho com codigo do registro e acoes no rodape.
+- Para leitura de registros tecnicos, preferir lista compacta com detalhes recolhidos (`details/summary`) e tabelas internas com rolagem segura.
+- Paginacao deve preservar o `pageSize` real da lista atual; nao forcar `pageSize=20` quando a tela usa outro tamanho.
+
 ## Proximo passo recomendado
-Criar Ordem de Producao real:
-1. Cadastro de OP com produto, quantidade, molde e data prevista.
-2. Criacao das etapas padrao.
-3. Consumo de estoque por saida para producao.
-4. Apontamento de producao.
-5. Entrada de produto acabado no estoque.
+Consolidar estabilidade antes da integracao fiscal:
+1. Revisar pendencias do worktree e commitar em pacote coerente.
+2. Validar no navegador os fluxos alterados: produtos/fichas, solicitacoes, estoque, vendas e financeiro.
+3. Em seguida, iniciar a etapa fiscal Focus NFe em homologacao, com backend proprio e sem token no frontend.

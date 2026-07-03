@@ -11,3 +11,6 @@ tsconfig.tsbuildinfo
 stitch-reference/
 
 .vercel
+
+# Local private project memory
+PROCESS.md

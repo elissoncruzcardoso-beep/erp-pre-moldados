@@ -83,13 +83,15 @@ O projeto deve crescer com fundamentos reais:
 Antes de criar grandes funcionalidades, preferir um fluxo simples funcionando de ponta a ponta.
 
 ## Norte atual
-O sistema esta saindo do prototipo e entrando no MVP real. A prioridade agora e construir fluxos operacionais completos:
+O sistema ja saiu do prototipo e entrou no MVP operacional. A prioridade agora e manter os fluxos simples, confiaveis e rastreaveis:
 
-1. Produto cadastrado.
-2. Estoque movimentado.
-3. Ordem de producao criada.
-4. Insumo consumido.
-5. Produto acabado recebido.
-6. Diretor visualiza indicadores confiaveis.
+1. Cadastros confiaveis.
+2. Produto com ficha tecnica.
+3. Compra com solicitacao, cotacao, pedido e nota fiscal.
+4. Estoque com saldo real e movimentacao auditada.
+5. Producao apontada pelo diario de obra.
+6. Venda direta com recibo, baixa de estoque e contas a receber.
+7. Financeiro com baixa, estorno e historico.
+8. Indicadores do dashboard vindos de agregacoes reais.
 
-Esse e o caminho.
+Antes de crescer, cada fluxo precisa fechar bem no banco, na tela e na auditoria.

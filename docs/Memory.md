@@ -51,8 +51,10 @@ O projeto nasceu como um prototipo visual para apresentar a diretoria e foi apro
   - criar composicao: `/produtos/composicoes/nova`
   - editar composicao: `/produtos/composicoes/[id]/editar`
   - APIs: `POST /api/produtos/composicoes`, `PATCH/DELETE /api/produtos/composicoes/[id]`
-- A composicao deve abrir em pagina propria, nao como formulario espremido dentro do card.
-- A grade de composicao usa tabela rolavel interna; linhas devem aparecer ao clicar em `Insumo`.
+- Criacao/edicao completa de composicao continuam em paginas proprias quando acessadas por rota direta.
+- Na lista de fichas tecnicas em `/produtos`, a acao `Editar` deve abrir modal centralizado usando o mesmo formulario, sem formulario espremido dentro do card.
+- A lista de fichas tecnicas deve ficar compacta: resumo da ficha, capacidade lateral e insumos recolhidos em `Abrir consumo tecnico`.
+- A grade de composicao usa tabela rolavel interna; linhas devem aparecer ao clicar em `Insumo` ou ao abrir os detalhes da ficha.
 - Ficha tecnica usada em ordem de producao fica travada para edicao/exclusao.
 - Evitar reintroduzir o antigo catalogo tecnico dentro de `/produtos`; cadastro de produto deve ficar em `/cadastros/produtos`.
 
@@ -82,6 +84,7 @@ O projeto nasceu como um prototipo visual para apresentar a diretoria e foi apro
   - `/suprimentos/notas-fiscais`
   - `/suprimentos/relatorios`
 - Solicitacoes, cotacoes, pedidos e notas fiscais possuem CRUD/ajustes reais.
+- Solicitacoes devem abrir edicao em modal centralizado, preservando o card da lista e evitando formularios inline estreitos.
 - Cotacoes devem permitir varios fornecedores e mapa comparativo.
 - Mapa comparativo deve destacar melhor valor por item e fornecedor vencedor.
 - Pedido aprovado gera base para nota fiscal.
@@ -162,6 +165,8 @@ O projeto nasceu como um prototipo visual para apresentar a diretoria e foi apro
 - Acoes de Suprimentos tambem foram padronizadas com `fetchJson` e validacao Zod quando aplicavel: editar/excluir solicitacoes, aprovar/reprovar/converter/editar/excluir cotacoes, editar/excluir pedidos e editar/excluir notas fiscais/recebimentos.
 - A padronizacao tambem foi iniciada em Produtos e Producao: cadastro de produto, ordem de producao, apontamento e diario de producao usam schemas Zod do backend antes de chamar a API.
 - Composicoes/fichas tecnicas tambem passaram a usar `useApiForm`, incluindo criacao e edicao com `POST`/`PATCH`; exclusao usa `fetchJson` para erro padronizado.
+- A edicao rapida de ficha tecnica em `/produtos` reutiliza `CompositionForm` dentro de modal, mantendo validacao e submissao padronizadas.
+- A edicao de solicitacao em `/suprimentos/solicitacoes` usa modal centralizado e `PATCH /api/suprimentos/solicitacoes/[id]`.
 - Liberação de lotes em cura usa `useApiForm` e `productionBatchReleaseSchema`; a varredura principal de `fetch(` em Financeiro, Suprimentos, Produtos, Producao e Vendas nao encontrou chamadas manuais restantes.
 - Financeiro tem CRUD nas telas de contas a receber e contas a pagar. Exclusao e bloqueada quando a conta a receber veio de venda direta ou possui baixa. Em contas a pagar, Administrador e Diretoria podem excluir titulos mesmo quando vieram de recebimento/NF ou baixa; a exclusao fica registrada em auditoria como acao forcada por perfil.
 - Contas a receber possui estorno de baixa financeira: o usuario seleciona a baixa, informa motivo obrigatorio, o sistema remove a baixa, recalcula `receivedAmount`, reabre o status do titulo e registra auditoria do estorno.
@@ -176,8 +181,11 @@ O projeto nasceu como um prototipo visual para apresentar a diretoria e foi apro
 - Erro TLS Prisma/Supabase no Windows: projeto passou a usar `@prisma/adapter-pg` e `pg`.
 - Login ficava na tela: ajustado para usar navegacao direta via `window.location.assign`.
 - Senha admin perdida: `/setup-admin` agora redefine a senha.
-- Layout de Produtos: edicao de composicao nao deve abrir inline; agora usa pagina propria.
+- Layout de Produtos: edicao de composicao nao deve abrir inline; em rota direta usa pagina propria e na lista usa modal centralizado.
+- Layout de Produtos: fichas tecnicas devem aparecer como lista compacta, com consumo tecnico recolhido.
+- Layout de Produtos: paginacao deve preservar `pageSize` real para `pecasPage` e `fichasPage`, sem voltar para a mesma lista ao clicar em proxima.
 - Layout de Produtos: botao `Insumo` na composicao deve adicionar linha visivel na grade.
+- Layout de Suprimentos: edicao de solicitacao deve abrir em modal centralizado, nao em formulario cortado no canto da tela.
 - Layout de Diario de Producao: formulario e historico nao devem ser comprimidos na mesma linha em telas menores.
 - Build no Windows pode falhar com `EPERM` na DLL do Prisma quando o dev server esta rodando. Solucao usada: parar processo Node, rodar `npm.cmd run build`, ajustar `next-env.d.ts` de volta para `.next/dev/types/routes.d.ts` se necessario e religar `npm.cmd run dev`.
 
@@ -210,5 +218,5 @@ O projeto nasceu como um prototipo visual para apresentar a diretoria e foi apro
 Use este texto ao abrir uma nova sessao nesta pasta:
 
 ```text
-Continue o ERP de pre-moldados nesta pasta. Leia primeiro Memory.md e docs/ESTRATEGIA_UI_UX_ERP.md. Nao apague nada e nao rode comandos que possam prejudicar dados, banco, schema ou configuracoes sem perguntar. Preserve as funcionalidades ja criadas. Estamos evoluindo o MVP real com Next.js, React, Prisma e PostgreSQL/Supabase, corrigindo layouts responsivos e amarrando Produtos + Composicao + Producao.
+Continue o ERP de pre-moldados nesta pasta. Leia primeiro docs/Memory.md e docs/ESTRATEGIA_UI_UX_ERP.md. Nao apague nada e nao rode comandos que possam prejudicar dados, banco, schema ou configuracoes sem perguntar. Preserve as funcionalidades ja criadas. Estamos evoluindo o MVP real com Next.js, React, Prisma e PostgreSQL/Supabase, corrigindo layouts responsivos e amarrando Produtos + Composicao + Producao.
 ```
