@@ -24,8 +24,7 @@ estado atual do repositório.
 - `npm run build`: passou com `EXIT=0`.
 - `npm audit`: 0 vulnerabilidades.
 - `npm audit --omit=dev`: 0 vulnerabilidades.
-- `git status --short`: ainda existem arquivos modificados e documentos de
-  auditoria não commitados.
+- `git status --short`: limpo após organização em commits lógicos.
 - `npm run backup:readiness`: status `BLOQUEADO`; variáveis de backup externo
   e restore ainda ausentes no ambiente local.
 - `npm run security:readiness`: status `BLOQUEADO` somente por Backup e
@@ -33,6 +32,8 @@ estado atual do repositório.
 - `npm run security:check-migrations`: passou, mas no ambiente local ainda
   avisa que `SHADOW_DATABASE_URL` está ausente. O workflow de CI foi ajustado
   com Postgres de serviço e `SHADOW_DATABASE_URL`.
+- GitHub Actions `28664320154`: CI verde em `main`, incluindo Prisma migrations
+  guard com shadow database, testes e build.
 - `src/lib/auth/rate-limit.ts`: rate limit de login foi migrado para
   armazenamento durável via Prisma/Postgres.
 - `prisma/migrations/20260703000000_add_login_attempts/`: migration criada para
@@ -48,16 +49,16 @@ estado atual do repositório.
 
 ### Situação por item
 
-- P0.1 continua pendente: há alterações locais e arquivos de auditoria sem
-  commit.
+- P0.1 resolvido: trabalho pendente foi organizado em commits lógicos e enviado
+  ao GitHub.
 - P0.2 resolvido no código e coberto por testes automatizados. Falta apenas
   smoke manual de login em servidor reiniciado, se for exigido como aceite
   operacional.
 - P1.1 resolvido: `npm audit` e `npm audit --omit=dev` retornaram 0
   vulnerabilidades.
-- P1.2 parcialmente resolvido: CI foi configurado com Postgres e
-  `SHADOW_DATABASE_URL`; falta confirmar o log verde no GitHub Actions e fazer
-  o teste negativo local com Postgres disponível.
+- P1.2 resolvido: CI configurado com Postgres, banco shadow e execução verde no
+  GitHub Actions. O teste negativo local continua dependente de Postgres local,
+  mas o guard foi exercitado no CI.
 - P1.3 resolvido: teste E2E do fluxo crítico criado e passando.
 - P2.1 resolvido: APIs mutáveis usam `requireApiSession`.
 - P2.2 resolvido na parte de higiene local/documental. `PROCESS.md` permanece
