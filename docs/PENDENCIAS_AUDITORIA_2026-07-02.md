@@ -94,8 +94,8 @@ Rechecagem feita após nova varredura de dependências e estado atual do CI.
 - `npm audit`: 0 vulnerabilidades após overrides seguros para dependências
   transitivas (`@babel/core`, `esbuild`, `js-yaml`, `postcss`).
 - `npm audit --omit=dev`: 0 vulnerabilidades.
-- GitHub Actions `28674778971`: CI verde em `main` para o commit
-  `docs: add backup dr runbook`.
+- GitHub Actions `28890821872`: CI verde em `main` para o commit
+  `fix: refresh dependency audit posture`.
 - `npm run security:readiness`: todos os checks retornaram `OK`, exceto
   Backup e Disaster Recovery.
 - Backup/DR segue `BLOQUEADO` porque o ambiente atual não possui
@@ -111,6 +111,33 @@ Rechecagem feita após nova varredura de dependências e estado atual do CI.
   transitivas corrigidas e `package-lock.json` foi atualizado.
 - Backup/DR não pode ser marcado como concluído sem executar o runbook em um
   servidor/agendador com credenciais reais fora do Git.
+
+### Aceite atualizado
+
+Comprovado no estado atual:
+
+- P0.1: o escopo de auditoria foi organizado em commits e enviado ao GitHub.
+- P0.2: rate limit durável foi implementado com Prisma/Postgres, migration,
+  testes automatizados e guard de migrations verde.
+- P1.1: dependências vulneráveis foram atualizadas por `overrides` seguros;
+  `npm audit` e `npm audit --omit=dev` retornam 0 vulnerabilidades.
+- P1.2: CI executa migrations com Postgres/shadow database e está verde.
+- P1.3: teste E2E do fluxo venda → estoque → financeiro → cancelamento existe e
+  passa em `npm test`.
+- P2.1: rotas mutáveis foram padronizadas em `requireApiSession`.
+- P2.3: requisito de proxy para `x-forwarded-for` está documentado.
+
+Ainda não comprovado por depender de operação externa ou ação fora desta
+auditoria:
+
+- Backup/DR real: falta configurar credenciais externas, executar backup,
+  validar S3, executar restore drill e gerar evidências.
+- Smoke manual com criação real: não deve ser feito em banco de produção sem
+  janela/ambiente combinado.
+- Teste negativo local de migration: pode ser feito em ambiente descartável, mas
+  o CI já cobre o guard principal com shadow database.
+- `git status` ainda mostra `docs/PENDENCIAS_DESIGN_2026-07-04.md` como arquivo
+  não rastreado, fora do escopo desta auditoria.
 
 ---
 
@@ -352,8 +379,8 @@ proxy_set_header X-Forwarded-For $remote_addr;  # sobrescreve, não anexa
 
 ## Checklist final (rodar após concluir P0–P1)
 
-- [ ] `npm test` — 100% verde
-- [ ] `npm run build` — todos os guards do prebuild verdes
-- [ ] `npm audit` — sem moderate+
-- [ ] CI verde no GitHub
+- [x] `npm test` — 100% verde
+- [x] `npm run build` — todos os guards do prebuild verdes
+- [x] `npm audit` — sem moderate+
+- [x] CI verde no GitHub
 - [ ] `git status` limpo
