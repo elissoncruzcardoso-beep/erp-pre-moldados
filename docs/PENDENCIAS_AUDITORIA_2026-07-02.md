@@ -83,6 +83,37 @@ depende de execução real no servidor/agendador.
 
 ---
 
+## Verificação Codex — 2026-07-07
+
+Rechecagem feita após nova varredura de dependências e estado atual do CI.
+
+### Evidências coletadas
+
+- `npm test`: passou com 136 testes.
+- `npm run build`: passou com Next `16.2.10` e guards do prebuild verdes.
+- `npm audit`: 0 vulnerabilidades após overrides seguros para dependências
+  transitivas (`@babel/core`, `esbuild`, `js-yaml`, `postcss`).
+- `npm audit --omit=dev`: 0 vulnerabilidades.
+- GitHub Actions `28674778971`: CI verde em `main` para o commit
+  `docs: add backup dr runbook`.
+- `npm run security:readiness`: todos os checks retornaram `OK`, exceto
+  Backup e Disaster Recovery.
+- Backup/DR segue `BLOQUEADO` porque o ambiente atual não possui
+  `BACKUP_DATABASE_URL`, `BACKUP_S3_BUCKET`, `BACKUP_S3_PREFIX`,
+  `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` e evidências reais
+  de backup/restore.
+
+### Situação atual
+
+- P1.1 voltou a exigir ação porque o banco de vulnerabilidades do npm passou a
+  apontar novas ocorrências transitivas. A correção foi aplicada sem
+  `npm audit fix --force`; `package.json` usa `overrides` para versões
+  transitivas corrigidas e `package-lock.json` foi atualizado.
+- Backup/DR não pode ser marcado como concluído sem executar o runbook em um
+  servidor/agendador com credenciais reais fora do Git.
+
+---
+
 ## Como usar este documento
 
 - Executar na ordem: P0 → P1 → P2.
@@ -315,7 +346,8 @@ proxy_set_header X-Forwarded-For $remote_addr;  # sobrescreve, não anexa
 - HSTS / CSP de produção ✅
 - Migrations + guard anti-`db push` ✅
 - CI + 12 guards de segurança no prebuild ✅
-- Backup S3 + restore drill + evidências ✅
+- Backup S3 + restore drill + evidências: preparado por scripts/runbook, mas
+  pendente de execução real externa.
 - Limites de query (`query-limits.ts` + guard) ✅
 
 ## Checklist final (rodar após concluir P0–P1)
