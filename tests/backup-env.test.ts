@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  getNodeEnvFileArg,
   loadDotEnv,
   resolveBackupEnvFile,
   resolveEnvFilePath
@@ -79,6 +80,31 @@ test("backup env resolver accepts legacy BACKUP_ENV_FILE pointer", () => {
   try {
     assert.equal(resolveBackupEnvFile(undefined, { fallback: "fallback.env" }), "D:/seguro/precast-backup.env");
   } finally {
+    restoreEnv("PRECAST_BACKUP_ENV_FILE", previousPrecast);
+    restoreEnv("BACKUP_ENV_FILE", previousBackup);
+  }
+});
+
+test("backup env resolver can read Node native --env-file argument", () => {
+  const previousPrecast = process.env.PRECAST_BACKUP_ENV_FILE;
+  const previousBackup = process.env.BACKUP_ENV_FILE;
+  delete process.env.PRECAST_BACKUP_ENV_FILE;
+  delete process.env.BACKUP_ENV_FILE;
+
+  const previousExecArgv = process.execArgv;
+  Object.defineProperty(process, "execArgv", {
+    value: ["--env-file", "/etc/precast-erp/precast-backup.env"],
+    configurable: true
+  });
+
+  try {
+    assert.equal(getNodeEnvFileArg(), "/etc/precast-erp/precast-backup.env");
+    assert.equal(resolveBackupEnvFile(undefined, { fallback: "fallback.env" }), "/etc/precast-erp/precast-backup.env");
+  } finally {
+    Object.defineProperty(process, "execArgv", {
+      value: previousExecArgv,
+      configurable: true
+    });
     restoreEnv("PRECAST_BACKUP_ENV_FILE", previousPrecast);
     restoreEnv("BACKUP_ENV_FILE", previousBackup);
   }

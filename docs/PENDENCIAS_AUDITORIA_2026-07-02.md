@@ -12,6 +12,8 @@ Mudancas aplicadas:
 - `backup:readiness` nao exige postura S3 quando o modo local esta ativo.
 - Evidencias de backup e restore aceitam caminho local absoluto alem de `s3://`.
 - Runbook e template foram atualizados para Proxmox CT/Linux e Windows.
+- `npm run backup:install-linux-cron` prepara o agendamento no Proxmox CT/Linux
+  em modo dry-run por padrao, com `--apply` somente depois de revisao.
 
 Pendencia operacional: executar no servidor, gerar o primeiro backup real, garantir copia externa da pasta local e depois fazer restore drill em banco temporario.
 

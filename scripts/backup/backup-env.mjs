@@ -7,6 +7,16 @@ export function getDefaultExternalBackupEnvFile() {
     : "/etc/precast-erp/precast-backup.env";
 }
 
+export function getNodeEnvFileArg(args = process.execArgv) {
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+    if (value === "--env-file") return args[index + 1];
+    if (value?.startsWith("--env-file=")) return value.split("=", 2)[1];
+  }
+
+  return undefined;
+}
+
 export function resolveBackupEnvFile(explicitValue, {
   fallback = ".env"
 } = {}) {
@@ -14,6 +24,7 @@ export function resolveBackupEnvFile(explicitValue, {
     explicitValue ||
     process.env.PRECAST_BACKUP_ENV_FILE ||
     process.env.BACKUP_ENV_FILE ||
+    getNodeEnvFileArg() ||
     fallback
   );
 }

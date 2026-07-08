@@ -113,7 +113,40 @@ A evidencia aceita caminho `s3://` ou caminho local absoluto.
 
 ## Agendamento simples no CT
 
-Exemplo de cron diario as 22h:
+Antes de agendar, crie a pasta de log:
+
+```bash
+sudo mkdir -p /var/log/precast-erp
+sudo chown $USER:$USER /var/log/precast-erp
+```
+
+Gere o cron em modo de revisao:
+
+```bash
+npm run backup:install-linux-cron -- --project-path /opt/precast/erp-pre-moldados-prototype --backup-env-file /etc/precast-erp/precast-backup.env --log-dir /var/log/precast-erp
+```
+
+Depois de revisar o bloco gerado, aplique no CT:
+
+```bash
+npm run backup:install-linux-cron -- --project-path /opt/precast/erp-pre-moldados-prototype --backup-env-file /etc/precast-erp/precast-backup.env --log-dir /var/log/precast-erp --apply
+```
+
+Esse comando agenda:
+
+- validacao da configuracao antes do backup;
+- backup completo local diario;
+- conferencia diaria da evidencia do backup;
+- relatorio semanal de prontidao Backup/DR.
+
+O restore drill mensal pode ser incluido somente se o banco temporario de restore
+ja estiver criado e isolado:
+
+```bash
+npm run backup:install-linux-cron -- --project-path /opt/precast/erp-pre-moldados-prototype --backup-env-file /etc/precast-erp/precast-backup.env --log-dir /var/log/precast-erp --include-restore-drill --apply
+```
+
+Alternativa manual de cron diario as 22h:
 
 ```bash
 crontab -e

@@ -55,3 +55,12 @@ Restore drill local:
 ```bash
 npm run backup:restore-drill:local -- --env-file /etc/precast-erp/precast-backup.env
 ```
+
+Agendamento no Proxmox CT/Linux:
+
+```bash
+npm run backup:install-linux-cron -- --project-path /opt/precast/erp-pre-moldados-prototype --backup-env-file /etc/precast-erp/precast-backup.env --log-dir /var/log/precast-erp
+```
+
+O comando acima e dry-run. Para instalar no crontab do CT, revise a saida e rode
+novamente com `--apply`.
