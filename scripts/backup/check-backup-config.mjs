@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
+import { existsSync } from "node:fs";
 import { loadDotEnv, resolveBackupEnvFile } from "./backup-env.mjs";
 
 function getArg(name, fallback = undefined) {
@@ -50,6 +51,20 @@ function addWarning(warnings, message) {
   warnings.push(message);
 }
 
+function hasBackupEnvironmentVariables() {
+  return [
+    "BACKUP_STORAGE_MODE",
+    "BACKUP_DATABASE_URL",
+    "BACKUP_LOCAL_DIR",
+    "BACKUP_S3_BUCKET",
+    "BACKUP_S3_PREFIX",
+    "AWS_REGION",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "RESTORE_DATABASE_URL"
+  ].some((name) => Boolean(process.env[name]));
+}
+
 function isPlaceholderValue(value) {
   if (typeof value !== "string") return true;
   const normalized = value.trim().replace(/^['"]|['"]$/g, "").toLowerCase();
@@ -80,9 +95,21 @@ export function checkBackupConfig({
   const warnings = [];
   const checks = [];
 
-  loadDotEnv(envFile);
+  const envFileLoaded = loadDotEnv(envFile);
+  addCheck(
+    checks,
+    errors,
+    "arquivo/config backup",
+    envFileLoaded || hasBackupEnvironmentVariables(),
+    envFileLoaded
+      ? `carregado de ${envFile}`
+      : existsSync(envFile)
+        ? "arquivo existe, mas nao trouxe variaveis reconhecidas"
+        : `arquivo nao encontrado em ${envFile}`
+  );
 
-  const storageMode = (process.env.BACKUP_STORAGE_MODE || "s3").trim().toLowerCase();
+  const hasS3Config = requiredS3Env.some((name) => Boolean(process.env[name]));
+  const storageMode = (process.env.BACKUP_STORAGE_MODE || (hasS3Config ? "s3" : "local")).trim().toLowerCase();
   const isLocalMode = storageMode === "local";
   const isS3Mode = storageMode === "s3";
 

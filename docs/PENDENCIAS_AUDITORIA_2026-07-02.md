@@ -14,6 +14,13 @@ Mudancas aplicadas:
 - Runbook e template foram atualizados para Proxmox CT/Linux e Windows.
 - `npm run backup:install-linux-cron` prepara o agendamento no Proxmox CT/Linux
   em modo dry-run por padrao, com `--apply` somente depois de revisao.
+- `npm run backup:readiness -- --json` agora aponta para backup local por
+  padrao e bloqueia corretamente pela falta do arquivo externo
+  `C:\seguro\precast-backup.env`, `BACKUP_DATABASE_URL` e `BACKUP_LOCAL_DIR`,
+  sem exigir AWS/S3 quando `BACKUP_STORAGE_MODE` nao foi definido.
+- `npm run security:readiness` foi reexecutado em 2026-07-08: todos os guards
+  retornaram `OK`; o unico bloqueio restante e Backup/DR pelos mesmos itens
+  externos acima.
 
 Pendencia operacional: executar no servidor, gerar o primeiro backup real, garantir copia externa da pasta local e depois fazer restore drill em banco temporario.
 

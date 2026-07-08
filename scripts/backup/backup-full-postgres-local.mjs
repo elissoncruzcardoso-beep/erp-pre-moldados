@@ -49,7 +49,7 @@ function assertOutsideRepo(outputDir) {
 }
 
 export async function runLocalFullBackup({
-  envFile = resolveBackupEnvFile(undefined, { fallback: ".env" }),
+  envFile = resolveBackupEnvFile(),
   outputDir,
   evidencePath = defaultEvidencePath,
   operator,
@@ -133,7 +133,7 @@ export async function runLocalFullBackup({
 
 async function main() {
   const args = process.argv.slice(2);
-  const envFile = resolveBackupEnvFile(getArg(args, "--env-file"), { fallback: ".env" });
+  const envFile = resolveBackupEnvFile(getArg(args, "--env-file"));
   const outputDir = getArg(args, "--output-dir");
   const evidencePath = path.resolve(root, getArg(args, "--evidence", defaultEvidencePath));
   const operator = getArg(args, "--operator");

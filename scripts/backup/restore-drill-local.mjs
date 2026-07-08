@@ -143,7 +143,7 @@ function runCapture(command, args) {
 }
 
 export async function runLocalRestoreDrill({
-  envFile = resolveBackupEnvFile(undefined, { fallback: ".env" }),
+  envFile = resolveBackupEnvFile(),
   dumpPath,
   checksumPath,
   backupEvidencePath = defaultBackupEvidencePath,
@@ -255,7 +255,7 @@ export async function runLocalRestoreDrill({
 
 async function main() {
   const args = process.argv.slice(2);
-  const envFile = resolveBackupEnvFile(getArg(args, "--env-file"), { fallback: ".env" });
+  const envFile = resolveBackupEnvFile(getArg(args, "--env-file"));
   const dumpPath = getArg(args, "--dump-path") || getArg(args, "--dump");
   const checksumPath = getArg(args, "--checksum-path") || getArg(args, "--checksum");
   const backupEvidencePath = path.resolve(root, getArg(args, "--backup-evidence", defaultBackupEvidencePath));

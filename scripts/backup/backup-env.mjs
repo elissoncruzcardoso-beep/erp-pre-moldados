@@ -18,7 +18,7 @@ export function getNodeEnvFileArg(args = process.execArgv) {
 }
 
 export function resolveBackupEnvFile(explicitValue, {
-  fallback = ".env"
+  fallback = getDefaultExternalBackupEnvFile()
 } = {}) {
   return (
     explicitValue ||

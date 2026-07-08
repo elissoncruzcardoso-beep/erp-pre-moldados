@@ -8,6 +8,10 @@ O arquivo real esperado pelo check e:
 
 `docs/security/backups/latest.json`
 
+Por padrao, os scripts procuram o arquivo externo de configuracao em
+`C:\seguro\precast-backup.env` no Windows ou
+`/etc/precast-erp/precast-backup.env` no Linux/Proxmox CT.
+
 No modo local, o comando recomendado e:
 
 ```powershell

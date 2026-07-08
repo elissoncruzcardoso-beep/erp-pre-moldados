@@ -31,6 +31,11 @@ O template publico fica em:
 
 `docs/security/backups/precast-backup.env.template`
 
+Sem `--env-file`, os scripts de backup procuram o arquivo externo padrao:
+
+- Windows: `C:\seguro\precast-backup.env`
+- Linux/Proxmox CT: `/etc/precast-erp/precast-backup.env`
+
 ## Preparacao no Proxmox CT
 
 1. Instalar Node.js.

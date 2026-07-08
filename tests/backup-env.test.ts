@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  getDefaultExternalBackupEnvFile,
   getNodeEnvFileArg,
   loadDotEnv,
   resolveBackupEnvFile,
@@ -44,6 +45,20 @@ test("backup env resolver prefers explicit value before environment pointer", ()
   }
 });
 
+test("backup env resolver defaults to external backup env file", () => {
+  const previousPrecast = process.env.PRECAST_BACKUP_ENV_FILE;
+  const previousBackup = process.env.BACKUP_ENV_FILE;
+  delete process.env.PRECAST_BACKUP_ENV_FILE;
+  delete process.env.BACKUP_ENV_FILE;
+
+  try {
+    assert.equal(resolveBackupEnvFile(), getDefaultExternalBackupEnvFile());
+  } finally {
+    restoreEnv("PRECAST_BACKUP_ENV_FILE", previousPrecast);
+    restoreEnv("BACKUP_ENV_FILE", previousBackup);
+  }
+});
+
 test("backup config accepts local mode without AWS credentials", () => {
   const cwd = mkdtempSync(path.join(os.tmpdir(), "precast-backup-local-"));
   const envPath = path.join(cwd, "precast-backup.env");
@@ -64,6 +79,31 @@ test("backup config accepts local mode without AWS credentials", () => {
     assert.equal(report.ok, true);
     assert.equal(report.storageMode, "local");
     assert.doesNotMatch(report.errors.join("\n"), /AWS_SECRET_ACCESS_KEY/);
+  } finally {
+    for (const [key, value] of previousValues) {
+      restoreEnv(key, value);
+    }
+  }
+});
+
+test("backup config defaults missing external config to local backup requirements", () => {
+  const cwd = mkdtempSync(path.join(os.tmpdir(), "precast-backup-missing-"));
+  const envPath = path.join(cwd, "precast-backup.env");
+  const previousValues = new Map(backupEnvKeys.map((key) => [key, process.env[key]]));
+
+  for (const key of backupEnvKeys) {
+    delete process.env[key];
+  }
+
+  try {
+    const report = checkBackupConfig({ envFile: envPath, skipTools: true });
+    assert.equal(report.ok, false);
+    assert.equal(report.storageMode, "local");
+    assert.match(report.errors.join("\n"), /arquivo nao encontrado/);
+    assert.match(report.errors.join("\n"), /BACKUP_DATABASE_URL/);
+    assert.match(report.errors.join("\n"), /BACKUP_LOCAL_DIR/);
+    assert.doesNotMatch(report.errors.join("\n"), /AWS_SECRET_ACCESS_KEY/);
+    assert.doesNotMatch(report.errors.join("\n"), /BACKUP_S3_BUCKET/);
   } finally {
     for (const [key, value] of previousValues) {
       restoreEnv(key, value);
