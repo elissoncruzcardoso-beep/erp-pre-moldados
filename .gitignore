@@ -4,6 +4,9 @@ out
 *.log
 .env*
 !.env.example
+precast-backup.env
+*.dump
+*.sha256
 next-debug.*.log
 dev-*.log
 dev.log

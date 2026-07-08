@@ -28,8 +28,9 @@ function commandAvailable(command) {
   return !result.error && result.status === 0;
 }
 
-const requiredEnv = [
-  "BACKUP_DATABASE_URL",
+const requiredBaseEnv = ["BACKUP_DATABASE_URL"];
+
+const requiredS3Env = [
   "BACKUP_S3_BUCKET",
   "BACKUP_S3_PREFIX",
   "AWS_REGION",
@@ -37,7 +38,8 @@ const requiredEnv = [
   "AWS_SECRET_ACCESS_KEY"
 ];
 
-const requiredTools = ["aws", "pg_dump", "pg_restore", "psql"];
+const baseRequiredTools = ["pg_dump", "pg_restore", "psql"];
+const s3RequiredTools = ["aws"];
 
 function addCheck(checks, errors, name, ok, detail) {
   checks.push({ name, ok, detail });
@@ -79,6 +81,20 @@ export function checkBackupConfig({
   const checks = [];
 
   loadDotEnv(envFile);
+
+  const storageMode = (process.env.BACKUP_STORAGE_MODE || "s3").trim().toLowerCase();
+  const isLocalMode = storageMode === "local";
+  const isS3Mode = storageMode === "s3";
+
+  addCheck(
+    checks,
+    errors,
+    "BACKUP_STORAGE_MODE",
+    isLocalMode || isS3Mode,
+    isLocalMode || isS3Mode ? storageMode : "use local ou s3"
+  );
+
+  const requiredEnv = isLocalMode ? requiredBaseEnv : [...requiredBaseEnv, ...requiredS3Env];
 
   for (const name of requiredEnv) {
     const value = process.env[name];
@@ -146,33 +162,60 @@ export function checkBackupConfig({
     addWarning(warnings, "RESTORE_DATABASE_URL ausente. Configure antes do teste mensal de restauracao.");
   }
 
-  const bucket = process.env.BACKUP_S3_BUCKET || "";
-  addCheck(
-    checks,
-    errors,
-    "BACKUP_S3_BUCKET formato",
-    Boolean(bucket) && !bucket.includes("/") && !bucket.startsWith("s3://"),
-    bucket ? "bucket sem barra ou prefixo s3://" : "bucket ausente"
-  );
+  if (isLocalMode) {
+    const localDir = process.env.BACKUP_LOCAL_DIR || "";
+    const configured = Boolean(localDir) && !isPlaceholderValue(localDir);
+    addCheck(
+      checks,
+      errors,
+      "BACKUP_LOCAL_DIR",
+      configured,
+      configured ? "destino local configurado" : localDir ? "placeholder ou valor invalido" : "ausente"
+    );
 
-  const prefix = process.env.BACKUP_S3_PREFIX || "";
-  addCheck(
-    checks,
-    errors,
-    "BACKUP_S3_PREFIX formato",
-    Boolean(prefix) && !prefix.startsWith("/") && !prefix.includes(".."),
-    prefix ? "prefixo relativo seguro" : "prefixo ausente"
-  );
+    if (configured) {
+      addCheck(
+        checks,
+        errors,
+        "BACKUP_LOCAL_DIR fora do repositorio",
+        !localDir.includes("erp-pre-moldados-prototype") && !localDir.includes("Documents\\New project"),
+        !localDir.includes("erp-pre-moldados-prototype") && !localDir.includes("Documents\\New project")
+          ? "fora do checkout do projeto"
+          : "use caminho externo ao checkout do projeto"
+      );
+    }
 
-  if (process.env.BACKUP_S3_KMS_KEY_ID) {
-    addCheck(checks, errors, "BACKUP_S3_KMS_KEY_ID", true, "KMS configurado");
+    addWarning(warnings, "Modo local exige que a pasta seja copiada por backup externo da empresa.");
   } else {
-    addWarning(warnings, "BACKUP_S3_KMS_KEY_ID ausente. O script usa SSE-S3 AES256 como fallback.");
+    const bucket = process.env.BACKUP_S3_BUCKET || "";
+    addCheck(
+      checks,
+      errors,
+      "BACKUP_S3_BUCKET formato",
+      Boolean(bucket) && !bucket.includes("/") && !bucket.startsWith("s3://"),
+      bucket ? "bucket sem barra ou prefixo s3://" : "bucket ausente"
+    );
+
+    const prefix = process.env.BACKUP_S3_PREFIX || "";
+    addCheck(
+      checks,
+      errors,
+      "BACKUP_S3_PREFIX formato",
+      Boolean(prefix) && !prefix.startsWith("/") && !prefix.includes(".."),
+      prefix ? "prefixo relativo seguro" : "prefixo ausente"
+    );
+
+    if (process.env.BACKUP_S3_KMS_KEY_ID) {
+      addCheck(checks, errors, "BACKUP_S3_KMS_KEY_ID", true, "KMS configurado");
+    } else {
+      addWarning(warnings, "BACKUP_S3_KMS_KEY_ID ausente. O script usa SSE-S3 AES256 como fallback.");
+    }
   }
 
   if (skipTools) {
     addWarning(warnings, "Checagem de ferramentas pulada por --skip-tools.");
   } else {
+    const requiredTools = isS3Mode ? [...baseRequiredTools, ...s3RequiredTools] : baseRequiredTools;
     for (const tool of requiredTools) {
       const available = commandAvailable(tool);
       addCheck(
@@ -188,6 +231,7 @@ export function checkBackupConfig({
   return {
     ok: errors.length === 0,
     envFile,
+    storageMode,
     backupDatabase: backupUrl ? safeUrlSummary(backupUrl) : null,
     restoreDatabase: restoreUrl ? safeUrlSummary(restoreUrl) : null,
     checks,
@@ -206,7 +250,7 @@ function main() {
   if (jsonOutput) {
     console.log(JSON.stringify(report, null, 2));
   } else {
-    console.log("Verificacao de backup externo");
+    console.log("Verificacao de backup");
     console.log(`Ambiente: ${envFile}`);
     if (report.backupDatabase) console.log(`Banco origem: ${report.backupDatabase}`);
     if (report.restoreDatabase) console.log(`Banco restore: ${report.restoreDatabase}`);

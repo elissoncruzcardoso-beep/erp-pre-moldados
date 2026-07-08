@@ -1,6 +1,6 @@
 # Evidencias de backup completo
 
-Esta pasta guarda somente evidencias seguras dos backups completos enviados para storage externo.
+Esta pasta guarda somente evidencias seguras dos backups completos.
 
 Nao registre senhas, tokens, connection strings completas, URLs com usuario/senha ou dados sensiveis.
 
@@ -8,21 +8,32 @@ O arquivo real esperado pelo check e:
 
 `docs/security/backups/latest.json`
 
-O script `npm run backup:full` grava esse arquivo automaticamente depois que o dump e o checksum sao enviados para o S3.
+No modo local, o comando recomendado e:
 
-Exemplo seguro:
+```powershell
+npm run backup:full:local -- --env-file "C:\seguro\precast-backup.env"
+```
+
+No Proxmox CT/Linux, use:
+
+```bash
+npm run backup:full:local -- --env-file /etc/precast-erp/precast-backup.env
+```
+
+Exemplo seguro de evidencia local:
 
 ```json
 {
   "schemaVersion": 1,
-  "performedAt": "2026-06-18T20:00:00.000Z",
+  "performedAt": "2026-07-08T14:00:00.000Z",
   "operator": "Administrador ERP",
   "type": "full-logical-backup",
-  "destination": "s3://precast-backups/precast-erp/postgres/full/2026/06/18/precast-erp-full-20260618T200000Z.dump",
-  "checksumUri": "s3://precast-backups/precast-erp/postgres/full/2026/06/18/precast-erp-full-20260618T200000Z.sha256",
+  "storageMode": "local",
+  "destination": "/var/backups/precast-erp/full/2026/07/08/precast-erp-full.dump",
+  "checksumUri": "/var/backups/precast-erp/full/2026/07/08/precast-erp-full.dump.sha256",
   "checksumSha256": "64-caracteres-hexadecimais",
   "sizeBytes": 123456,
-  "encryption": "AES256",
+  "encryption": "local-managed",
   "result": "PASS"
 }
 ```
@@ -36,5 +47,5 @@ npm run backup:check-evidence
 Relatorio consolidado:
 
 ```powershell
-npm run backup:readiness
+npm run backup:readiness -- --env-file "C:\seguro\precast-backup.env"
 ```

@@ -1,135 +1,157 @@
 # Runbook de Backup e Disaster Recovery
 
-Este runbook define como operar backup externo e teste de restauracao do PRECAST ERP sem salvar segredos no repositorio.
+Este runbook define como operar backup do PRECAST ERP sem salvar segredos no repositorio.
 
-## Estado atual
+## Decisao atual
 
-O codigo ja possui scripts para:
+Neste momento o projeto usa backup local no servidor/CT da empresa.
 
-- validar configuracao externa de backup;
-- gerar backup completo PostgreSQL com `pg_dump`;
-- enviar dump e checksum para S3;
-- gerar export incremental logico;
-- validar postura segura do bucket S3;
-- executar restore drill em banco temporario;
-- registrar evidencias seguras em `docs/security`.
+Nao precisa de AWS agora.
 
-O ambiente so deve ser considerado pronto quando `npm run backup:readiness -- --env-file "C:\seguro\precast-backup.env"` retornar `PRONTO`.
+O backup fica em uma pasta fora do projeto, por exemplo:
+
+- Linux/Proxmox CT: `/var/backups/precast-erp`
+- Windows: `C:\precast-backups`
+
+Essa pasta precisa entrar no backup em nuvem que a empresa ja usa. Se ela ficar somente no mesmo servidor, ainda existe risco em caso de perda, invasao ou defeito fisico.
 
 ## Arquivos que nunca entram no Git
 
 Nao commitar:
 
+- `/etc/precast-erp/precast-backup.env`;
 - `C:\seguro\precast-backup.env`;
 - dumps `.dump`;
-- checksums reais baixados localmente;
+- checksums reais `.sha256`;
 - connection strings completas;
-- tokens, senhas ou chaves AWS;
+- tokens, senhas ou chaves;
 - logs com variaveis de ambiente.
 
 O template publico fica em:
 
 `docs/security/backups/precast-backup.env.template`
 
-## Preparacao inicial no servidor/agendador
+## Preparacao no Proxmox CT
 
-1. Instalar PostgreSQL Client Tools com `pg_dump`, `pg_restore` e `psql`.
-2. Instalar AWS CLI.
-3. Criar bucket S3 privado para backup.
-4. Habilitar bloqueio de acesso publico, criptografia e versionamento no bucket.
-5. Criar usuario IAM exclusivo para backup, sem permissao de apagar objetos.
-6. Criar banco temporario para restore drill.
+1. Instalar Node.js.
+2. Instalar Git.
+3. Instalar PostgreSQL Client Tools com `pg_dump`, `pg_restore` e `psql`.
+4. Baixar/clonar o projeto.
+5. Rodar `npm install`.
+6. Criar a pasta segura:
+
+```bash
+sudo mkdir -p /etc/precast-erp
+sudo mkdir -p /var/backups/precast-erp
+sudo chmod 700 /etc/precast-erp /var/backups/precast-erp
+```
+
 7. Criar o arquivo externo:
 
-```powershell
-npm run backup:init-env -- -Apply
+```bash
+sudo nano /etc/precast-erp/precast-backup.env
 ```
 
-8. Editar `C:\seguro\precast-backup.env` somente no servidor/agendador.
+Conteudo minimo:
 
-## Validacao antes de agendar
-
-Rodar:
-
-```powershell
-npm run backup:check-config -- --env-file "C:\seguro\precast-backup.env"
-npm run backup:check-s3 -- --env-file "C:\seguro\precast-backup.env"
+```env
+BACKUP_STORAGE_MODE="local"
+BACKUP_DATABASE_URL="postgresql://USUARIO:SENHA@HOST:5432/postgres"
+BACKUP_LOCAL_DIR="/var/backups/precast-erp"
+RESTORE_DATABASE_URL="postgresql://USUARIO:SENHA@HOST:5432/precast_erp_restore_drill"
+BACKUP_OPERATOR="Administrador ERP"
 ```
 
-Se qualquer comando falhar, nao agendar backup ainda.
+## Validacao antes do primeiro backup
+
+```bash
+npm run backup:check-config -- --env-file /etc/precast-erp/precast-backup.env --skip-tools
+```
+
+Para validar tambem as ferramentas instaladas:
+
+```bash
+npm run backup:check-config -- --env-file /etc/precast-erp/precast-backup.env
+```
+
+Se falhar, nao agendar backup ainda.
 
 ## Primeiro backup manual
 
-```powershell
-npm run backup:full -- -EnvFile "C:\seguro\precast-backup.env"
+```bash
+npm run backup:full:local -- --env-file /etc/precast-erp/precast-backup.env
 npm run backup:check-evidence
 ```
 
-O backup completo deve gerar `docs/security/backups/latest.json` com caminho S3, checksum, tamanho, criptografia e resultado `PASS`.
+O backup completo deve gerar:
 
-## Primeiro restore drill
+- dump `.dump` em `/var/backups/precast-erp/full/...`;
+- checksum `.sha256`;
+- evidencia segura em `docs/security/backups/latest.json`.
 
-Use o dump mais recente enviado ao S3:
+## Restore drill
 
-```powershell
-npm run backup:restore-drill -- -EnvFile "C:\seguro\precast-backup.env" -S3DumpUri "s3://bucket/prefix/full/AAAA/MM/DD/arquivo.dump" -S3ChecksumUri "s3://bucket/prefix/full/AAAA/MM/DD/arquivo.sha256"
-npm run backup:check-restore-drill
+O teste de restauracao continua necessario.
+
+Ele deve restaurar o dump em um banco temporario, nunca no banco real.
+
+Com dump local, o teste pode apontar para o caminho absoluto do arquivo gerado. A evidencia aceita caminho `s3://` ou caminho local absoluto.
+
+## Agendamento simples no CT
+
+Exemplo de cron diario as 22h:
+
+```bash
+crontab -e
 ```
 
-O destino precisa ser banco temporario. Nunca aponte `RESTORE_DATABASE_URL` para producao.
+Adicionar:
 
-## Agendamento Windows
-
-Primeiro simule:
-
-```powershell
-npm run backup:install-windows-tasks
+```cron
+0 22 * * * cd /caminho/erp-pre-moldados-prototype && npm run backup:full:local -- --env-file /etc/precast-erp/precast-backup.env >> /var/log/precast-backup.log 2>&1
 ```
-
-Depois aplique conscientemente no servidor:
-
-```powershell
-npm run backup:install-windows-tasks -- -ProjectPath "C:\caminho\erp-pre-moldados-prototype" -EnvFile "C:\seguro\precast-backup.env" -Apply
-```
-
-Tarefas esperadas:
-
-- backup completo diario;
-- export incremental horario;
-- checagem diaria de configuracao;
-- checagem diaria de evidencia de backup;
-- checagem diaria de postura S3;
-- checagem semanal de restore drill.
 
 ## Rotina operacional
 
 Diario:
 
-```powershell
-npm run backup:readiness -- --env-file "C:\seguro\precast-backup.env"
+```bash
+npm run backup:check-evidence
+```
+
+Semanal:
+
+```bash
+npm run backup:readiness -- --env-file /etc/precast-erp/precast-backup.env
 ```
 
 Mensal:
 
-```powershell
-npm run backup:restore-drill -- -EnvFile "C:\seguro\precast-backup.env" -S3DumpUri "s3://bucket/prefix/full/AAAA/MM/DD/arquivo.dump" -S3ChecksumUri "s3://bucket/prefix/full/AAAA/MM/DD/arquivo.sha256"
-```
+- escolher um dump recente;
+- restaurar em banco temporario;
+- validar que as tabelas principais aparecem;
+- registrar evidencia de restore drill.
 
-Antes de mudanca grande de schema:
+## Futuro com S3
 
-```powershell
-npm run backup:full -- -EnvFile "C:\seguro\precast-backup.env"
-npm run backup:restore-drill -- -EnvFile "C:\seguro\precast-backup.env" -S3DumpUri "s3://bucket/prefix/full/AAAA/MM/DD/arquivo.dump" -S3ChecksumUri "s3://bucket/prefix/full/AAAA/MM/DD/arquivo.sha256"
-```
+Se a empresa contratar AWS S3 ou storage compativel, o modo `s3` continua disponivel.
+
+Nesse caso voltam a ser exigidos:
+
+- bucket privado;
+- versionamento;
+- criptografia;
+- bloqueio de acesso publico;
+- IAM sem permissao de apagar objetos;
+- `npm run backup:check-s3`.
 
 ## Criterio de aceite
 
-Backup/DR fica aprovado somente com:
+Backup fica operacional quando:
 
-- `backup:check-config` OK;
-- `backup:check-s3` OK ou com avisos aceitos formalmente;
-- `backup:check-evidence` OK;
-- `backup:check-restore-drill` OK;
-- `backup:readiness` com status `PRONTO`.
+- `backup:check-config` passar;
+- `backup:full:local` gerar dump e checksum;
+- `backup:check-evidence` passar;
+- a pasta de backup local estiver sendo copiada pelo backup em nuvem da empresa.
 
-Enquanto isso nao acontecer, a situacao correta e `BLOQUEADO` por falta de credenciais/evidencias externas.
+Backup/DR completo fica aprovado somente depois do restore drill mensal passar.

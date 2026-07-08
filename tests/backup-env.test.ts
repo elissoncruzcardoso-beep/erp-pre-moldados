@@ -19,7 +19,9 @@ function restoreEnv(key: string, value: string | undefined) {
 }
 
 const backupEnvKeys = [
+  "BACKUP_STORAGE_MODE",
   "BACKUP_DATABASE_URL",
+  "BACKUP_LOCAL_DIR",
   "BACKUP_S3_BUCKET",
   "BACKUP_S3_PREFIX",
   "AWS_REGION",
@@ -38,6 +40,33 @@ test("backup env resolver prefers explicit value before environment pointer", ()
     assert.equal(resolveBackupEnvFile(undefined, { fallback: "fallback.env" }), "C:/seguro/precast-backup.env");
   } finally {
     restoreEnv("PRECAST_BACKUP_ENV_FILE", previous);
+  }
+});
+
+test("backup config accepts local mode without AWS credentials", () => {
+  const cwd = mkdtempSync(path.join(os.tmpdir(), "precast-backup-local-"));
+  const envPath = path.join(cwd, "precast-backup.env");
+  const previousValues = new Map(backupEnvKeys.map((key) => [key, process.env[key]]));
+
+  for (const key of backupEnvKeys) {
+    delete process.env[key];
+  }
+
+  writeFileSync(envPath, [
+    "BACKUP_STORAGE_MODE=local",
+    "BACKUP_DATABASE_URL=postgresql://backup:secret@db.precast.lan:5432/postgres",
+    "BACKUP_LOCAL_DIR=C:\\\\precast-backups"
+  ].join("\n"));
+
+  try {
+    const report = checkBackupConfig({ envFile: envPath, skipTools: true });
+    assert.equal(report.ok, true);
+    assert.equal(report.storageMode, "local");
+    assert.doesNotMatch(report.errors.join("\n"), /AWS_SECRET_ACCESS_KEY/);
+  } finally {
+    for (const [key, value] of previousValues) {
+      restoreEnv(key, value);
+    }
   }
 });
 

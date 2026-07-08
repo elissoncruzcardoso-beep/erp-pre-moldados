@@ -47,6 +47,16 @@ function add(errors, field, message) {
   errors.push(`${field}: ${message}`);
 }
 
+function isBackupArtifactPath(value, extension) {
+  if (typeof value !== "string") return false;
+  const normalized = value.replace(/\\/g, "/");
+  return (
+    new RegExp(`^s3://[^/]+/.+\\.${extension}$`, "i").test(normalized) ||
+    new RegExp(`^[A-Za-z]:/.+\\.${extension}$`, "i").test(normalized) ||
+    new RegExp(`^/.+\\.${extension}$`, "i").test(normalized)
+  );
+}
+
 function isIsoDate(value) {
   if (typeof value !== "string") return false;
   const date = new Date(value);
@@ -91,12 +101,16 @@ export function validateBackupEvidence(evidence, {
     add(errors, "operator", "informe responsavel pelo backup");
   }
 
-  if (typeof evidence.destination !== "string" || !/^s3:\/\/[^/]+\/.+\.dump$/i.test(evidence.destination)) {
-    add(errors, "destination", "informe caminho s3:// do dump enviado");
+  if (!["s3", "local", undefined].includes(evidence.storageMode)) {
+    add(errors, "storageMode", "precisa ser local ou s3");
   }
 
-  if (typeof evidence.checksumUri !== "string" || !/^s3:\/\/[^/]+\/.+\.sha256$/i.test(evidence.checksumUri)) {
-    add(errors, "checksumUri", "informe caminho s3:// do checksum enviado");
+  if (!isBackupArtifactPath(evidence.destination, "dump")) {
+    add(errors, "destination", "informe caminho do dump em s3:// ou caminho local absoluto");
+  }
+
+  if (!isBackupArtifactPath(evidence.checksumUri, "sha256")) {
+    add(errors, "checksumUri", "informe caminho do checksum em s3:// ou caminho local absoluto");
   }
 
   if (typeof evidence.checksumSha256 !== "string" || !/^[a-f0-9]{64}$/i.test(evidence.checksumSha256)) {
@@ -107,8 +121,8 @@ export function validateBackupEvidence(evidence, {
     add(errors, "sizeBytes", "precisa ser inteiro maior que zero");
   }
 
-  if (!["AES256", "aws:kms"].includes(evidence.encryption)) {
-    add(errors, "encryption", "precisa ser AES256 ou aws:kms");
+  if (!["AES256", "aws:kms", "local-managed"].includes(evidence.encryption)) {
+    add(errors, "encryption", "precisa ser AES256, aws:kms ou local-managed");
   }
 
   if (evidence.result !== "PASS") {

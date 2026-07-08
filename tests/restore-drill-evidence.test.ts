@@ -32,6 +32,17 @@ test("restore drill evidence accepts recent successful restore metadata", () => 
   assert.deepEqual(errors, []);
 });
 
+test("restore drill evidence accepts local source backup path", () => {
+  const errors = validateRestoreDrillEvidence(
+    validEvidence({
+      sourceBackup: "C:/precast-backups/full/2026/06/18/precast-erp-full.dump"
+    }),
+    { now, maxAgeDays: 45 }
+  );
+
+  assert.deepEqual(errors, []);
+});
+
 test("restore drill evidence rejects missing evidence file", () => {
   const cwd = mkdtempSync(path.join(tmpdir(), "precast-restore-evidence-"));
   const report = checkRestoreDrillEvidenceFile({

@@ -32,6 +32,20 @@ test("backup evidence accepts recent full backup metadata", () => {
   assert.deepEqual(errors, []);
 });
 
+test("backup evidence accepts local full backup metadata", () => {
+  const errors = validateBackupEvidence(
+    validEvidence({
+      storageMode: "local",
+      destination: "C:/precast-backups/full/2026/06/18/precast-erp-full.dump",
+      checksumUri: "C:/precast-backups/full/2026/06/18/precast-erp-full.sha256",
+      encryption: "local-managed"
+    }),
+    { now, maxAgeHours: 36 }
+  );
+
+  assert.deepEqual(errors, []);
+});
+
 test("backup evidence rejects missing file", () => {
   const cwd = mkdtempSync(path.join(tmpdir(), "precast-backup-evidence-"));
   const report = checkBackupEvidenceFile({

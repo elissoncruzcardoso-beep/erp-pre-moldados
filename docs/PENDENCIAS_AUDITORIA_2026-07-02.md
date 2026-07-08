@@ -1,5 +1,20 @@
 # Pendências de Auditoria — 2026-07-02
 
+## Verificacao Codex - 2026-07-08 - Backup local
+
+O backup foi ajustado para o cenario atual da empresa: modo local no servidor ou Proxmox CT, sem obrigar AWS neste momento.
+
+Mudancas aplicadas:
+
+- `BACKUP_STORAGE_MODE=local` passa a ser aceito pelos checks.
+- `BACKUP_LOCAL_DIR` define a pasta externa onde os dumps ficam salvos.
+- `npm run backup:full:local` gera dump PostgreSQL, checksum e evidencia segura.
+- `backup:readiness` nao exige postura S3 quando o modo local esta ativo.
+- Evidencias de backup e restore aceitam caminho local absoluto alem de `s3://`.
+- Runbook e template foram atualizados para Proxmox CT/Linux e Windows.
+
+Pendencia operacional: executar no servidor, gerar o primeiro backup real, garantir copia externa da pasta local e depois fazer restore drill em banco temporario.
+
 > Documento gerado por auditoria externa (Claude) para execução pelo Codex.
 > **Contexto:** sistema em produção. Toda mudança deve ser incremental, testada e
 > sem quebra de contrato de API ou de regra de negócio existente.

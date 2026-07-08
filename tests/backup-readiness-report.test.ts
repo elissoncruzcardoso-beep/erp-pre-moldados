@@ -9,6 +9,7 @@ function validBackupConfig(overrides: Record<string, unknown> = {}) {
   return {
     ok: true,
     envFile: "C:/seguro/precast-backup.env",
+    storageMode: "s3",
     backupDatabase: "postgresql://db.example.com:5432/postgres",
     restoreDatabase: "postgresql://db.example.com:5432/precast_erp_restore_drill",
     checks: [{ name: "BACKUP_DATABASE_URL", ok: true, detail: "configurada" }],
@@ -113,6 +114,37 @@ test("backup readiness report is partial when S3 posture evidence is missing", (
   assert.match(report.nextActions.join("\n"), /backup:check-s3/);
 });
 
+test("backup readiness report skips S3 posture in local storage mode", () => {
+  const report = buildReadinessReport({
+    backupConfig: validBackupConfig({ storageMode: "local" }),
+    backupEvidence: validBackupEvidence({
+      evidence: {
+        ...validBackupEvidence().evidence,
+        storageMode: "local",
+        destination: "C:/precast-backups/full/2026/06/18/precast-erp-full.dump",
+        checksumUri: "C:/precast-backups/full/2026/06/18/precast-erp-full.sha256",
+        encryption: "local-managed"
+      }
+    }),
+    s3PostureEvidence: {
+      ok: false,
+      evidencePath: "docs/security/backups/s3-posture-latest.json",
+      errors: ["evidencia de postura S3 ausente"]
+    },
+    restoreEvidence: validRestoreEvidence({
+      evidence: {
+        ...validRestoreEvidence().evidence,
+        sourceBackup: "C:/precast-backups/full/2026/06/18/precast-erp-full.dump"
+      }
+    }),
+    generatedAt: "2026-06-18T12:00:00.000Z"
+  });
+
+  assert.equal(report.status, "PRONTO");
+  assert.equal(report.ready, true);
+  assert.equal(report.s3Posture.skipped, true);
+});
+
 test("backup readiness report is blocked when external backup config is missing", () => {
   const report = buildReadinessReport({
     backupConfig: validBackupConfig({
@@ -127,7 +159,7 @@ test("backup readiness report is blocked when external backup config is missing"
 
   assert.equal(report.status, "BLOQUEADO");
   assert.equal(report.ready, false);
-  assert.match(report.nextActions.join("\n"), /variaveis de backup externo/);
+  assert.match(report.nextActions.join("\n"), /variaveis de backup/);
 });
 
 test("backup readiness report is blocked when a child check returns no details", () => {

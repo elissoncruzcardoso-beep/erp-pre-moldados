@@ -47,6 +47,16 @@ function add(errors, field, message) {
   errors.push(`${field}: ${message}`);
 }
 
+function isBackupArtifactPath(value) {
+  if (typeof value !== "string") return false;
+  const normalized = value.replace(/\\/g, "/");
+  return (
+    /^s3:\/\/[^/]+\/.+/i.test(normalized) ||
+    /^[A-Za-z]:\/.+\.dump$/i.test(normalized) ||
+    /^\/.+\.dump$/i.test(normalized)
+  );
+}
+
 function isIsoDate(value) {
   if (typeof value !== "string") return false;
   const date = new Date(value);
@@ -87,8 +97,8 @@ export function validateRestoreDrillEvidence(evidence, {
     add(errors, "operator", "informe responsavel pelo teste");
   }
 
-  if (typeof evidence.sourceBackup !== "string" || !/^s3:\/\/[^/]+\/.+/i.test(evidence.sourceBackup)) {
-    add(errors, "sourceBackup", "informe caminho s3:// do dump restaurado");
+  if (!isBackupArtifactPath(evidence.sourceBackup)) {
+    add(errors, "sourceBackup", "informe caminho s3:// ou caminho local absoluto do dump restaurado");
   }
 
   if (typeof evidence.restoreTarget !== "string" || !/(restore|drill|teste|test|tmp|temp|ci)/i.test(evidence.restoreTarget)) {

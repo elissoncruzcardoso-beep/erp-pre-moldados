@@ -67,6 +67,7 @@ function summarizeBackupConfig(report) {
   return {
     ok,
     envFile: report.envFile,
+    storageMode: report.storageMode || "s3",
     backupDatabase: report.backupDatabase,
     restoreDatabase: report.restoreDatabase,
     checks: Array.isArray(report.checks) ? report.checks : [],
@@ -205,7 +206,15 @@ export function buildReadinessReport({
 }) {
   const backup = summarizeBackupConfig(backupConfig);
   const backupRun = summarizeBackupEvidence(backupEvidence);
-  const s3Posture = summarizeS3PostureEvidence(s3PostureEvidence);
+  const s3Posture = backup.storageMode === "local"
+    ? {
+        ok: true,
+        skipped: true,
+        evidencePath: "nao exigido para BACKUP_STORAGE_MODE=local",
+        summary: null,
+        errors: []
+      }
+    : summarizeS3PostureEvidence(s3PostureEvidence);
   const restore = summarizeRestoreEvidence(restoreEvidence);
   const blockers = [];
   const warnings = [];
@@ -213,8 +222,12 @@ export function buildReadinessReport({
 
   if (!backup.ok) {
     blockers.push(...backup.errors);
-    nextActions.push("Configurar variaveis de backup externo em arquivo seguro fora do repositorio.");
-    nextActions.push("Rodar npm run backup:check-config com as ferramentas AWS CLI e PostgreSQL instaladas.");
+    nextActions.push("Configurar variaveis de backup em arquivo seguro fora do repositorio.");
+    nextActions.push(
+      backup.storageMode === "local"
+        ? "Rodar npm run backup:check-config com PostgreSQL Client Tools instaladas."
+        : "Rodar npm run backup:check-config com AWS CLI e PostgreSQL Client Tools instaladas."
+    );
   }
 
   if (backup.ok && !backupRun.ok) {
@@ -297,9 +310,9 @@ function main() {
     console.log("Relatorio de prontidao backup/DR");
     console.log(`Status: ${report.status}`);
     console.log(`Gerado em: ${report.generatedAt}`);
-    console.log(`Backup externo: ${report.backup.ok ? "OK" : "pendente"}`);
+    console.log(`Configuracao de backup: ${report.backup.ok ? "OK" : "pendente"}`);
     console.log(`Ultimo backup completo: ${report.backupRun.ok ? "OK" : "pendente"}`);
-    console.log(`Postura S3: ${report.s3Posture.ok ? "OK" : "pendente"}`);
+    console.log(`Postura S3: ${report.s3Posture.skipped ? "nao exigida" : report.s3Posture.ok ? "OK" : "pendente"}`);
     console.log(`Restore drill: ${report.restore.ok ? "OK" : "pendente"}`);
 
     for (const blocker of report.blockers) {
