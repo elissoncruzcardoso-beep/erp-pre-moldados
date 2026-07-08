@@ -35,6 +35,7 @@
     "backup:full:local": "node scripts/backup/backup-full-postgres-local.mjs",
     "backup:incremental": "node scripts/backup/export-incremental.mjs",
     "backup:restore-drill": "powershell -ExecutionPolicy Bypass -File scripts/backup/restore-drill.ps1",
+    "backup:restore-drill:local": "node scripts/backup/restore-drill-local.mjs",
     "maintenance:audit-retention": "tsx scripts/maintenance/cleanup-audit-logs.ts",
     "start": "next start",
     "lint": "next lint",

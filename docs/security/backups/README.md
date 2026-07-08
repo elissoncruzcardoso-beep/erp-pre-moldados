@@ -49,3 +49,9 @@ Relatorio consolidado:
 ```powershell
 npm run backup:readiness -- --env-file "C:\seguro\precast-backup.env"
 ```
+
+Restore drill local:
+
+```bash
+npm run backup:restore-drill:local -- --env-file /etc/precast-erp/precast-backup.env
+```

@@ -95,7 +95,21 @@ O teste de restauracao continua necessario.
 
 Ele deve restaurar o dump em um banco temporario, nunca no banco real.
 
-Com dump local, o teste pode apontar para o caminho absoluto do arquivo gerado. A evidencia aceita caminho `s3://` ou caminho local absoluto.
+Depois de um `backup:full:local`, o restore local pode usar automaticamente a
+ultima evidencia de backup:
+
+```bash
+npm run backup:restore-drill:local -- --env-file /etc/precast-erp/precast-backup.env
+npm run backup:check-restore-drill
+```
+
+Tambem e possivel informar os arquivos manualmente:
+
+```bash
+npm run backup:restore-drill:local -- --env-file /etc/precast-erp/precast-backup.env --dump-path /var/backups/precast-erp/full/AAAA/MM/DD/arquivo.dump --checksum-path /var/backups/precast-erp/full/AAAA/MM/DD/arquivo.dump.sha256
+```
+
+A evidencia aceita caminho `s3://` ou caminho local absoluto.
 
 ## Agendamento simples no CT
 
@@ -128,7 +142,7 @@ npm run backup:readiness -- --env-file /etc/precast-erp/precast-backup.env
 Mensal:
 
 - escolher um dump recente;
-- restaurar em banco temporario;
+- restaurar em banco temporario com `backup:restore-drill:local`;
 - validar que as tabelas principais aparecem;
 - registrar evidencia de restore drill.
 

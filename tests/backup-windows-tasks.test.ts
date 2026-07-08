@@ -50,6 +50,7 @@ test("restore drill records safe evidence without printing the full database URL
 
   assert.match(restoreScript, /EvidencePath/);
   assert.match(restoreScript, /sourceBackup/);
+  assert.match(restoreScript, /resolvedDumpPath/);
   assert.match(restoreScript, /Get-Safe-Restore-Target/);
   assert.doesNotMatch(restoreScript, /Banco de teste preservado para conferencias: \$restoreUrl/);
 });

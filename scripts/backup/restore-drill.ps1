@@ -189,11 +189,14 @@ $safeRestoreTarget = Get-Safe-Restore-Target -RestoreUrl $restoreUrl
 Write-Host "Banco de teste preservado para conferencias: $safeRestoreTarget"
 
 $sourceBackupForEvidence = $S3DumpUri
+if (-not $sourceBackupForEvidence -and $resolvedDumpPath) {
+  $sourceBackupForEvidence = $resolvedDumpPath
+}
 if (-not $sourceBackupForEvidence -and $env:RESTORE_DRILL_SOURCE_BACKUP_URI) {
   $sourceBackupForEvidence = $env:RESTORE_DRILL_SOURCE_BACKUP_URI
 }
 
-if ($sourceBackupForEvidence -and $sourceBackupForEvidence -match "^s3://") {
+if ($sourceBackupForEvidence) {
   if (-not $Operator) {
     $Operator = $env:BACKUP_OPERATOR
   }
@@ -228,5 +231,5 @@ if ($sourceBackupForEvidence -and $sourceBackupForEvidence -match "^s3://") {
   $evidence | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $evidenceFullPath -Encoding UTF8
   Write-Host "Evidencia segura gravada em: $EvidencePath"
 } else {
-  Write-Host "Evidencia automatica nao gravada: informe -S3DumpUri ou RESTORE_DRILL_SOURCE_BACKUP_URI com s3://."
+  Write-Host "Evidencia automatica nao gravada: informe -DumpPath, -S3DumpUri ou RESTORE_DRILL_SOURCE_BACKUP_URI."
 }
