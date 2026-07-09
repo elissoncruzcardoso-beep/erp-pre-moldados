@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import {
+  buildCronCliPlan,
   buildCronBlock,
   mergeManagedCronBlock
 } from "../scripts/backup/install-linux-backup-cron.mjs";
@@ -11,29 +11,19 @@ const envFile = "/etc/precast-erp/precast-backup.env";
 const logDir = "/var/log/precast-erp";
 
 test("Linux backup cron installer is dry-run by default", () => {
-  const result = spawnSync(
-    process.execPath,
-    [
-      "scripts/backup/install-linux-backup-cron.mjs",
-      "--project-path",
-      projectPath,
-      "--backup-env-file",
-      envFile,
-      "--log-dir",
-      logDir
-    ],
-    {
-      cwd: process.cwd(),
-      encoding: "utf8",
-      shell: false
-    }
-  );
+  const plan = buildCronCliPlan([
+    "--project-path",
+    projectPath,
+    "--backup-env-file",
+    envFile,
+    "--log-dir",
+    logDir
+  ]);
 
-  assert.equal(result.status, 0);
-  assert.match(result.stdout, /Modo dry-run/);
-  assert.match(result.stdout, /backup:full:local/);
-  assert.match(result.stdout, /backup:readiness/);
-  assert.doesNotMatch(result.stdout, /postgresql:\/\/[^"'\s]+:[^@"'\s]+@/);
+  assert.equal(plan.apply, false);
+  assert.match(plan.block, /backup:full:local/);
+  assert.match(plan.block, /backup:readiness/);
+  assert.doesNotMatch(JSON.stringify(plan), /postgresql:\/\/[^"'\s]+:[^@"'\s]+@/);
 });
 
 test("Linux backup cron block schedules local backup checks", () => {

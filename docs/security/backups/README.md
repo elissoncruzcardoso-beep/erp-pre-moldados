@@ -8,9 +8,23 @@ O arquivo real esperado pelo check e:
 
 `docs/security/backups/latest.json`
 
+Os arquivos `latest.json`, `restore-drill-latest.json` e
+`s3-posture-latest.json` sao gerados localmente e ficam ignorados pelo Git.
+Guarde a evidencia completa no ambiente seguro da empresa.
+
 Por padrao, os scripts procuram o arquivo externo de configuracao em
 `C:\seguro\precast-backup.env` no Windows ou
 `/etc/precast-erp/precast-backup.env` no Linux/Proxmox CT.
+
+No Proxmox CT, gere o arquivo externo a partir do template:
+
+```bash
+npm run backup:init-linux-env -- --backup-env-file /etc/precast-erp/precast-backup.env
+sudo node scripts/backup/init-linux-backup-env.mjs --backup-env-file /etc/precast-erp/precast-backup.env --apply
+```
+
+Depois edite `/etc/precast-erp/precast-backup.env` e preencha as credenciais
+reais antes de validar. O arquivo e criado com permissao `600`, fora do Git.
 
 No modo local, o comando recomendado e:
 

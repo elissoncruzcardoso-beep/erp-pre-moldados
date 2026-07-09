@@ -49,15 +49,27 @@ Sem `--env-file`, os scripts de backup procuram o arquivo externo padrao:
 sudo mkdir -p /etc/precast-erp
 sudo mkdir -p /var/backups/precast-erp
 sudo chmod 700 /etc/precast-erp /var/backups/precast-erp
+sudo chown "$USER:$USER" /var/backups/precast-erp
 ```
 
-7. Criar o arquivo externo:
+7. Criar o arquivo externo em modo assistido:
+
+```bash
+npm run backup:init-linux-env -- --backup-env-file /etc/precast-erp/precast-backup.env
+sudo node scripts/backup/init-linux-backup-env.mjs --backup-env-file /etc/precast-erp/precast-backup.env --apply
+```
+
+O inicializador aplica permissao `700` no diretorio e `600` no arquivo. Quando
+executado com `sudo`, ele entrega a propriedade ao usuario que chamou o comando,
+para que o cron desse usuario consiga ler a configuracao.
+
+8. Editar o arquivo externo e trocar os placeholders pelos dados reais:
 
 ```bash
 sudo nano /etc/precast-erp/precast-backup.env
 ```
 
-Conteudo minimo:
+Conteudo minimo esperado:
 
 ```env
 BACKUP_STORAGE_MODE="local"
@@ -66,6 +78,10 @@ BACKUP_LOCAL_DIR="/var/backups/precast-erp"
 RESTORE_DATABASE_URL="postgresql://USUARIO:SENHA@HOST:5432/precast_erp_restore_drill"
 BACKUP_OPERATOR="Administrador ERP"
 ```
+
+Use a URL de conexao do banco mostrada no painel do Supabase. Nao use chave
+`anon`, `service_role` ou variavel `NEXT_PUBLIC_*`: o `pg_dump` precisa da URL
+PostgreSQL e da senha do banco.
 
 ## Validacao antes do primeiro backup
 
@@ -93,6 +109,9 @@ O backup completo deve gerar:
 - dump `.dump` em `/var/backups/precast-erp/full/...`;
 - checksum `.sha256`;
 - evidencia segura em `docs/security/backups/latest.json`.
+
+Confirme tambem que o usuario do cron consegue escrever em
+`/var/backups/precast-erp`.
 
 ## Restore drill
 

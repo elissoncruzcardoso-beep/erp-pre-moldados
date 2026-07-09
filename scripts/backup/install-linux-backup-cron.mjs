@@ -119,6 +119,26 @@ export function mergeManagedCronBlock(existingCron, newBlock) {
   return `${normalizedExisting}\n\n${newBlock}`;
 }
 
+export function buildCronCliPlan(args = []) {
+  const projectPath = getArg(args, "--project-path", "/opt/precast/erp-pre-moldados-prototype");
+  const envFile = resolveBackupEnvFile(
+    getArg(args, "--backup-env-file", getArg(args, "--env-file")),
+    { fallback: "/etc/precast-erp/precast-backup.env" }
+  );
+  const logDir = getArg(args, "--log-dir", "/var/log/precast-erp");
+  const apply = hasFlag(args, "--apply");
+  const includeRestoreDrill = hasFlag(args, "--include-restore-drill");
+
+  return {
+    projectPath,
+    envFile,
+    logDir,
+    apply,
+    includeRestoreDrill,
+    block: buildCronBlock({ projectPath, envFile, logDir, includeRestoreDrill })
+  };
+}
+
 function readCurrentCron() {
   const result = spawnSync("crontab", ["-l"], {
     encoding: "utf8",
@@ -147,15 +167,14 @@ function writeCron(value) {
 
 function main() {
   const args = process.argv.slice(2);
-  const projectPath = getArg(args, "--project-path", "/opt/precast/erp-pre-moldados-prototype");
-  const envFile = resolveBackupEnvFile(
-    getArg(args, "--backup-env-file", getArg(args, "--env-file")),
-    { fallback: "/etc/precast-erp/precast-backup.env" }
-  );
-  const logDir = getArg(args, "--log-dir", "/var/log/precast-erp");
-  const apply = hasFlag(args, "--apply");
-  const includeRestoreDrill = hasFlag(args, "--include-restore-drill");
-  const block = buildCronBlock({ projectPath, envFile, logDir, includeRestoreDrill });
+  const {
+    projectPath,
+    envFile,
+    logDir,
+    apply,
+    includeRestoreDrill,
+    block
+  } = buildCronCliPlan(args);
 
   console.log("Agendamento Linux de backup do PRECAST ERP");
   console.log(`Projeto: ${projectPath}`);

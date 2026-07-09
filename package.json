@@ -30,6 +30,7 @@
     "backup:check-restore-drill": "node scripts/backup/check-restore-drill-evidence.mjs",
     "backup:readiness": "node scripts/backup/backup-readiness-report.mjs",
     "backup:init-env": "powershell -ExecutionPolicy Bypass -File scripts/backup/init-backup-env.ps1",
+    "backup:init-linux-env": "node scripts/backup/init-linux-backup-env.mjs",
     "backup:install-windows-tasks": "powershell -ExecutionPolicy Bypass -File scripts/backup/install-windows-backup-tasks.ps1",
     "backup:install-linux-cron": "node scripts/backup/install-linux-backup-cron.mjs",
     "backup:full": "powershell -ExecutionPolicy Bypass -File scripts/backup/backup-full-postgres.ps1",

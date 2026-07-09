@@ -21,6 +21,12 @@ Mudancas aplicadas:
 - `npm run security:readiness` foi reexecutado em 2026-07-08: todos os guards
   retornaram `OK`; o unico bloqueio restante e Backup/DR pelos mesmos itens
   externos acima.
+- `npm run backup:init-linux-env` prepara o arquivo externo
+  `/etc/precast-erp/precast-backup.env` no Proxmox CT a partir do template,
+  com dry-run por padrao e `--apply` somente no CT.
+- Validacao local em 2026-07-09: 157 testes do recorte de backup passaram e
+  `npm run build` concluiu sem erro. Isso valida o pacote, nao substitui a
+  evidencia operacional do primeiro dump e do restore drill no CT.
 
 Pendencia operacional: executar no servidor, gerar o primeiro backup real, garantir copia externa da pasta local e depois fazer restore drill em banco temporario.
 

@@ -7,6 +7,9 @@ out
 precast-backup.env
 *.dump
 *.sha256
+docs/security/backups/latest.json
+docs/security/backups/restore-drill-latest.json
+docs/security/backups/s3-posture-latest.json
 next-debug.*.log
 dev-*.log
 dev.log
