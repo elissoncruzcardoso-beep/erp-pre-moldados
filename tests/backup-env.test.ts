@@ -24,6 +24,7 @@ const backupEnvKeys = [
   "BACKUP_STORAGE_MODE",
   "BACKUP_DATABASE_URL",
   "BACKUP_LOCAL_DIR",
+  "BACKUP_RETENTION_DAYS",
   "BACKUP_S3_BUCKET",
   "BACKUP_S3_PREFIX",
   "AWS_REGION",
@@ -193,6 +194,7 @@ test("backup config rejects template placeholder values", () => {
 
   writeFileSync(envPath, [
     "BACKUP_DATABASE_URL=postgresql://USUARIO:SENHA@HOST:5432/postgres",
+    "RESTORE_DATABASE_URL=postgresql://USUARIO:SENHA@HOST:5432/precast_restore_drill",
     "BACKUP_S3_BUCKET=nome-do-bucket-privado",
     "BACKUP_S3_PREFIX=precast-erp/postgres",
     "AWS_REGION=sa-east-1",
@@ -205,6 +207,7 @@ test("backup config rejects template placeholder values", () => {
     assert.equal(report.ok, false);
     assert.match(report.errors.join("\n"), /placeholder/);
     assert.match(report.errors.join("\n"), /BACKUP_DATABASE_URL/);
+    assert.match(report.errors.join("\n"), /RESTORE_DATABASE_URL configurada/);
     assert.match(report.errors.join("\n"), /AWS_SECRET_ACCESS_KEY/);
   } finally {
     for (const [key, value] of previousValues) {

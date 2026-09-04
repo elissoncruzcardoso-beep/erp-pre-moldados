@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 import { existsSync } from "node:fs";
 import { loadDotEnv, resolveBackupEnvFile } from "./backup-env.mjs";
 import { resolveBackupSchema } from "./backup-schema.mjs";
+import { resolveBackupRetentionDays } from "./local-backup-retention.mjs";
 
 function getArg(name, fallback = undefined) {
   const args = process.argv.slice(2);
@@ -58,6 +59,7 @@ function hasBackupEnvironmentVariables() {
     "BACKUP_DATABASE_URL",
     "BACKUP_DATABASE_SCHEMA",
     "BACKUP_LOCAL_DIR",
+    "BACKUP_RETENTION_DAYS",
     "BACKUP_S3_BUCKET",
     "BACKUP_S3_PREFIX",
     "AWS_REGION",
@@ -180,6 +182,14 @@ export function checkBackupConfig({
 
   const restoreUrl = process.env.RESTORE_DATABASE_URL;
   if (restoreUrl) {
+    const restoreConfigured = !isPlaceholderValue(restoreUrl);
+    addCheck(
+      checks,
+      errors,
+      "RESTORE_DATABASE_URL configurada",
+      restoreConfigured,
+      restoreConfigured ? "configurada" : "placeholder ou valor invalido"
+    );
     addCheck(
       checks,
       errors,
@@ -229,6 +239,29 @@ export function checkBackupConfig({
         !localDir.includes("erp-pre-moldados-prototype") && !localDir.includes("Documents\\New project")
           ? "fora do checkout do projeto"
           : "use caminho externo ao checkout do projeto"
+      );
+    }
+
+    try {
+      const retentionDays = resolveBackupRetentionDays(process.env.BACKUP_RETENTION_DAYS);
+      if (retentionDays) {
+        addCheck(
+          checks,
+          errors,
+          "BACKUP_RETENTION_DAYS",
+          true,
+          `${retentionDays} dia(s)`
+        );
+      } else {
+        addWarning(warnings, "BACKUP_RETENTION_DAYS ausente. Backups locais antigos nao serao removidos.");
+      }
+    } catch (error) {
+      addCheck(
+        checks,
+        errors,
+        "BACKUP_RETENTION_DAYS",
+        false,
+        error instanceof Error ? error.message : "retencao invalida"
       );
     }
 

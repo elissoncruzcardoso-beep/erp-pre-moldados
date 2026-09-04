@@ -76,7 +76,8 @@ BACKUP_STORAGE_MODE="local"
 BACKUP_DATABASE_URL="postgresql://USUARIO:SENHA@HOST:5432/postgres"
 BACKUP_DATABASE_SCHEMA="public"
 BACKUP_LOCAL_DIR="/var/backups/precast-erp"
-RESTORE_DATABASE_URL="postgresql://USUARIO:SENHA@HOST:5432/precast_erp_restore_drill"
+BACKUP_RETENTION_DAYS="30"
+# RESTORE_DATABASE_URL="postgresql://USUARIO:SENHA@HOST:5432/precast_erp_restore_drill"
 BACKUP_OPERATOR="Administrador ERP"
 ```
 
@@ -88,6 +89,14 @@ O ERP usa o schema `public`. O backup limita o `pg_dump` e o `pg_restore` a
 esse schema para nao copiar nem tentar restaurar schemas internos do Supabase.
 Mantenha `BACKUP_DATABASE_SCHEMA="public"` enquanto o Prisma continuar usando
 o schema padrao.
+
+`BACKUP_RETENTION_DAYS="30"` remove somente arquivos `.dump` e
+`.dump.sha256` com mais de 30 dias dentro de `BACKUP_LOCAL_DIR/full`. A limpeza
+acontece apenas depois que o novo dump e seu checksum foram criados. Sem essa
+variavel, a retencao fica desativada.
+
+Mantenha `RESTORE_DATABASE_URL` comentada enquanto nao existir um banco
+temporario real e isolado para o teste de restauracao.
 
 ## Validacao antes do primeiro backup
 

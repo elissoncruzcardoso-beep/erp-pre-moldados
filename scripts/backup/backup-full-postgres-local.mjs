@@ -5,6 +5,10 @@ import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { loadDotEnv, resolveBackupEnvFile, resolveEnvFilePath } from "./backup-env.mjs";
 import { resolveBackupSchema } from "./backup-schema.mjs";
+import {
+  pruneExpiredLocalBackups,
+  resolveBackupRetentionDays
+} from "./local-backup-retention.mjs";
 
 const root = process.cwd();
 const defaultEvidencePath = path.join(root, "docs", "security", "backups", "latest.json");
@@ -79,6 +83,7 @@ export async function runLocalFullBackup({
   const databaseSchema = resolveBackupSchema();
   const configuredOutputDir = outputDir || process.env.BACKUP_LOCAL_DIR;
   const backupOperator = operator || process.env.BACKUP_OPERATOR || process.env.CRON_USER_EMAIL || "Administrador ERP";
+  const retentionDays = resolveBackupRetentionDays(process.env.BACKUP_RETENTION_DAYS);
 
   if (!databaseUrl) {
     throw new Error("Defina BACKUP_DATABASE_URL no arquivo externo de backup.");
@@ -118,6 +123,13 @@ export async function runLocalFullBackup({
   const checksum = await sha256File(dumpPath);
   writeFileSync(checksumPath, `${checksum}  ${path.basename(dumpPath)}\n`, "utf8");
 
+  const retention = pruneExpiredLocalBackups({
+    outputDir: resolvedOutputDir,
+    retentionDays,
+    preservePaths: [dumpPath, checksumPath],
+    now
+  });
+
   const evidence = {
     schemaVersion: 1,
     performedAt: now.toISOString(),
@@ -129,6 +141,8 @@ export async function runLocalFullBackup({
     checksumUri: normalizePathForEvidence(checksumPath),
     checksumSha256: checksum,
     sizeBytes: statSync(dumpPath).size,
+    retentionDays,
+    prunedFiles: retention.removedFiles.length,
     encryption: "local-managed",
     result: "PASS"
   };
@@ -140,7 +154,8 @@ export async function runLocalFullBackup({
     dumpPath,
     checksumPath,
     evidencePath,
-    evidence
+    evidence,
+    retention
   };
 }
 
@@ -157,6 +172,11 @@ async function main() {
   console.log(`Dump: ${result.dumpPath}`);
   console.log(`Checksum: ${result.checksumPath}`);
   console.log(`Evidencia: ${result.evidencePath}`);
+  console.log(
+    result.retention.retentionDays
+      ? `Retencao: ${result.retention.retentionDays} dia(s); ${result.retention.removedFiles.length} arquivo(s) antigo(s) removido(s)`
+      : "Retencao: desativada; configure BACKUP_RETENTION_DAYS"
+  );
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

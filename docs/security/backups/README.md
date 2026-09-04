@@ -30,6 +30,10 @@ reais antes de validar. O arquivo e criado com permissao `600`, fora do Git.
 O template usa `BACKUP_DATABASE_SCHEMA="public"`. Esse limite impede que o
 backup do ERP tente copiar schemas internos gerenciados pelo Supabase.
 
+Para o modo local, `BACKUP_RETENTION_DAYS="30"` mantem os backups dos ultimos
+30 dias. A limpeza aceita somente `.dump` e `.dump.sha256` dentro da pasta
+`full` e ocorre depois da criacao do backup novo.
+
 No modo local, o comando recomendado e:
 
 ```powershell
