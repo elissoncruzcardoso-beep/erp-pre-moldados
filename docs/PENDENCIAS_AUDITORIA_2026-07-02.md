@@ -27,6 +27,12 @@ Mudancas aplicadas:
 - Validacao local em 2026-07-09: 157 testes do recorte de backup passaram e
   `npm run build` concluiu sem erro. Isso valida o pacote, nao substitui a
   evidencia operacional do primeiro dump e do restore drill no CT.
+- Revisao de 2026-07-14: `pg_dump` e `pg_restore` foram limitados ao schema
+  `public`, usado pelo Prisma, para nao copiar schemas internos do Supabase. O
+  caminho ignorado da evidencia de restore tambem foi alinhado com
+  `docs/security/restore-drills/latest.json`.
+- Validacao dessa revisao: 160 testes passaram, os scripts PowerShell tiveram
+  a sintaxe validada e `npm run build` concluiu sem erro.
 
 Pendencia operacional: executar no servidor, gerar o primeiro backup real, garantir copia externa da pasta local e depois fazer restore drill em banco temporario.
 

@@ -74,6 +74,7 @@ Conteudo minimo esperado:
 ```env
 BACKUP_STORAGE_MODE="local"
 BACKUP_DATABASE_URL="postgresql://USUARIO:SENHA@HOST:5432/postgres"
+BACKUP_DATABASE_SCHEMA="public"
 BACKUP_LOCAL_DIR="/var/backups/precast-erp"
 RESTORE_DATABASE_URL="postgresql://USUARIO:SENHA@HOST:5432/precast_erp_restore_drill"
 BACKUP_OPERATOR="Administrador ERP"
@@ -82,6 +83,11 @@ BACKUP_OPERATOR="Administrador ERP"
 Use a URL de conexao do banco mostrada no painel do Supabase. Nao use chave
 `anon`, `service_role` ou variavel `NEXT_PUBLIC_*`: o `pg_dump` precisa da URL
 PostgreSQL e da senha do banco.
+
+O ERP usa o schema `public`. O backup limita o `pg_dump` e o `pg_restore` a
+esse schema para nao copiar nem tentar restaurar schemas internos do Supabase.
+Mantenha `BACKUP_DATABASE_SCHEMA="public"` enquanto o Prisma continuar usando
+o schema padrao.
 
 ## Validacao antes do primeiro backup
 

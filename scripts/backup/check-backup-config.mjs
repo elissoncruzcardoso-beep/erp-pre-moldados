@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { existsSync } from "node:fs";
 import { loadDotEnv, resolveBackupEnvFile } from "./backup-env.mjs";
+import { resolveBackupSchema } from "./backup-schema.mjs";
 
 function getArg(name, fallback = undefined) {
   const args = process.argv.slice(2);
@@ -55,6 +56,7 @@ function hasBackupEnvironmentVariables() {
   return [
     "BACKUP_STORAGE_MODE",
     "BACKUP_DATABASE_URL",
+    "BACKUP_DATABASE_SCHEMA",
     "BACKUP_LOCAL_DIR",
     "BACKUP_S3_BUCKET",
     "BACKUP_S3_PREFIX",
@@ -155,6 +157,24 @@ export function checkBackupConfig({
       "BACKUP_DATABASE_URL valida",
       safeUrlSummary(backupUrl) !== "URL invalida",
       safeUrlSummary(backupUrl)
+    );
+  }
+
+  try {
+    addCheck(
+      checks,
+      errors,
+      "BACKUP_DATABASE_SCHEMA",
+      true,
+      resolveBackupSchema()
+    );
+  } catch (error) {
+    addCheck(
+      checks,
+      errors,
+      "BACKUP_DATABASE_SCHEMA",
+      false,
+      error instanceof Error ? error.message : "schema invalido"
     );
   }
 

@@ -4,6 +4,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { loadDotEnv, resolveBackupEnvFile, resolveEnvFilePath } from "./backup-env.mjs";
+import { resolveBackupSchema } from "./backup-schema.mjs";
 
 const root = process.cwd();
 const defaultEvidencePath = path.join(root, "docs", "security", "backups", "latest.json");
@@ -48,6 +49,23 @@ function assertOutsideRepo(outputDir) {
   }
 }
 
+export function buildPgDumpArgs({ databaseUrl, dumpPath, schema = "public" }) {
+  return [
+    "--dbname",
+    databaseUrl,
+    "--schema",
+    resolveBackupSchema(schema),
+    "--format",
+    "custom",
+    "--compress",
+    "9",
+    "--no-owner",
+    "--no-privileges",
+    "--file",
+    dumpPath
+  ];
+}
+
 export async function runLocalFullBackup({
   envFile = resolveBackupEnvFile(),
   outputDir,
@@ -58,6 +76,7 @@ export async function runLocalFullBackup({
   loadDotEnv(envFile);
 
   const databaseUrl = process.env.BACKUP_DATABASE_URL;
+  const databaseSchema = resolveBackupSchema();
   const configuredOutputDir = outputDir || process.env.BACKUP_LOCAL_DIR;
   const backupOperator = operator || process.env.BACKUP_OPERATOR || process.env.CRON_USER_EMAIL || "Administrador ERP";
 
@@ -79,18 +98,11 @@ export async function runLocalFullBackup({
   const dumpPath = path.join(backupDir, `precast-erp-full-${stamp}.dump`);
   const checksumPath = `${dumpPath}.sha256`;
 
-  const dumpResult = spawnSync("pg_dump", [
-    "--dbname",
+  const dumpResult = spawnSync("pg_dump", buildPgDumpArgs({
     databaseUrl,
-    "--format",
-    "custom",
-    "--compress",
-    "9",
-    "--no-owner",
-    "--no-privileges",
-    "--file",
-    dumpPath
-  ], {
+    dumpPath,
+    schema: databaseSchema
+  }), {
     stdio: "inherit",
     shell: false
   });
@@ -110,6 +122,7 @@ export async function runLocalFullBackup({
     schemaVersion: 1,
     performedAt: now.toISOString(),
     type: "full-logical-backup",
+    databaseSchema,
     storageMode: "local",
     operator: backupOperator,
     destination: normalizePathForEvidence(dumpPath),

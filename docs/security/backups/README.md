@@ -8,9 +8,10 @@ O arquivo real esperado pelo check e:
 
 `docs/security/backups/latest.json`
 
-Os arquivos `latest.json`, `restore-drill-latest.json` e
-`s3-posture-latest.json` sao gerados localmente e ficam ignorados pelo Git.
-Guarde a evidencia completa no ambiente seguro da empresa.
+Os arquivos `docs/security/backups/latest.json`,
+`docs/security/backups/s3-posture-latest.json` e
+`docs/security/restore-drills/latest.json` sao gerados localmente e ficam
+ignorados pelo Git. Guarde a evidencia completa no ambiente seguro da empresa.
 
 Por padrao, os scripts procuram o arquivo externo de configuracao em
 `C:\seguro\precast-backup.env` no Windows ou
@@ -25,6 +26,9 @@ sudo node scripts/backup/init-linux-backup-env.mjs --backup-env-file /etc/precas
 
 Depois edite `/etc/precast-erp/precast-backup.env` e preencha as credenciais
 reais antes de validar. O arquivo e criado com permissao `600`, fora do Git.
+
+O template usa `BACKUP_DATABASE_SCHEMA="public"`. Esse limite impede que o
+backup do ERP tente copiar schemas internos gerenciados pelo Supabase.
 
 No modo local, o comando recomendado e:
 

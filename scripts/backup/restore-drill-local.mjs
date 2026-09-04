@@ -4,6 +4,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { loadDotEnv, resolveBackupEnvFile, resolveEnvFilePath } from "./backup-env.mjs";
+import { resolveBackupSchema } from "./backup-schema.mjs";
 
 const root = process.cwd();
 const defaultBackupEvidencePath = path.join(root, "docs", "security", "backups", "latest.json");
@@ -142,6 +143,20 @@ function runCapture(command, args) {
   return String(result.stdout || "").trim();
 }
 
+export function buildPgRestoreArgs({ restoreUrl, dumpPath, schema = "public" }) {
+  return [
+    "--dbname",
+    restoreUrl,
+    "--schema",
+    resolveBackupSchema(schema),
+    "--clean",
+    "--if-exists",
+    "--no-owner",
+    "--no-privileges",
+    dumpPath
+  ];
+}
+
 export async function runLocalRestoreDrill({
   envFile = resolveBackupEnvFile(),
   dumpPath,
@@ -159,6 +174,7 @@ export async function runLocalRestoreDrill({
   const selectedDumpPath = dumpPath || fromEvidence.dumpPath;
   const selectedChecksumPath = checksumPath || fromEvidence.checksumPath;
   const restoreUrl = targetDatabaseUrl || process.env.RESTORE_DATABASE_URL;
+  const databaseSchema = resolveBackupSchema();
 
   assertRestoreTarget(restoreUrl, [
     process.env.BACKUP_DATABASE_URL,
@@ -193,22 +209,18 @@ export async function runLocalRestoreDrill({
   }
 
   console.log("Iniciando restore drill em banco temporario...");
-  run("pg_restore", [
-    "--dbname",
+  run("pg_restore", buildPgRestoreArgs({
     restoreUrl,
-    "--clean",
-    "--if-exists",
-    "--no-owner",
-    "--no-privileges",
-    resolvedDumpPath
-  ]);
+    dumpPath: resolvedDumpPath,
+    schema: databaseSchema
+  }));
 
   const tableCountRaw = runCapture("psql", [
     restoreUrl,
     "-v",
     "ON_ERROR_STOP=1",
     "-Atc",
-    "select count(*) from information_schema.tables where table_schema = 'public';"
+    `select count(*) from information_schema.tables where table_schema = '${databaseSchema}';`
   ]);
 
   const userTable = runCapture("psql", [
@@ -216,7 +228,7 @@ export async function runLocalRestoreDrill({
     "-v",
     "ON_ERROR_STOP=1",
     "-Atc",
-    "select to_regclass('public.\"User\"') is not null;"
+    `select to_regclass('${databaseSchema}.\"User\"') is not null;`
   ]);
 
   if (userTable.trim() !== "t") {

@@ -131,6 +131,12 @@ if (-not $restoreUrl) {
   $restoreUrl = $env:RESTORE_DATABASE_URL
 }
 
+$databaseSchema = $env:BACKUP_DATABASE_SCHEMA
+if (-not $databaseSchema) { $databaseSchema = "public" }
+if ($databaseSchema -notmatch '^[a-zA-Z_][a-zA-Z0-9_]*$') {
+  throw "BACKUP_DATABASE_SCHEMA invalido. Use apenas letras, numeros e sublinhado."
+}
+
 Assert-Restore-Target -RestoreUrl $restoreUrl
 
 $workDir = Join-Path $env:TEMP "precast-erp-restore-drill"
@@ -162,6 +168,7 @@ Write-Host "Iniciando restore drill em banco temporario..."
 
 & pg_restore `
   --dbname $restoreUrl `
+  --schema $databaseSchema `
   --clean `
   --if-exists `
   --no-owner `
@@ -172,12 +179,12 @@ if ($LASTEXITCODE -ne 0) {
   throw "pg_restore falhou com codigo $LASTEXITCODE."
 }
 
-$tableCount = & psql $restoreUrl -v ON_ERROR_STOP=1 -Atc "select count(*) from information_schema.tables where table_schema = 'public';"
+$tableCount = & psql $restoreUrl -v ON_ERROR_STOP=1 -Atc "select count(*) from information_schema.tables where table_schema = '$databaseSchema';"
 if ($LASTEXITCODE -ne 0) {
   throw "Validacao do restore falhou ao consultar tabelas."
 }
 
-$userTable = & psql $restoreUrl -v ON_ERROR_STOP=1 -Atc "select to_regclass('public.""User""') is not null;"
+$userTable = & psql $restoreUrl -v ON_ERROR_STOP=1 -Atc "select to_regclass('$databaseSchema.""User""') is not null;"
 if ($LASTEXITCODE -ne 0 -or $userTable.Trim() -ne "t") {
   throw "Validacao do restore falhou: tabela User nao encontrada."
 }

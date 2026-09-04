@@ -52,6 +52,12 @@ if (-not $databaseUrl) { $databaseUrl = $env:DIRECT_URL }
 if (-not $databaseUrl) { $databaseUrl = $env:DATABASE_URL }
 if (-not $databaseUrl) { throw "Configure BACKUP_DATABASE_URL, DIRECT_URL ou DATABASE_URL." }
 
+$databaseSchema = $env:BACKUP_DATABASE_SCHEMA
+if (-not $databaseSchema) { $databaseSchema = "public" }
+if ($databaseSchema -notmatch '^[a-zA-Z_][a-zA-Z0-9_]*$') {
+  throw "BACKUP_DATABASE_SCHEMA invalido. Use apenas letras, numeros e sublinhado."
+}
+
 $storageMode = $env:BACKUP_STORAGE_MODE
 if (-not $storageMode) { $storageMode = "s3" }
 $storageMode = $storageMode.Trim().ToLowerInvariant()
@@ -79,6 +85,7 @@ Write-Host "Iniciando backup completo logico do PostgreSQL..."
 
 & pg_dump `
   --dbname $databaseUrl `
+  --schema $databaseSchema `
   --format custom `
   --compress 9 `
   --no-owner `
@@ -172,6 +179,7 @@ $evidence = [ordered]@{
   performedAt = (Get-Date).ToUniversalTime().ToString("o")
   operator = $Operator
   type = "full-logical-backup"
+  databaseSchema = $databaseSchema
   storageMode = $storageMode
   destination = $backupDestination
   checksumUri = $checksumDestination
